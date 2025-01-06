@@ -187,6 +187,7 @@ func (ist *Instructions) NTT(r *ring.Ring){
 
 func (ist *Instructions) INTT(r *ring.Ring){
 	r.INTT(ist.RS1, ist.RS1)
+	r.INTT(ist.RS2, ist.RS2)
 	r.INTT(ist.RDPositive, ist.RDPositive)
 	r.INTT(ist.RDNegative, ist.RDNegative)
 	r.INTT(ist.Operation, ist.Operation)
