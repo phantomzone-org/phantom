@@ -1,3 +1,5 @@
+use crate::trace::gen_auto_perms;
+use math::automorphism::{AutoPerm, AutoPermMap};
 use math::modulus::barrett::Barrett;
 use math::modulus::montgomery::Montgomery;
 use math::modulus::ONCE;
@@ -8,15 +10,27 @@ use std::cmp::min;
 pub fn pack<const ZEROGARBAGE: bool, const NTT: bool>(
     ring: &Ring<u64>,
     polys: &mut Vec<Option<&mut Poly<u64>>>,
+    pack_galois_elements: &[usize],
+    auto_perms: &AutoPermMap,
     log_gap: usize,
 ) {
     let log_n: usize = ring.log_n();
-    let log_nth_root: usize = log_n + 1;
-    let nth_root: usize = 1 << log_nth_root;
     let log_start: usize = log_n - log_gap;
     let mut log_end: usize = log_n;
 
     let mut indices: Vec<usize> = Vec::<usize>::new();
+
+    pack_galois_elements.iter().for_each(|gal_el| {
+        if let Some(auto_perm) = auto_perms.get(gal_el) {
+            assert!(
+                auto_perm.ntt == true,
+                "invalid AutoPerm NTT flag for gal_el={}, expected to be true but is false",
+                gal_el
+            );
+        } else {
+            panic!("galois element {} not found in AutoPermMap", gal_el)
+        }
+    });
 
     // Retrives non-empty indexes
     polys.iter().enumerate().for_each(|(i, poly)| {
@@ -60,6 +74,8 @@ pub fn pack<const ZEROGARBAGE: bool, const NTT: bool>(
 
         let (polys_lo, polys_hi) = polys.split_at_mut(t);
 
+        let gal_el = pack_galois_elements[i];
+
         for j in 0..t {
             if let Some(poly_hi) = polys_hi[j].as_mut() {
                 ring.a_mul_b_montgomery_into_a::<ONCE>(&x_pow2[log_n - i - 1], poly_hi);
@@ -71,24 +87,34 @@ pub fn pack<const ZEROGARBAGE: bool, const NTT: bool>(
             }
 
             if let Some(poly_lo) = polys_lo[j].as_mut() {
-                let gal_el: usize = ring.galois_element((1 << i) >> 1, i == 0, log_nth_root);
-
                 if !polys_hi[j].is_none() {
-                    ring.a_apply_automorphism_add_b_into_b::<ONCE, true>(
-                        &tmp,
-                        gal_el,
-                        2 << ring.log_n(),
-                        poly_lo,
-                    );
+                    if let Some(auto_perm) = auto_perms.get(&gal_el) {
+                        ring.a_apply_automorphism_from_perm_add_b_into_b::<ONCE, true>(
+                            &tmp, auto_perm, poly_lo,
+                        );
+                    } else {
+                        panic!("galois element {} not found in AutoPermMap", gal_el)
+                    }
                 } else {
-                    ring.a_apply_automorphism_into_b::<true>(poly_lo, gal_el, nth_root, &mut tmp);
-                    ring.a_add_b_into_b::<ONCE>(&tmp, poly_lo);
+                    if let Some(auto_perm) = auto_perms.get(&gal_el) {
+                        ring.a_apply_automorphism_from_perm_into_b::<true>(
+                            poly_lo, auto_perm, &mut tmp,
+                        );
+                        ring.a_add_b_into_b::<ONCE>(&tmp, poly_lo);
+                    } else {
+                        panic!("galois element {} not found in AutoPermMap", gal_el)
+                    }
                 }
             } else if let Some(poly_hi) = polys_hi[j].as_mut() {
-                let gal_el: usize = ring.galois_element((1 << i) >> 1, i == 0, log_nth_root);
-                ring.a_apply_automorphism_into_b::<true>(poly_hi, gal_el, nth_root, &mut tmp);
-                ring.a_sub_b_into_a::<1, ONCE>(&tmp, poly_hi);
-                std::mem::swap(&mut polys_lo[j], &mut polys_hi[j]);
+                if let Some(auto_perm) = auto_perms.get(&gal_el) {
+                    ring.a_apply_automorphism_from_perm_into_b::<true>(
+                        poly_hi, auto_perm, &mut tmp,
+                    );
+                    ring.a_sub_b_into_a::<1, ONCE>(&tmp, poly_hi);
+                    std::mem::swap(&mut polys_lo[j], &mut polys_hi[j]);
+                } else {
+                    panic!("galois element {} not found in AutoPermMap", gal_el)
+                }
             }
         }
 
@@ -125,6 +151,8 @@ pub struct StreamRepacker {
     tmp_a: Poly<u64>,
     tmp_b: Poly<u64>,
     x_pow_2: Vec<Poly<Montgomery<u64>>>,
+    gal_els: Vec<usize>,
+    auto_perms: AutoPermMap,
     n_inv: Barrett<u64>,
     counter: usize,
 }
@@ -146,17 +174,26 @@ impl Accumulator {
 }
 
 impl StreamRepacker {
-    pub fn new(r: &Ring<u64>) -> Self {
+    pub fn new(ring: &Ring<u64>) -> Self {
         let mut accumulators: Vec<Accumulator> = Vec::<Accumulator>::new();
 
-        (0..r.log_n()).for_each(|_| accumulators.push(Accumulator::new(r)));
+        let log_n: usize = ring.log_n();
+
+        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(ring)));
+
+        let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
 
         Self {
             accumulators: accumulators,
-            tmp_a: r.new_poly(),
-            tmp_b: r.new_poly(),
-            x_pow_2: r.gen_x_pow_2::<true, false>(r.log_n()),
-            n_inv: r.modulus.barrett.prepare(r.modulus.inv(r.n() as u64)),
+            tmp_a: ring.new_poly(),
+            tmp_b: ring.new_poly(),
+            x_pow_2: ring.gen_x_pow_2::<true, false>(log_n),
+            gal_els: gal_els,
+            auto_perms: auto_perms,
+            n_inv: ring
+                .modulus
+                .barrett
+                .prepare(ring.modulus.inv(1 << log_n as u64)),
             counter: 0,
         }
     }
@@ -182,6 +219,8 @@ impl StreamRepacker {
             &mut self.accumulators,
             &self.n_inv,
             &self.x_pow_2,
+            &self.gal_els,
+            &self.auto_perms,
             &mut self.tmp_a,
             &mut self.tmp_b,
             0,
@@ -209,11 +248,15 @@ fn pack_core<const NTT: bool>(
     accumulators: &mut [Accumulator],
     n_inv: &Barrett<u64>,
     x_pow_2: &[Poly<u64>],
+    gal_els: &[usize],
+    auto_perms: &AutoPermMap,
     tmp_a: &mut Poly<u64>,
     tmp_b: &mut Poly<u64>,
     i: usize,
 ) {
-    if i == r.log_n() {
+    let log_n = r.log_n();
+
+    if i == log_n {
         return;
     }
 
@@ -230,7 +273,22 @@ fn pack_core<const NTT: bool>(
         }
         acc_mut_ref.control = true;
     } else {
-        combine::<true>(r, &mut acc_prev[0], a, n_inv, x_pow_2, tmp_a, tmp_b, i);
+        if let Some(auto_perm) = auto_perms.get(&gal_els[i]) {
+            combine::<true>(
+                r,
+                &mut acc_prev[0],
+                a,
+                n_inv,
+                &x_pow_2[log_n - i - 1],
+                auto_perm,
+                tmp_a,
+                tmp_b,
+                i,
+            );
+        } else {
+            panic!("galois element {} not found in AutoPerms", &gal_els[i])
+        }
+
         acc_prev[0].control = false;
 
         if acc_prev[0].value {
@@ -240,12 +298,25 @@ fn pack_core<const NTT: bool>(
                 acc_next,
                 n_inv,
                 x_pow_2,
+                gal_els,
+                auto_perms,
                 tmp_a,
                 tmp_b,
                 i + 1,
             );
         } else {
-            pack_core::<NTT>(r, None, acc_next, n_inv, x_pow_2, tmp_a, tmp_b, i + 1);
+            pack_core::<NTT>(
+                r,
+                None,
+                acc_next,
+                n_inv,
+                x_pow_2,
+                gal_els,
+                auto_perms,
+                tmp_a,
+                tmp_b,
+                i + 1,
+            );
         }
     }
 }
@@ -255,16 +326,12 @@ fn combine<const NTT: bool>(
     acc: &mut Accumulator,
     b: Option<&Poly<u64>>,
     n_inv: &Barrett<u64>,
-    x_pow_2: &[Poly<u64>],
+    x_pow_2: &Poly<u64>,
+    auto_perm: &AutoPerm,
     tmp_a: &mut Poly<u64>,
     tmp_b: &mut Poly<u64>,
     i: usize,
 ) {
-    let log_n = r.log_n();
-    let log_nth_root = log_n + 1;
-    let nth_root = 1 << log_nth_root;
-    let gal_el: usize = r.galois_element((1 << i) >> 1, i == 0, log_nth_root);
-
     let a: &mut Poly<u64> = &mut acc.buf;
 
     if acc.value {
@@ -274,7 +341,7 @@ fn combine<const NTT: bool>(
 
         if let Some(b) = b {
             // tmp_a = b * X^t
-            r.a_mul_b_montgomery_into_c::<ONCE>(b, &x_pow_2[log_n - i - 1], tmp_a);
+            r.a_mul_b_montgomery_into_c::<ONCE>(b, x_pow_2, tmp_a);
 
             if i == 0 {
                 r.a_mul_b_scalar_barrett_into_a::<ONCE>(&n_inv, tmp_a);
@@ -287,24 +354,24 @@ fn combine<const NTT: bool>(
             r.a_add_b_into_b::<ONCE>(tmp_a, a);
 
             // a = a + b * X^t + phi(a - b * X^t)
-            r.a_apply_automorphism_add_b_into_b::<ONCE, NTT>(tmp_b, gal_el, nth_root, a);
+            r.a_apply_automorphism_from_perm_add_b_into_b::<ONCE, NTT>(tmp_b, auto_perm, a);
         } else {
             // tmp_a = phi(a)
-            r.a_apply_automorphism_into_b::<NTT>(a, gal_el, nth_root, tmp_a);
+            r.a_apply_automorphism_from_perm_into_b::<NTT>(a, auto_perm, tmp_a);
             // a = a + phi(a)
             r.a_add_b_into_b::<ONCE>(tmp_a, a);
         }
     } else {
         if let Some(b) = b {
             // tmp_b = b * X^t
-            r.a_mul_b_montgomery_into_c::<ONCE>(b, &x_pow_2[log_n - i - 1], tmp_b);
+            r.a_mul_b_montgomery_into_c::<ONCE>(b, x_pow_2, tmp_b);
 
             if i == 0 {
                 r.a_mul_b_scalar_barrett_into_a::<ONCE>(&n_inv, tmp_b);
             }
 
             // tmp_a = phi(b * X^t)
-            r.a_apply_automorphism_into_b::<NTT>(tmp_b, gal_el, nth_root, tmp_a);
+            r.a_apply_automorphism_from_perm_into_b::<NTT>(tmp_b, auto_perm, tmp_a);
 
             // a = (b* X^t - phi(b* X^t))
             r.a_sub_b_into_c::<1, ONCE>(tmp_b, tmp_a, a);

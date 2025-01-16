@@ -1,8 +1,7 @@
 use fhevm::memory::{Index, Memory};
 use math::ring::Ring;
 
-#[test]
-fn memory() {
+fn main() {
     let n: usize = 1 << 4;
     let q_base: u64 = 65537u64;
     let q_power: usize = 1usize;
@@ -17,8 +16,10 @@ fn memory() {
     let write_value: u64 = 255;
 
     // Read
-    (0..1).for_each(|i| {
+    (0..16).for_each(|i| {
         idx.set(&ring, i);
+
+        println!("{}", i);
 
         // Reads idx[i] check it is equal to i, and writes write_value on idx[i]
         let value = memory.read_and_write(&ring, &idx, write_value, true);

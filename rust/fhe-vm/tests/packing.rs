@@ -1,4 +1,5 @@
 use fhevm::packing::{pack, StreamRepacker};
+use fhevm::trace::gen_auto_perms;
 use math::modulus::WordOps;
 use math::poly::Poly;
 use math::ring::Ring;
@@ -45,7 +46,9 @@ fn test_packing_sparse_u64<const NTT: bool>(ring: &Ring<u64>, gap: usize) {
         result[i * gap] = Some(poly);
     });
 
-    pack::<true, NTT>(ring, &mut result, ring.log_n());
+    let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
+
+    pack::<true, NTT>(ring, &mut result, &gal_els, &auto_perms, ring.log_n());
 
     if let Some(poly) = result[0].as_mut() {
         if NTT {

@@ -1,4 +1,4 @@
-use fhevm::trace::a_apply_trace_into_a;
+use fhevm::trace::{a_apply_trace_into_a, gen_auto_perms};
 use math::poly::Poly;
 use math::ring::Ring;
 
@@ -44,11 +44,23 @@ fn test_trace_u64<const INV: bool, const NTT: bool>(ring: &Ring<u64>) {
 
     let step_start: usize = 2;
 
-    a_apply_trace_into_a::<INV, NTT>(ring, step_start, &mut buf0, &mut buf1, &mut poly);
+    let (auto_perms, gal_els) = gen_auto_perms::<NTT>(ring);
+
+    a_apply_trace_into_a::<INV, NTT>(
+        ring,
+        step_start,
+        &gal_els,
+        &auto_perms,
+        &mut buf0,
+        &mut buf1,
+        &mut poly,
+    );
 
     if NTT {
         ring.intt_inplace::<false>(&mut poly);
     }
+
+    println!("{:?}", poly);
 
     let gap: usize = 1 << (ring.log_n() - step_start);
 

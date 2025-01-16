@@ -1,10 +1,16 @@
-use crate::packing::{pack, StreamRepacker};
-use math::modulus::montgomery::Montgomery;
+use crate::packing::StreamRepacker;
+use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b, gen_auto_perms};
+use math::automorphism::AutoPermMap;
 use math::modulus::{WordOps, ONCE};
 use math::poly::Poly;
 use math::ring::Ring;
 
-pub struct Memory(pub Vec<Poly<u64>>);
+pub struct Memory {
+    pub data: Vec<Poly<u64>>,
+    gal_els: Vec<usize>,
+    auto_perms: AutoPermMap,
+}
+
 pub struct Index(pub Vec<Poly<u64>>);
 
 impl Index {
@@ -57,7 +63,13 @@ impl Memory {
             polys.push(poly);
         }
 
-        Self { 0: polys }
+        let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
+
+        Self {
+            data: polys,
+            gal_els: gal_els,
+            auto_perms: auto_perms,
+        }
     }
 
     pub fn read_and_write(
@@ -73,7 +85,10 @@ impl Memory {
 
         let mut results: Vec<Vec<Poly<u64>>> = Vec::new();
 
-        let mut buf: Poly<u64> = ring.new_poly();
+        let mut buf0: Poly<u64> = ring.new_poly();
+        let mut buf1: Poly<u64> = ring.new_poly();
+        let mut buf2: Poly<u64> = ring.new_poly();
+        let mut buf3: Poly<u64> = ring.new_poly();
 
         for i in 0..idx.0.len() {
             let idx_i: &Poly<u64> = &idx.0[i];
@@ -81,7 +96,7 @@ impl Memory {
             let result_prev: &mut Vec<Poly<u64>>;
 
             if i == 0 {
-                result_prev = &mut self.0;
+                result_prev = &mut self.data;
             } else {
                 result_prev = &mut results[i - 1];
             }
@@ -90,8 +105,6 @@ impl Memory {
             result_prev.iter_mut().for_each(|poly| {
                 ring.a_mul_b_montgomery_into_a::<ONCE>(idx_i, poly);
             });
-
-            println!("{}", i);
 
             if i < idx.0.len() - 1 {
                 let mut result_next: Vec<Poly<u64>> = Vec::new();
@@ -111,7 +124,7 @@ impl Memory {
                 packer.flush::<true>(ring, &mut result_next);
 
                 result_next.iter_mut().for_each(|poly| {
-                    ring.intt::<false>(poly, &mut buf);
+                    ring.intt::<false>(poly, &mut buf0);
                 });
 
                 // Stores the packed polynomial
@@ -119,32 +132,134 @@ impl Memory {
             }
         }
 
+        let size: usize = results.len();
+        let mut result = &mut results[size - 1][0];
+
         // READ value
-        ring.intt::<false>(&results[results.len() - 1][0], &mut buf);
+        ring.intt_inplace::<false>(&mut result);
 
-        let read_value = buf.0[0];
+        let read_value: u64 = result.0[0];
 
-        let nth_root: usize = ring.n() << 1;
-        let gal_el_inv: usize = nth_root - 1;
+        // CMUX(read_value, write_value, write_bool) -> read_value/write_value
+        if write_bool {
+            result.0[0] = write_value
+        }
 
-        for i in (0..idx.0.len()).rev() {
-            let idx_i: &Poly<u64> = &idx.0[i];
+        ring.ntt_inplace::<false>(&mut result);
 
-            let result_prev: &mut Vec<Poly<u64>>;
+        /*
+        for i in 0..self.0.len(){
+            ring.intt::<false>(&self.0[i], &mut buf0);
+            println!("MEMORY[0][{}]: {:?}", i, buf0);
+        }
+        println!();
 
+        for i in 0..results.len(){
+            for j in 0..results[i].len(){
+                ring.intt::<false>(&results[i][j], &mut buf0);
+                println!("TREE[{}][{}]: {:?}", i+1, j, buf0);
+            }
+            println!();
+        }
+         */
+
+        let mut x_inv: Poly<u64> = ring.new_poly();
+        x_inv.0[ring.n() - 1] = ring.modulus.montgomery.minus_one();
+        ring.ntt_inplace::<false>(&mut x_inv);
+
+        let gal_el_inv: usize = self.gal_els[0];
+
+        // Walk back the tree in reverse order, repacking the coefficients
+        // where the read coefficient has been conditionally replaced by
+        // the write value based on the write boolean.
+        for i in (0..idx.0.len() - 1).rev() {
+            // Index polynomial X^{-i}
+            let idx_i: &Poly<u64> = &idx.0[i + 1];
+
+            let result_hi: &mut Vec<Poly<u64>>; // Above level
+            let result_lo: &mut Vec<Poly<u64>>; // Current level
+
+            //println!("i: {}", i);
+
+            // Top of the tree is not stored in results.
             if i == 0 {
-                result_prev = &mut self.0;
+                result_hi = &mut self.data;
+                result_lo = &mut results[0];
             } else {
-                result_prev = &mut results[i - 1];
+                //println!("{} {}", results[i].len(), results[i-1].len());
+                let (left, right) = results.split_at_mut(i);
+                //println!("left: {} right:{}", left.len(), right.len());
+                result_hi = &mut left[left.len() - 1];
+                result_lo = &mut right[0];
             }
 
-            ring.a_apply_automorphism_into_b::<true>(idx_i, gal_el_inv, nth_root, &mut buf);
+            // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
+            // Will be used to apply the reverse cyclic shift.
+            if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
+                ring.a_apply_automorphism_from_perm_into_b::<true>(idx_i, auto_perm, &mut buf3);
+            } else {
+                panic!("galois element {} not found in AutoPermMap", gal_el_inv)
+            }
 
-            // Shift polynomial of the last iteration by X^{-i}
-            result_prev.iter_mut().for_each(|poly| {
-                ring.a_mul_b_montgomery_into_a::<ONCE>(&buf, poly);
-            });
+            //println!("{} {}", result_lo.len(), result_hi.len());
+
+            // Iterates over the set of chuncks of n polynomials of the level above
+            result_hi
+                .chunks_mut(ring.n())
+                .enumerate()
+                .for_each(|(j, chunk)| {
+                    // Retrieve the associated polynomial to extract and pack related to the current chunk
+                    let poly_lo: &mut Poly<u64> = &mut result_lo[j];
+
+                    // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
+                    ring.a_mul_b_montgomery_into_a::<ONCE>(&buf3, poly_lo);
+
+                    // Iterates over the polynomial of the current chunk of the level above
+                    chunk.iter_mut().enumerate().for_each(|(i, poly_hi)| {
+                        // Extract the first coefficient poly_lo
+                        // [a, b, c, d] -> [a, 0, 0, 0]
+                        a_apply_trace_into_b::<false, true>(
+                            &ring,
+                            0,
+                            &self.gal_els,
+                            &self.auto_perms,
+                            poly_lo,
+                            &mut buf0,
+                            &mut buf1,
+                            &mut buf2,
+                        );
+
+                        // Zeroes the first coefficient of poly_j
+                        // [a, b, c, d] -> [0, b, c, d]
+                        a_apply_trace_into_a::<true, true>(
+                            &ring,
+                            0,
+                            &self.gal_els,
+                            &self.auto_perms,
+                            &mut buf0,
+                            &mut buf1,
+                            poly_hi,
+                        );
+
+                        // Adds TRACE(poly_lo) + TRACEINV(poly_hi)
+                        ring.a_add_b_into_b::<ONCE>(&buf2, poly_hi);
+
+                        // Cyclic shift poly_lo by X^-1
+                        ring.a_mul_b_montgomery_into_a::<ONCE>(&x_inv, poly_lo);
+                    });
+                });
         }
+
+        // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
+        // Will be used to apply the reverse cyclic shift.
+        if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
+            ring.a_apply_automorphism_from_perm_into_b::<true>(&idx.0[0], auto_perm, &mut buf3);
+        }
+
+        // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
+        self.data.iter_mut().for_each(|poly_lo| {
+            ring.a_mul_b_montgomery_into_a::<ONCE>(&buf3, poly_lo);
+        });
 
         read_value
     }

@@ -5,3 +5,6 @@ edition = "2021"
 
 [dependencies]
 math = { path = "../../../fhe/math"}
+
+[profile.release]
+debug = true
