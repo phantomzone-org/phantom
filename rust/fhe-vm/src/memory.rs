@@ -125,10 +125,6 @@ impl Memory {
 
                 packer.flush::<true>(ring, &mut result_next);
 
-                result_next.iter_mut().for_each(|poly| {
-                    ring.intt::<false>(poly, &mut buf0);
-                });
-
                 // Stores the packed polynomial
                 results.push(result_next);
             }
