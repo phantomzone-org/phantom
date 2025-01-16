@@ -1,6 +1,7 @@
 use crate::packing::StreamRepacker;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b, gen_auto_perms};
 use math::automorphism::AutoPermMap;
+use math::modulus::montgomery::Montgomery;
 use math::modulus::{WordOps, ONCE};
 use math::poly::Poly;
 use math::ring::Ring;
@@ -30,7 +31,8 @@ impl Index {
         let mask: usize = (1 << log_base) - 1;
         let mut remain: usize = idx as _;
         let n: usize = ring.n();
-        let minus_one: u64 = ring.modulus.montgomery.minus_one();
+        let minus_one: Montgomery<u64> = ring.modulus.montgomery.minus_one();
+        let one: Montgomery<u64> = ring.modulus.montgomery.one();
 
         self.0.iter_mut().for_each(|poly| {
             let chunk = remain & mask;
@@ -40,7 +42,7 @@ impl Index {
             if chunk != 0 {
                 poly.0[n - chunk] = minus_one; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
             } else {
-                poly.0[0] = 1;
+                poly.0[0] = one;
             }
 
             ring.ntt_inplace::<false>(poly);
@@ -133,27 +135,37 @@ impl Memory {
         }
 
         let size: usize = results.len();
-        let mut result = &mut results[size - 1][0];
+        let read_value: u64;
 
-        // READ value
-        ring.intt_inplace::<false>(&mut result);
+        if size != 0 {
+            let mut result = &mut results[size - 1][0];
 
-        let read_value: u64 = result.0[0];
+            // READ value
+            ring.intt_inplace::<false>(&mut result);
 
-        // CMUX(read_value, write_value, write_bool) -> read_value/write_value
-        if write_bool {
-            result.0[0] = write_value
+            read_value = result.0[0];
+
+            // CMUX(read_value, write_value, write_bool) -> read_value/write_value
+            if write_bool {
+                result.0[0] = write_value
+            }
+
+            ring.ntt_inplace::<false>(&mut result);
+        } else {
+            // READ value
+            ring.intt_inplace::<false>(&mut self.data[0]);
+
+            read_value = self.data[0].0[0];
+
+            // CMUX(read_value, write_value, write_bool) -> read_value/write_value
+            if write_bool {
+                self.data[0].0[0] = write_value
+            }
+
+            ring.ntt_inplace::<false>(&mut self.data[0]);
         }
-
-        ring.ntt_inplace::<false>(&mut result);
 
         /*
-        for i in 0..self.0.len(){
-            ring.intt::<false>(&self.0[i], &mut buf0);
-            println!("MEMORY[0][{}]: {:?}", i, buf0);
-        }
-        println!();
-
         for i in 0..results.len(){
             for j in 0..results[i].len(){
                 ring.intt::<false>(&results[i][j], &mut buf0);
@@ -186,9 +198,7 @@ impl Memory {
                 result_hi = &mut self.data;
                 result_lo = &mut results[0];
             } else {
-                //println!("{} {}", results[i].len(), results[i-1].len());
                 let (left, right) = results.split_at_mut(i);
-                //println!("left: {} right:{}", left.len(), right.len());
                 result_hi = &mut left[left.len() - 1];
                 result_lo = &mut right[0];
             }
@@ -200,8 +210,6 @@ impl Memory {
             } else {
                 panic!("galois element {} not found in AutoPermMap", gal_el_inv)
             }
-
-            //println!("{} {}", result_lo.len(), result_hi.len());
 
             // Iterates over the set of chuncks of n polynomials of the level above
             result_hi
