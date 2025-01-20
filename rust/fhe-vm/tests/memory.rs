@@ -1,4 +1,5 @@
-use fhevm::memory::{Index, Memory};
+use fhevm::address::Address;
+use fhevm::memory::Memory;
 use math::ring::Ring;
 
 #[test]
@@ -12,7 +13,7 @@ fn memory() {
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as u64);
 
     let mut memory: Memory = Memory::new(&ring, &data);
-    let mut idx = Index::new(&ring, size);
+    let mut idx = Address::new(&ring, size);
 
     let write_value: u64 = 255;
 
