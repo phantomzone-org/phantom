@@ -1,3 +1,4 @@
+use crate::gadget::Gadget;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
 use math::automorphism::AutoPermMap;
 use math::modulus::montgomery::Montgomery;
@@ -64,7 +65,7 @@ impl Accumulator {
         buf0: &mut Poly<u64>,
         buf1: &mut Poly<u64>,
         buf2: &mut Poly<u64>,
-        a: &mut Vec<Poly<u64>>,
+        a: &mut Gadget<Poly<u64>>,
     ) {
         buf0.zero();
 
@@ -89,20 +90,7 @@ impl Accumulator {
             .enumerate()
             .for_each(|(i, test_vector)| {
                 ring.a_mul_b_montgomery_into_c::<ONCE>(test_vector, buf0, buf1);
-
-                if i == 0 {
-                    ring.intt_inplace::<false>(buf1);
-                    println!("circuit_bootstrap: {:?}", buf1);
-                    ring.ntt_inplace::<false>(buf1);
-                }
-
-                ring.switch_degree::<true>(buf1, buf2, &mut a[i]);
-
-                if i == 0 {
-                    ring.intt_inplace::<false>(&mut a[0]);
-                    println!("circuit_bootstrap: {:?}", &mut a[0]);
-                    ring.ntt_inplace::<false>(&mut a[0]);
-                }
+                ring.switch_degree::<true>(buf1, buf2, a.at_mut(i));
             });
     }
 
@@ -114,9 +102,9 @@ impl Accumulator {
         trace_gal_els: &[usize],
         auto_perms: &AutoPermMap,
         buf: &mut [Poly<u64>; 6],
-        a: &mut Vec<Poly<u64>>,
+        a: &mut Gadget<Poly<u64>>,
     ) {
-        a.iter_mut().for_each(|ai| {
+        a.value.iter_mut().for_each(|ai| {
             self.post_process_core(
                 ring,
                 log_gap_in,

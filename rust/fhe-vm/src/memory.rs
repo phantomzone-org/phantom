@@ -1,6 +1,8 @@
 use crate::address::Address;
+use crate::gadget::Gadget;
 use crate::packing::StreamRepacker;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b, gen_auto_perms};
+use itertools::izip;
 use math::automorphism::AutoPermMap;
 use math::modulus::{WordOps, ONCE};
 use math::poly::Poly;
@@ -37,7 +39,7 @@ impl Memory {
     pub fn read_and_write(
         &mut self,
         ring: &Ring<u64>,
-        idx: &Address,
+        address: &Address,
         write_value: u64,
         write_bool: bool,
     ) -> u64 {
@@ -52,8 +54,10 @@ impl Memory {
         let mut buf2: Poly<u64> = ring.new_poly();
         let mut buf3: Poly<u64> = ring.new_poly();
 
-        for i in 0..idx.0.len() {
-            let idx_i: &Poly<u64> = &idx.0[i];
+        let mut buf_gadget: Gadget<Poly<u64>> = Gadget::new(&ring, address.log_base());
+
+        for i in 0..address.0.len() {
+            let address_i: &Gadget<Poly<u64>> = &address.0[i];
 
             let result_prev: &mut Vec<Poly<u64>>;
 
@@ -65,10 +69,10 @@ impl Memory {
 
             // Shift polynomial of the last iteration by X^{-i}
             result_prev.iter_mut().for_each(|poly| {
-                ring.a_mul_b_montgomery_into_a::<ONCE>(idx_i, poly);
+                address_i.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly)
             });
 
-            if i < idx.0.len() - 1 {
+            if i < address.0.len() - 1 {
                 let mut result_next: Vec<Poly<u64>> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
@@ -140,9 +144,9 @@ impl Memory {
         // Walk back the tree in reverse order, repacking the coefficients
         // where the read coefficient has been conditionally replaced by
         // the write value based on the write boolean.
-        for i in (0..idx.0.len() - 1).rev() {
+        for i in (0..address.0.len() - 1).rev() {
             // Index polynomial X^{-i}
-            let idx_i: &Poly<u64> = &idx.0[i + 1];
+            let address_i: &Gadget<Poly<u64>> = &address.0[i + 1];
 
             let result_hi: &mut Vec<Poly<u64>>; // Above level
             let result_lo: &mut Vec<Poly<u64>>; // Current level
@@ -162,7 +166,9 @@ impl Memory {
             // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
             // Will be used to apply the reverse cyclic shift.
             if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-                ring.a_apply_automorphism_from_perm_into_b::<true>(idx_i, auto_perm, &mut buf3);
+                izip!(address_i.value.iter(), buf_gadget.value.iter_mut()).for_each(|(a, b)| {
+                    ring.a_apply_automorphism_from_perm_into_b::<true>(a, auto_perm, b);
+                });
             } else {
                 panic!("galois element {} not found in AutoPermMap", gal_el_inv)
             }
@@ -176,7 +182,7 @@ impl Memory {
                     let poly_lo: &mut Poly<u64> = &mut result_lo[j];
 
                     // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-                    ring.a_mul_b_montgomery_into_a::<ONCE>(&buf3, poly_lo);
+                    buf_gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
 
                     // Iterates over the polynomial of the current chunk of the level above
                     chunk.iter_mut().for_each(|poly_hi| {
@@ -219,12 +225,14 @@ impl Memory {
         // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
         // Will be used to apply the reverse cyclic shift.
         if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-            ring.a_apply_automorphism_from_perm_into_b::<true>(&idx.0[0], auto_perm, &mut buf3);
+            izip!(address.0[0].value.iter(), buf_gadget.value.iter_mut()).for_each(|(a, b)| {
+                ring.a_apply_automorphism_from_perm_into_b::<true>(a, auto_perm, b);
+            });
         }
 
         // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
         self.data.iter_mut().for_each(|poly_lo| {
-            ring.a_mul_b_montgomery_into_a::<ONCE>(&buf3, poly_lo);
+            buf_gadget.product_inplace(ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
         });
 
         read_value

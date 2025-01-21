@@ -8,12 +8,13 @@ fn memory() {
     let q_base: u64 = 0x1fffffffffe00001u64;
     let q_power: usize = 1usize;
     let ring: Ring<u64> = Ring::new(n, q_base, q_power);
+    let log_base: usize = 7;
     let size: usize = 2 * n - 37;
     let mut data: Vec<u64> = vec![0u64; size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as u64);
 
     let mut memory: Memory = Memory::new(&ring, &data);
-    let mut idx = Address::new(&ring, size);
+    let mut idx = Address::new(&ring, log_base, size);
 
     let write_value: u64 = 255;
 

@@ -44,7 +44,7 @@ pub fn a_apply_trace_into_a<const INV: bool, const NTT: bool>(
             .barrett
             .prepare(ring.modulus.inv(1 << log_steps));
         if INV {
-            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(&n_inv, a, buf1);
+            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(a, &n_inv, buf1);
             trace_core::<NTT>(
                 ring,
                 step_start,
@@ -109,7 +109,7 @@ pub fn a_apply_trace_into_b<const INV: bool, const NTT: bool>(
             .barrett
             .prepare(ring.modulus.inv(1 << log_steps));
         if INV {
-            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(&n_inv, a, buf1);
+            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(a, &n_inv, buf1);
             trace_core::<NTT>(
                 ring,
                 step_start,
@@ -121,7 +121,7 @@ pub fn a_apply_trace_into_b<const INV: bool, const NTT: bool>(
             );
             ring.a_sub_b_into_a::<1, ONCE>(buf1, b);
         } else {
-            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(&n_inv, a, b);
+            ring.a_mul_b_scalar_barrett_into_c::<ONCE>(a, &n_inv, b);
             trace_core::<NTT>(
                 ring,
                 step_start,

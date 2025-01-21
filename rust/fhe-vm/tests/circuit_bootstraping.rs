@@ -1,4 +1,5 @@
 use fhevm::circuit_bootstrapping::Accumulator;
+use fhevm::gadget::Gadget;
 use fhevm::trace::gen_auto_perms;
 use math::poly::Poly;
 use math::ring::Ring;
@@ -20,9 +21,7 @@ fn circuit_bootstrapping() {
     let mut buf_acc_1: Poly<u64> = ring_acc.new_poly();
     let mut buf_acc_2: Poly<u64> = ring_acc.new_poly();
 
-    let mut a: Vec<Poly<u64>> = Vec::new();
-
-    (0..acc.test_vectors.len()).for_each(|_| a.push(ring.new_poly()));
+    let mut a: Gadget<Poly<u64>> = Gadget::new(&ring, log_base);
 
     let value: usize = 28;
 
@@ -62,9 +61,7 @@ fn circuit_bootstrapping() {
         &mut a,
     );
 
-    a.iter_mut().for_each(|ai| {
-        ring.intt_inplace::<false>(ai);
-    });
+    a.intt(&ring);
 
-    println!("{:?}", a[0]);
+    println!("{:?}", a.at(0));
 }

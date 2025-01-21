@@ -1,17 +1,21 @@
-use math::modulus::montgomery::Montgomery;
+use crate::gadget::Gadget;
 use math::modulus::WordOps;
 use math::poly::Poly;
 use math::ring::Ring;
 
-pub struct Address(pub Vec<Poly<u64>>);
+pub struct Address(pub Vec<Gadget<Poly<u64>>>);
 
 impl Address {
-    pub fn new(ring: &Ring<u64>, size: usize) -> Self {
+    pub fn new(ring: &Ring<u64>, log_base: usize, size: usize) -> Self {
         let log_n = ring.log_n();
-        let mut polys: Vec<Poly<u64>> = Vec::new();
+        let mut polys: Vec<Gadget<Poly<u64>>> = Vec::new();
         let dims: usize = (size.log2() + log_n - 1) / log_n;
-        (0..dims).for_each(|_| polys.push(ring.new_poly()));
+        (0..dims).for_each(|_| polys.push(Gadget::new(&ring, log_base)));
         Self { 0: polys }
+    }
+
+    pub fn log_base(&self) -> usize {
+        self.0[0].log_base
     }
 
     pub fn set(&mut self, ring: &Ring<u64>, idx: usize) {
@@ -22,21 +26,25 @@ impl Address {
         let mask: usize = (1 << log_base) - 1;
         let mut remain: usize = idx as _;
         let n: usize = ring.n();
-        let minus_one: Montgomery<u64> = ring.modulus.montgomery.minus_one();
-        let one: Montgomery<u64> = ring.modulus.montgomery.one();
+        let q: u64 = ring.modulus.q();
+        let mut buf: Poly<u64> = ring.new_poly();
 
-        self.0.iter_mut().for_each(|poly| {
+        self.0.iter_mut().for_each(|gadget| {
             let chunk = remain & mask;
 
-            poly.zero();
-
             if chunk != 0 {
-                poly.0[n - chunk] = minus_one; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
+                buf.0[n - chunk] = q - 1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
             } else {
-                poly.0[0] = one;
+                buf.0[0] = 1;
             }
 
-            ring.ntt_inplace::<false>(poly);
+            gadget.encode(ring, &mut buf);
+
+            if chunk != 0 {
+                buf.0[n - chunk] = 0;
+            } else {
+                buf.0[0] = 0;
+            }
 
             remain >>= log_base
         });
