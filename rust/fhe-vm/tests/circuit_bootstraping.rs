@@ -1,15 +1,17 @@
 use fhevm::circuit_bootstrapping::Accumulator;
 use fhevm::gadget::Gadget;
 use fhevm::trace::gen_auto_perms;
+use itertools::izip;
 use math::poly::Poly;
 use math::ring::Ring;
 
 #[test]
 fn circuit_bootstrapping() {
-    let n: usize = 1 << 4;
+    let n: usize = 1 << 7;
+    let n_acc = n << 1;
     let q_base: u64 = 65537;
     let q_power: usize = 1usize;
-    let ring_acc: Ring<u64> = Ring::new(n * 2, q_base, q_power);
+    let ring_acc: Ring<u64> = Ring::new(n_acc, q_base, q_power);
     let ring: Ring<u64> = Ring::new(n, q_base, q_power);
 
     let log_gap: usize = 3;
@@ -21,47 +23,67 @@ fn circuit_bootstrapping() {
     let mut buf_acc_1: Poly<u64> = ring_acc.new_poly();
     let mut buf_acc_2: Poly<u64> = ring_acc.new_poly();
 
-    let mut a: Gadget<Poly<u64>> = Gadget::new(&ring, log_base);
+    let mut gadget: Gadget<Poly<u64>> = Gadget::new(&ring, log_base);
 
-    let value: usize = 28;
+    // value in [0, n_acc/2^{log_gap} - 1]
+    (0..n_acc / (1 << log_gap)).for_each(|value| {
+        // value in [0, n_acc - 2^log_gap]
+        let value_scaled: usize = value << log_gap;
 
-    acc.circuit_bootstrap(
-        &ring_acc,
-        value,
-        &mut buf_acc_0,
-        &mut buf_acc_1,
-        &mut buf_acc_2,
-        &mut a,
-    );
+        // Maps value in [0, n_acc - 2^log_gap] to X^{value * (2^log_gap*n/n_acc) +/- drift/2^{log_gap-1}}
+        acc.circuit_bootstrap(
+            &ring_acc,
+            value_scaled,
+            &mut buf_acc_0,
+            &mut buf_acc_1,
+            &mut buf_acc_2,
+            &mut gadget,
+        );
 
-    let buf: &mut [Poly<u64>; 6] = &mut [
-        ring.new_poly(),
-        ring.new_poly(),
-        ring.new_poly(),
-        ring.new_poly(),
-        ring.new_poly(),
-        ring.new_poly(),
-    ];
+        let buf: &mut [Poly<u64>; 6] = &mut [
+            ring.new_poly(),
+            ring.new_poly(),
+            ring.new_poly(),
+            ring.new_poly(),
+            ring.new_poly(),
+            ring.new_poly(),
+        ];
 
-    let (auto_perms, trace_gal_els) = gen_auto_perms::<true>(&ring);
+        let (auto_perms, trace_gal_els) = gen_auto_perms::<true>(&ring);
 
-    let log_gap_in: usize = log_gap - (ring_acc.log_n() - ring.log_n());
-    let log_gap_out: usize = log_gap_in;
+        let log_gap_in: usize = log_gap - (ring_acc.log_n() - ring.log_n());
+        let log_gap_out: usize = log_gap_in;
 
-    println!("log_gap_in: {}", log_gap_in);
-    println!("log_gap_out: {}", log_gap_out);
+        //println!("log_gap_in: {}", log_gap_in);
+        //println!("log_gap_out: {}", log_gap_out);
 
-    acc.post_process(
-        &ring,
-        log_gap_in,
-        log_gap_out,
-        &trace_gal_els,
-        &auto_perms,
-        buf,
-        &mut a,
-    );
+        // Maps X^(i * 2^{log_gap_in}) to X^(i * 2^{log_gal_out})
+        acc.post_process(
+            &ring,
+            log_gap_in,
+            log_gap_out,
+            &trace_gal_els,
+            &auto_perms,
+            buf,
+            &mut gadget,
+        );
 
-    a.intt(&ring);
+        let mut have: Poly<u64> = ring.new_poly();
+        have.0[0] = 1;
+        ring.ntt_inplace::<false>(&mut have);
 
-    println!("{:?}", a.at(0));
+        let [buf0, buf1, buf2, _, _, _] = buf;
+
+        gadget.product_inplace(&ring, buf0, buf1, buf2, &mut have);
+
+        ring.intt_inplace::<false>(&mut have);
+
+        let mut want: Poly<u64> = ring.new_poly();
+        want.0[value << log_gap_out] = 1;
+
+        //println!("{:?}", want);
+        //println!("{:?}", have);
+
+        izip!(want.0, have.0).for_each(|(a, b)| assert_eq!(a, b));
+    });
 }
