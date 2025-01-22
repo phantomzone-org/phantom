@@ -52,7 +52,6 @@ impl Memory {
         let mut buf0: Poly<u64> = ring.new_poly();
         let mut buf1: Poly<u64> = ring.new_poly();
         let mut buf2: Poly<u64> = ring.new_poly();
-        let mut buf3: Poly<u64> = ring.new_poly();
 
         let mut buf_gadget: Gadget<Poly<u64>> = Gadget::new(&ring, address.log_base());
 
