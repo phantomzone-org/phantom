@@ -50,12 +50,13 @@ impl Gadget<Poly<u64>> {
         &self,
         ring: &Ring<u64>,
         a: &Poly<u64>,
-        buf: &mut [Poly<u64>; 3],
+        buf0: &mut Poly<u64>,
+        buf1: &mut Poly<u64>,
+        buf2: &mut Poly<u64>,
         b: &mut Poly<u64>,
     ) {
-        let [a_intt, a_decomp, carry] = buf;
-        ring.intt::<false>(a, a_intt);
-        self.product_core(ring, a_intt, a_decomp, carry, b);
+        ring.intt::<false>(a, buf0);
+        self.product_core(ring, buf0, buf1, buf2, b);
     }
 
     pub fn product_inplace(

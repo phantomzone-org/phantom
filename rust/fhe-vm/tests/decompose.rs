@@ -21,7 +21,7 @@ fn decompose_u32() {
 
     let mut have: u32 = 0;
 
-    (0..d).for_each(|i| {
+    (0..d).rev().for_each(|i| {
         have <<= log_base;
         have |= result[i] as u32;
     });
