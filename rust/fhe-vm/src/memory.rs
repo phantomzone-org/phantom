@@ -36,6 +36,71 @@ impl Memory {
         }
     }
 
+    pub fn read(&self, ring: &Ring<u64>, address: &Address) -> u64 {
+        let log_n: usize = ring.log_n();
+
+        let mut packer: StreamRepacker = StreamRepacker::new(ring);
+        let mut results: Vec<Poly<u64>> = Vec::new();
+
+        let mut buf0: Poly<u64> = ring.new_poly();
+        let mut buf1: Poly<u64> = ring.new_poly();
+        let mut buf2: Poly<u64> = ring.new_poly();
+        let mut buf3: Poly<u64> = ring.new_poly();
+
+        for i in 0..address.0.len() {
+            let address_i: &Gadget<Poly<u64>> = &address.0[i];
+
+            let result_prev: &Vec<Poly<u64>>;
+
+            if i == 0 {
+                result_prev = &self.data;
+            } else {
+                result_prev = &results;
+            }
+
+            if i < address.0.len() - 1 {
+                let mut result_next: Vec<Poly<u64>> = Vec::new();
+
+                // Packs the first coefficient of each polynomial.
+                for chunk in result_prev.chunks(ring.n()) {
+                    for j in 0..ring.n() {
+                        let j_rev: usize = j.reverse_bits_msb(log_n as u32);
+                        if j_rev < chunk.len() {
+                            // Shift polynomial by X^{-i} and then pack
+                            address_i.product(
+                                &ring,
+                                &chunk[j_rev],
+                                &mut buf0,
+                                &mut buf1,
+                                &mut buf2,
+                                &mut buf3,
+                            );
+                            packer.add::<true>(ring, Some(&buf3), &mut result_next);
+                        } else {
+                            packer.add::<true>(ring, None, &mut result_next)
+                        }
+                    }
+                }
+
+                packer.flush::<true>(ring, &mut result_next);
+                packer.reset();
+                results = result_next.clone();
+            } else {
+                address_i.product(
+                    &ring,
+                    &result_prev[0],
+                    &mut buf0,
+                    &mut buf1,
+                    &mut buf2,
+                    &mut buf3,
+                );
+            }
+        }
+
+        ring.intt_inplace::<false>(&mut buf3);
+        buf3.0[0]
+    }
+
     pub fn read_and_write(
         &mut self,
         ring: &Ring<u64>,
@@ -87,6 +152,7 @@ impl Memory {
                 }
 
                 packer.flush::<true>(ring, &mut result_next);
+                packer.reset();
 
                 // Stores the packed polynomial
                 results.push(result_next);

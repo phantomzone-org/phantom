@@ -18,29 +18,29 @@ fn memory() {
 
     let write_value: u64 = 255;
 
-    // Read
+    // Read & Write
+    (0..size).for_each(|i| {
+        idx.set(&ring, i);
+
+        //println!("{:?}", i);
+
+        // Reads idx[i] check it is equal to i.
+        let value: u64 = memory.read(&ring, &idx);
+        assert_eq!(i as u64, value);
+    });
+
+    // Read & Write
     (0..size).for_each(|i| {
         idx.set(&ring, i);
 
         //println!("{:?}", i);
 
         // Reads idx[i] check it is equal to i, and writes write_value on idx[i]
-        let value = memory.read_and_write(&ring, &idx, write_value, true);
+        let value: u64 = memory.read_and_write(&ring, &idx, write_value, true);
         assert_eq!(i as u64, value);
 
         // Reads idx[i], checks it is equal to write_value and writes back i on idx[i].
-        let value = memory.read_and_write(&ring, &idx, i as u64, true);
+        let value: u64 = memory.read_and_write(&ring, &idx, i as u64, true);
         assert_eq!(write_value, value);
     });
-
-    // Write
-    /*
-    let write = 1;
-    let value_write  = 37;
-    idx.set(&ring, 255);
-    memory.write(&ring, value_write, write, &idx);
-
-    let value_read = memory.read(&ring, &idx);
-    println!("write: {} read: {}", value_write, value_read);
-     */
 }
