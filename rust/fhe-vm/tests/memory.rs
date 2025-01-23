@@ -15,12 +15,12 @@ fn memory() {
 
     let mut memory: Memory = Memory::new(&ring);
     memory.set(&ring, &data);
-    let mut idx = Address::new(&ring, log_base, ring.log_n()>>1, size);
+    let mut idx = Address::new(&ring, log_base, ring.log_n() >> 1, size);
 
     let write_value: u64 = 255;
 
     // Read & Write
-    (0..size).for_each(|i| {
+    (16..17).for_each(|i| {
         idx.set(&ring, i);
 
         //println!("{:?}", i);

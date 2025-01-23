@@ -1,83 +1,137 @@
 use crate::gadget::Gadget;
+use itertools::izip;
+use math::automorphism::AutoPerm;
 use math::modulus::WordOps;
 use math::poly::Poly;
 use math::ring::Ring;
 
 pub struct Address {
     pub log_n_decomp: usize,
-    pub gadget_matrix: Vec<Vec<Gadget<Poly<u64>>>>,
+    pub coordinates: Vec<Coordinate>,
 }
 
 impl Address {
     pub fn new(ring: &Ring<u64>, log_base_gadget: usize, log_n_decomp: usize, size: usize) -> Self {
         let log_n: usize = ring.log_n();
-        let mut gadget_matrix: Vec<Vec<Gadget<Poly<u64>>>> = Vec::new();
+        let mut coordinates: Vec<Coordinate> = Vec::new();
         let dims_n: usize = (size.log2() + log_n - 1) / log_n;
         let dims_n_decomp: usize = (log_n + log_n_decomp - 1) / log_n_decomp;
 
-        (0..dims_n).for_each(|_| {
-            let mut gadget_vec: Vec<Gadget<Poly<u64>>> = Vec::new();
-
-            (0..dims_n_decomp).for_each(|_| gadget_vec.push(Gadget::new(&ring, log_base_gadget)));
-
-            gadget_matrix.push(gadget_vec)
-        });
+        (0..dims_n)
+            .for_each(|_| coordinates.push(Coordinate::new(ring, log_base_gadget, dims_n_decomp)));
         Self {
-            gadget_matrix: gadget_matrix,
+            coordinates: coordinates,
             log_n_decomp: log_n_decomp,
         }
     }
 
     pub fn log_base(&self) -> usize {
-        self.gadget_matrix[0][0].log_base
+        self.coordinates[0].0[0].log_base
     }
 
     pub fn dims_n(&self) -> usize {
-        self.gadget_matrix.len()
+        self.coordinates.len()
     }
 
     pub fn dims_n_decomp(&self) -> usize {
-        self.gadget_matrix[0].len()
+        self.coordinates[0].0.len()
     }
 
     pub fn set(&mut self, ring: &Ring<u64>, idx: usize) {
         let log_n: usize = ring.log_n();
-
-        //assert!(idx > (1<<log_base * self.0.len()) == 0, "invalid idx: idx={} > {}*{}={}", idx, 1<<log_base, self.0.len(), 1<<(log_base*self.0.len()));
-
         let mask_log_n: usize = (1 << log_n) - 1;
-        let mask_log_n_decomp: usize = (1 << self.log_n_decomp) - 1;
         let mut remain: usize = idx as _;
-        let n: usize = ring.n();
-        let q: u64 = ring.modulus.q();
         let mut buf: Poly<u64> = ring.new_poly();
-
-        // Decomposition mod N
-        self.gadget_matrix.iter_mut().for_each(|gadget_vec| {
-            let mut chunk: usize = remain & mask_log_n;
-
-            // Sub decomposition mod B < N
-            gadget_vec.iter_mut().for_each(|gadget| {
-                let sub_chunk: usize = chunk & mask_log_n_decomp;
-
-                if sub_chunk != 0 {
-                    buf.0[n - sub_chunk] = q - 1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
-                } else {
-                    buf.0[0] = 1;
-                }
-
-                gadget.encode(ring, &mut buf);
-
-                if sub_chunk != 0 {
-                    buf.0[n - sub_chunk] = 0;
-                } else {
-                    buf.0[0] = 0;
-                }
-
-                chunk >>= self.log_n_decomp;
-            });
-
+        self.coordinates.iter_mut().for_each(|coordinate| {
+            coordinate.encode(ring, remain & mask_log_n, self.log_n_decomp, &mut buf);
             remain >>= log_n;
+        });
+    }
+
+    pub fn at(&self, i: usize) -> &Coordinate {
+        &self.coordinates[i]
+    }
+}
+
+pub struct Coordinate(Vec<Gadget<Poly<u64>>>);
+
+impl Coordinate {
+    pub fn new(ring: &Ring<u64>, log_base: usize, dims: usize) -> Self {
+        let mut coordinates: Vec<Gadget<Poly<u64>>> = Vec::new();
+        (0..dims).for_each(|_| coordinates.push(Gadget::new(&ring, log_base)));
+        Self { 0: coordinates }
+    }
+
+    pub fn dims(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn encode(&mut self, ring: &Ring<u64>, value: usize, log_base: usize, buf: &mut Poly<u64>) {
+        let n: usize = ring.n();
+        let mask: usize = (1 << log_base) - 1;
+        let q: u64 = ring.modulus.q();
+
+        let mut remain: usize = value;
+
+        self.0.iter_mut().for_each(|gadget| {
+            let chunk: usize = remain & mask;
+
+            println!("{} {}", value, chunk);
+
+            if chunk != 0 {
+                buf.0[n - chunk] = q - 1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
+            } else {
+                buf.0[0] = 1;
+            }
+
+            gadget.encode(ring, buf);
+
+            if chunk != 0 {
+                buf.0[n - chunk] = 0;
+            } else {
+                buf.0[0] = 0;
+            }
+
+            remain >>= log_base;
+        });
+    }
+
+    pub fn product(
+        &self,
+        ring: &Ring<u64>,
+        a: &Poly<u64>,
+        buf0: &mut Poly<u64>,
+        buf1: &mut Poly<u64>,
+        buf2: &mut Poly<u64>,
+        b: &mut Poly<u64>,
+    ) {
+        self.0.iter().enumerate().for_each(|(i, gadget)| {
+            if i == 0 {
+                gadget.product(&ring, a, buf0, buf1, buf2, b);
+            } else {
+                gadget.product_inplace(&ring, buf0, buf1, buf2, b);
+            }
+        });
+    }
+
+    pub fn product_inplace(
+        &self,
+        ring: &Ring<u64>,
+        buf0: &mut Poly<u64>,
+        buf1: &mut Poly<u64>,
+        buf2: &mut Poly<u64>,
+        a: &mut Poly<u64>,
+    ) {
+        self.0.iter().enumerate().for_each(|(i, gadget)| {
+            gadget.product_inplace(&ring, buf0, buf1, buf2, a);
+        });
+    }
+
+    pub fn reverse(&self, ring: &Ring<u64>, auto_perm: &AutoPerm, a: &mut Coordinate) {
+        izip!(self.0.iter(), a.0.iter_mut()).for_each(|(a, b)| {
+            izip!(a.value.iter(), b.value.iter_mut()).for_each(|(a_sub, b_sub)| {
+                ring.a_apply_automorphism_from_perm_into_b::<true>(a_sub, auto_perm, b_sub);
+            });
         });
     }
 }
