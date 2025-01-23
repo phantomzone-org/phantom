@@ -19,9 +19,6 @@ impl Decomposer {
             "invalid log_base: ring.log_n() <= log_base"
         );
 
-        let log_gap: usize = log_n - log_base;
-        let gap: usize = 1 << log_gap;
-
         let f_sign = Box::new(move |x: usize| (x >> (log_n - 1)) << (log_n - 1));
         let test_vector_msb: TestVector = TestVector::new(&ring, f_sign);
 

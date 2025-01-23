@@ -12,8 +12,9 @@ fn main() {
     let mut data: Vec<u64> = vec![0u64; size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as u64);
 
-    let mut memory: Memory = Memory::new(&ring, &data);
-    let mut idx: Address = Address::new(&ring, log_base, size);
+    let mut memory: Memory = Memory::new(&ring);
+    memory.set(&ring, &data);
+    let mut idx: Address = Address::new(&ring, log_base, ring.log_n(), size);
 
     let write_value: u64 = 255;
 

@@ -1,4 +1,4 @@
-use fhevm::circuit_bootstrapping::Accumulator;
+use fhevm::circuit_bootstrapping::CircuitBootstrapper;
 use fhevm::gadget::Gadget;
 use fhevm::trace::gen_auto_perms;
 use itertools::izip;
@@ -17,7 +17,8 @@ fn circuit_bootstrapping() {
     let log_gap: usize = 3;
     let log_base: usize = 7;
 
-    let acc: Accumulator = Accumulator::new(&ring_acc, log_gap, log_base);
+    let acc: CircuitBootstrapper = CircuitBootstrapper::new(&ring_acc, log_gap, log_base);
+    //acc.init();
 
     let mut buf_acc_0: Poly<u64> = ring_acc.new_poly();
     let mut buf_acc_1: Poly<u64> = ring_acc.new_poly();

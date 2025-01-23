@@ -15,25 +15,25 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub fn new(ring: &Ring<u64>, data: &Vec<u64>) -> Self {
-        let n: usize = ring.n();
+    pub fn new(ring: &Ring<u64>) -> Self {
+        let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
+        Self {
+            data: Vec::new(),
+            gal_els: gal_els,
+            auto_perms: auto_perms,
+        }
+    }
 
+    pub fn set(&mut self, ring: &Ring<u64>, data: &Vec<u64>) {
         let mut polys: Vec<Poly<u64>> = Vec::new();
-
-        for chunk in data.chunks(n) {
+        for chunk in data.chunks(ring.n()) {
             let mut poly: Poly<u64> = ring.new_poly();
             poly.set(chunk);
             ring.ntt_inplace::<false>(&mut poly);
             polys.push(poly);
         }
 
-        let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
-
-        Self {
-            data: polys,
-            gal_els: gal_els,
-            auto_perms: auto_perms,
-        }
+        self.data = polys
     }
 
     pub fn read(&self, ring: &Ring<u64>, address: &Address) -> u64 {
@@ -47,8 +47,8 @@ impl Memory {
         let mut buf2: Poly<u64> = ring.new_poly();
         let mut buf3: Poly<u64> = ring.new_poly();
 
-        for i in 0..address.0.len() {
-            let address_i: &Gadget<Poly<u64>> = &address.0[i];
+        for i in 0..address.dims_n() {
+            let address_i: &Vec<Gadget<Poly<u64>>> = &address.gadget_matrix[i];
 
             let result_prev: &Vec<Poly<u64>>;
 
@@ -58,7 +58,7 @@ impl Memory {
                 result_prev = &results;
             }
 
-            if i < address.0.len() - 1 {
+            if i < address.dims_n() - 1 {
                 let mut result_next: Vec<Poly<u64>> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
@@ -67,14 +67,24 @@ impl Memory {
                         let j_rev: usize = j.reverse_bits_msb(log_n as u32);
                         if j_rev < chunk.len() {
                             // Shift polynomial by X^{-i} and then pack
-                            address_i.product(
-                                &ring,
-                                &chunk[j_rev],
-                                &mut buf0,
-                                &mut buf1,
-                                &mut buf2,
-                                &mut buf3,
-                            );
+                            // i might be decomposed into a base smaller than N
+                            address_i.iter().enumerate().for_each(|(i, gadget)| {
+                                if i == 0 {
+                                    gadget.product(
+                                        &ring,
+                                        &chunk[j_rev],
+                                        &mut buf0,
+                                        &mut buf1,
+                                        &mut buf2,
+                                        &mut buf3,
+                                    );
+                                } else {
+                                    gadget.product_inplace(
+                                        &ring, &mut buf0, &mut buf1, &mut buf2, &mut buf3,
+                                    );
+                                }
+                            });
+
                             packer.add::<true>(ring, Some(&buf3), &mut result_next);
                         } else {
                             packer.add::<true>(ring, None, &mut result_next)
@@ -86,14 +96,20 @@ impl Memory {
                 packer.reset();
                 results = result_next.clone();
             } else {
-                address_i.product(
-                    &ring,
-                    &result_prev[0],
-                    &mut buf0,
-                    &mut buf1,
-                    &mut buf2,
-                    &mut buf3,
-                );
+                address_i.iter().enumerate().for_each(|(i, gadget)| {
+                    if i == 0 {
+                        gadget.product(
+                            &ring,
+                            &result_prev[0],
+                            &mut buf0,
+                            &mut buf1,
+                            &mut buf2,
+                            &mut buf3,
+                        );
+                    } else {
+                        gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, &mut buf3);
+                    }
+                });
             }
         }
 
@@ -118,10 +134,14 @@ impl Memory {
         let mut buf1: Poly<u64> = ring.new_poly();
         let mut buf2: Poly<u64> = ring.new_poly();
 
-        let mut buf_gadget: Gadget<Poly<u64>> = Gadget::new(&ring, address.log_base());
+        let mut buf_gadget: Vec<Gadget<Poly<u64>>> = Vec::new();
 
-        for i in 0..address.0.len() {
-            let address_i: &Gadget<Poly<u64>> = &address.0[i];
+        (0..address.dims_n_decomp()).for_each(|_| {
+            buf_gadget.push(Gadget::new(&ring, address.log_base()));
+        });
+
+        for i in 0..address.dims_n() {
+            let address_i: &Vec<Gadget<Poly<u64>>> = &address.gadget_matrix[i];
 
             let result_prev: &mut Vec<Poly<u64>>;
 
@@ -133,10 +153,12 @@ impl Memory {
 
             // Shift polynomial of the last iteration by X^{-i}
             result_prev.iter_mut().for_each(|poly| {
-                address_i.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly)
+                address_i.iter().for_each(|gadget| {
+                    gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly);
+                });
             });
 
-            if i < address.0.len() - 1 {
+            if i < address.dims_n() - 1 {
                 let mut result_next: Vec<Poly<u64>> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
@@ -209,9 +231,9 @@ impl Memory {
         // Walk back the tree in reverse order, repacking the coefficients
         // where the read coefficient has been conditionally replaced by
         // the write value based on the write boolean.
-        for i in (0..address.0.len() - 1).rev() {
+        for i in (0..address.dims_n() - 1).rev() {
             // Index polynomial X^{-i}
-            let address_i: &Gadget<Poly<u64>> = &address.0[i + 1];
+            let address_i: &Vec<Gadget<Poly<u64>>> = &address.gadget_matrix[i + 1];
 
             let result_hi: &mut Vec<Poly<u64>>; // Above level
             let result_lo: &mut Vec<Poly<u64>>; // Current level
@@ -231,8 +253,10 @@ impl Memory {
             // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
             // Will be used to apply the reverse cyclic shift.
             if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-                izip!(address_i.value.iter(), buf_gadget.value.iter_mut()).for_each(|(a, b)| {
-                    ring.a_apply_automorphism_from_perm_into_b::<true>(a, auto_perm, b);
+                izip!(address_i.iter(), buf_gadget.iter_mut()).for_each(|(a, b)| {
+                    izip!(a.value.iter(), b.value.iter_mut()).for_each(|(a_sub, b_sub)| {
+                        ring.a_apply_automorphism_from_perm_into_b::<true>(a_sub, auto_perm, b_sub);
+                    });
                 });
             } else {
                 panic!("galois element {} not found in AutoPermMap", gal_el_inv)
@@ -247,7 +271,10 @@ impl Memory {
                     let poly_lo: &mut Poly<u64> = &mut result_lo[j];
 
                     // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-                    buf_gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+                    // i might be further decomposed
+                    buf_gadget.iter().for_each(|gadget| {
+                        gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+                    });
 
                     // Iterates over the polynomial of the current chunk of the level above
                     chunk.iter_mut().for_each(|poly_hi| {
@@ -290,16 +317,31 @@ impl Memory {
         // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
         // Will be used to apply the reverse cyclic shift.
         if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-            izip!(address.0[0].value.iter(), buf_gadget.value.iter_mut()).for_each(|(a, b)| {
-                ring.a_apply_automorphism_from_perm_into_b::<true>(a, auto_perm, b);
+            izip!(address.gadget_matrix[0].iter(), buf_gadget.iter_mut()).for_each(|(a, b)| {
+                izip!(a.value.iter(), b.value.iter_mut()).for_each(|(a_sub, b_sub)| {
+                    ring.a_apply_automorphism_from_perm_into_b::<true>(a_sub, auto_perm, b_sub);
+                });
             });
         }
 
         // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
         self.data.iter_mut().for_each(|poly_lo| {
-            buf_gadget.product_inplace(ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+            buf_gadget.iter().for_each(|gadget| {
+                gadget.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+            });
         });
 
         read_value
     }
 }
+
+/*
+address_i.iter().for_each(|gadget|{
+                    gadget.product_inplace(
+                        &ring,
+                        &mut buf0,
+                        &mut buf1,
+                        &mut buf2,
+                        poly,
+                    );
+                }); */

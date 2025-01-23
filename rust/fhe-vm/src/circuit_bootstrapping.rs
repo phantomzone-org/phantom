@@ -1,4 +1,7 @@
+use crate::address::Address;
+use crate::decompose::Decomposer;
 use crate::gadget::Gadget;
+use crate::test_vector;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
 use math::automorphism::AutoPermMap;
 use math::modulus::montgomery::Montgomery;
@@ -6,13 +9,13 @@ use math::modulus::{WordOps, ONCE};
 use math::poly::Poly;
 use math::ring::Ring;
 
-pub struct Accumulator {
+pub struct CircuitBootstrapper {
     pub test_vectors: Vec<Poly<Montgomery<u64>>>,
     pub log_gap: usize,
     pub log_base: usize,
 }
 
-impl Accumulator {
+impl CircuitBootstrapper {
     pub fn new(ring: &Ring<u64>, log_gap: usize, log_base: usize) -> Self {
         assert!(
             1 + log_gap < ring.log_n(),
@@ -57,6 +60,18 @@ impl Accumulator {
             log_base: log_base,
         }
     }
+
+    /*
+    pub fn bootstrap_to_address(&self, ring_circuit_bootstrap: &Ring<u64>, ring: &Ring<u64>, address: usize, max_address: usize, log_base_address: usize, log_base_rgsw: usize) -> Address{
+
+        // Initialize test vectors
+        let test_vector: Vec<Poly<u64>> = self.init(ring_circuit_bootstrap, ring_circuit_bootstrap.log_n() - ring.log_n(), log_base_rgsw);
+
+        let decomposer: Decomposer = Decomposer::new(ring, log_base_address);
+
+        let address_decomposed = decomposer.decompose(ring, address as u32);
+    }
+    */
 
     pub fn circuit_bootstrap(
         &self,
