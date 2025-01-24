@@ -1,7 +1,4 @@
-use crate::address::Address;
-use crate::decompose::Decomposer;
 use crate::gadget::Gadget;
-use crate::test_vector;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
 use math::automorphism::AutoPermMap;
 use math::modulus::montgomery::Montgomery;

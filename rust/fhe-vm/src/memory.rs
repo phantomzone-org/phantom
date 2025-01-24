@@ -1,8 +1,6 @@
 use crate::address::{Address, Coordinate};
-use crate::gadget::Gadget;
 use crate::packing::StreamRepacker;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b, gen_auto_perms};
-use itertools::izip;
 use math::automorphism::AutoPermMap;
 use math::modulus::{WordOps, ONCE};
 use math::poly::Poly;
@@ -77,7 +75,7 @@ impl Memory {
                             );
                             packer.add::<true>(ring, Some(&buf3), &mut result_next);
                         } else {
-                            packer.add::<true>(ring, None, &mut result_next)
+                            packer.add::<true>(ring, None, &mut result_next);
                         }
                     }
                 }

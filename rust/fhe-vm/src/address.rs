@@ -16,7 +16,6 @@ impl Address {
         let mut coordinates: Vec<Coordinate> = Vec::new();
         let dims_n: usize = (size.log2() + log_n - 1) / log_n;
         let dims_n_decomp: usize = (log_n + log_n_decomp - 1) / log_n_decomp;
-
         (0..dims_n)
             .for_each(|_| coordinates.push(Coordinate::new(ring, log_base_gadget, dims_n_decomp)));
         Self {
@@ -73,15 +72,13 @@ impl Coordinate {
 
         let mut remain: usize = value;
 
-        self.0.iter_mut().for_each(|gadget| {
-            let chunk: usize = remain & mask;
-
-            println!("{} {}", value, chunk);
+        self.0.iter_mut().enumerate().for_each(|(i, gadget)| {
+            let chunk: usize = (remain & mask) << (i * log_base);
 
             if chunk != 0 {
                 buf.0[n - chunk] = q - 1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
             } else {
-                buf.0[0] = 1;
+                buf.0[chunk] = 1;
             }
 
             gadget.encode(ring, buf);
@@ -89,7 +86,7 @@ impl Coordinate {
             if chunk != 0 {
                 buf.0[n - chunk] = 0;
             } else {
-                buf.0[0] = 0;
+                buf.0[chunk] = 0;
             }
 
             remain >>= log_base;
@@ -122,7 +119,7 @@ impl Coordinate {
         buf2: &mut Poly<u64>,
         a: &mut Poly<u64>,
     ) {
-        self.0.iter().enumerate().for_each(|(i, gadget)| {
+        self.0.iter().for_each(|gadget| {
             gadget.product_inplace(&ring, buf0, buf1, buf2, a);
         });
     }
