@@ -17,7 +17,7 @@ fn circuit_bootstrapping() {
     let log_gap: usize = 3;
     let log_base: usize = 7;
 
-    let acc: CircuitBootstrapper = CircuitBootstrapper::new(&ring_acc, log_gap, log_base);
+    let acc: CircuitBootstrapper = CircuitBootstrapper::new(&ring_acc, ring.log_n(), log_base);
     //acc.init();
 
     let mut buf_acc_0: Poly<u64> = ring_acc.new_poly();
@@ -82,8 +82,8 @@ fn circuit_bootstrapping() {
         let mut want: Poly<u64> = ring.new_poly();
         want.0[value << log_gap_out] = 1;
 
-        //println!("{:?}", want);
-        //println!("{:?}", have);
+        println!("{:?}", want);
+        println!("{:?}", have);
 
         izip!(want.0, have.0).for_each(|(a, b)| assert_eq!(a, b));
     });

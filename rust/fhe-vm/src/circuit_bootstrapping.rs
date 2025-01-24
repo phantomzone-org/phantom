@@ -1,4 +1,7 @@
+use crate::address::Address;
+use crate::decompose::Decomposer;
 use crate::gadget::Gadget;
+use crate::parameters::GADGETDECOMP;
 use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
 use math::automorphism::AutoPermMap;
 use math::modulus::montgomery::Montgomery;
@@ -13,13 +16,8 @@ pub struct CircuitBootstrapper {
 }
 
 impl CircuitBootstrapper {
-    pub fn new(ring: &Ring<u64>, log_gap: usize, log_base: usize) -> Self {
-        assert!(
-            1 + log_gap < ring.log_n(),
-            "invalid argument log_gap: should be smaller than ring.log_n()={} but is {}",
-            ring.log_n(),
-            log_gap
-        );
+    pub fn new(ring: &Ring<u64>, log_n_lwe: usize, log_base: usize) -> Self {
+        let log_gap: usize = ring.log_n() - log_n_lwe;
 
         let mut test_vectors: Vec<Poly<u64>> = Vec::new();
 
@@ -58,17 +56,23 @@ impl CircuitBootstrapper {
         }
     }
 
-    /*
-    pub fn bootstrap_to_address(&self, ring_circuit_bootstrap: &Ring<u64>, ring: &Ring<u64>, address: usize, max_address: usize, log_base_address: usize, log_base_rgsw: usize) -> Address{
+    pub fn bootstrap_to_address(
+        &self,
+        ring_pbs: &Ring<u64>,
+        ring_lwe: &Ring<u64>,
+        value: usize,
+        max_address: usize,
+        address: &mut Address,
+    ) {
 
-        // Initialize test vectors
-        let test_vector: Vec<Poly<u64>> = self.init(ring_circuit_bootstrap, ring_circuit_bootstrap.log_n() - ring.log_n(), log_base_rgsw);
+        //let mut decomposer: Decomposer = Decomposer::new(ring_pbs, SUBDECOMP);
 
-        let decomposer: Decomposer = Decomposer::new(ring, log_base_address);
+        //let base: Vec<usize> = Vec::new();
 
-        let address_decomposed = decomposer.decompose(ring, address as u32);
+        //
+
+        //let address_decomposed: Vec<u64> = decomposer.decompose(ring_pbs, value as u32, base);
     }
-    */
 
     pub fn circuit_bootstrap(
         &self,

@@ -1,4 +1,5 @@
 use fhevm::decompose::Decomposer;
+use fhevm::parameters::ADDRESSBASE;
 use math::ring::Ring;
 
 #[test]
@@ -8,10 +9,9 @@ fn decompose_u32() {
     let q_power: usize = 1usize;
     let ring: Ring<u64> = Ring::new(n, q_base, q_power);
 
-    let log_base: usize = 5;
-    let d: usize = (32 + log_base - 1) / log_base;
+    let log_base: Vec<usize> =[6, 6, 6, 6, 6, 2].to_vec();
 
-    let mut decomposer: Decomposer = Decomposer::new(&ring, log_base);
+    let mut decomposer: Decomposer = Decomposer::new(&ring, &log_base);
 
     let value: u32 = 0xf0f0f0ff;
 
@@ -21,10 +21,10 @@ fn decompose_u32() {
 
     let mut have: u32 = 0;
 
-    (0..d).rev().for_each(|i| {
-        have <<= log_base;
-        have |= result[i] as u32;
+    let mut sum_bases: usize= 0;
+    log_base.iter().enumerate().for_each(|(i, base)| {
+        have |= (result[i]<<sum_bases) as u32;
+        sum_bases += base;
     });
-
     assert_eq!(value, have);
 }
