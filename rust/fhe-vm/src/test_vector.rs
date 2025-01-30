@@ -1,6 +1,6 @@
-use math::modulus::ONCE;
-use math::poly::Poly;
-use math::ring::Ring;
+use rns::modulus::ONCE;
+use rns::poly::Poly;
+use rns::ring::Ring;
 
 pub struct TestVector(pub Poly<u64>);
 

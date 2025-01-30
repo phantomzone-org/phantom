@@ -1,30 +1,28 @@
+use base2k::{Module, FFT64};
 use fhevm::circuit_bootstrapping::CircuitBootstrapper;
-use fhevm::gadget::Gadget;
-use fhevm::trace::gen_auto_perms;
 use itertools::izip;
-use math::poly::Poly;
-use math::ring::Ring;
 
 #[test]
 fn circuit_bootstrapping() {
     let n: usize = 1 << 7;
-    let n_acc = n << 1;
-    let q_base: u64 = 65537;
-    let q_power: usize = 1usize;
-    let ring_acc: Ring<u64> = Ring::new(n_acc, q_base, q_power);
-    let ring: Ring<u64> = Ring::new(n, q_base, q_power);
+    let log_q: usize = 54;
+    let log_base2k: usize = 16;
+    let module: Module = Module::new::<FFT64>(n);
+
+    let module_acc: Module = Module::new::<FFT64>(4 * n);
 
     let log_gap: usize = 3;
     let log_base: usize = 7;
 
-    let acc: CircuitBootstrapper = CircuitBootstrapper::new(&ring_acc, ring.log_n(), log_base);
+    //let acc: CircuitBootstrapper = CircuitBootstrapper::new(&ring_acc, ring.log_n(), log_base);
     //acc.init();
 
+    /*
     let mut buf_acc_0: Poly<u64> = ring_acc.new_poly();
     let mut buf_acc_1: Poly<u64> = ring_acc.new_poly();
     let mut buf_acc_2: Poly<u64> = ring_acc.new_poly();
 
-    let mut gadget: Gadget<Poly<u64>> = Gadget::new(&ring, log_base);
+    let mut gadget: Gadget<Poly<u64>> = Gadget::new(&ring, log_base2k, log_q);
 
     // value in [0, n_acc/2^{log_gap} - 1]
     (0..n_acc / (1 << log_gap)).for_each(|value| {
@@ -87,4 +85,5 @@ fn circuit_bootstrapping() {
 
         izip!(want.0, have.0).for_each(|(a, b)| assert_eq!(a, b));
     });
+    */
 }

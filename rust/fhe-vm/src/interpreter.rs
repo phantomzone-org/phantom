@@ -2,8 +2,8 @@
 //use crate::circuit_bootstrapping::CircuitBootstrapper;
 use crate::address::Address;
 use crate::memory::Memory;
-use math::poly::Poly;
-use math::ring::Ring;
+use rns::poly::Poly;
+use rns::ring::Ring;
 
 pub struct Interpreter {
     pub log_base_rgsw: usize,
@@ -21,6 +21,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
+    /*
     pub fn new(ring: &Ring<u64>, log_base_rgsw: usize, max_counter: usize) -> Self {
         Self {
             log_base_rgsw: log_base_rgsw,
@@ -85,4 +86,5 @@ impl Interpreter {
 
         // Evaluates all OPS
     }
+    */
 }

@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
-math = { path = "../../../fhe/math"}
+rns = { path = "../../../fhe/rns"}
+base2k = { path = "../../../fhe/base2k"}
+sampling = { path = "../../../fhe/sampling"}
 
 [profile.release]
 debug = true

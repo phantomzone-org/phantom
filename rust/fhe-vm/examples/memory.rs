@@ -1,35 +1,41 @@
+use base2k::{Module, FFT64};
 use fhevm::address::Address;
 use fhevm::memory::Memory;
-use math::ring::Ring;
 
 fn main() {
-    let n: usize = 1 << 4;
-    let q_base: u64 = 65537u64;
-    let q_power: usize = 1usize;
-    let ring: Ring<u64> = Ring::new(n, q_base, q_power);
-    let log_base: usize = 7;
+    let log_n: usize = 4;
+    let n: usize = 1 << log_n;
+    let log_q: usize = 54;
+    let log_base2k: usize = 15;
+    let log_base_n: usize = 7;
+
+    let rows: usize = (log_q + log_base2k - 1) / log_base2k;
+    let cols: usize = rows;
+
+    let module = Module::new::<FFT64>(n);
+
     let size: usize = n * n * n * n;
-    let mut data: Vec<u64> = vec![0u64; size];
-    data.iter_mut().enumerate().for_each(|(i, x)| *x = i as u64);
+    let mut data: Vec<i64> = vec![i64::default(); size];
+    data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
 
-    let mut memory: Memory = Memory::new(&ring);
-    memory.set(&ring, &data);
-    let mut idx: Address = Address::new(&ring, log_base, ring.log_n(), size);
+    let mut memory: Memory = Memory::new(log_n, log_base2k, log_q);
+    memory.set(&data);
+    let mut idx: Address = Address::new(&module, log_base_n, size, rows, cols);
 
-    let write_value: u64 = 255;
+    let write_value: i64 = 255;
 
     // Read
     (0..16).for_each(|i| {
-        idx.set(&ring, i);
+        idx.set(&module, i);
 
         println!("{}", i);
 
         // Reads idx[i] check it is equal to i, and writes write_value on idx[i]
-        let value = memory.read_and_write(&ring, &idx, write_value, true);
-        assert_eq!(i as u64, value);
+        let value = memory.read_and_write(&module, &idx, write_value, true);
+        assert_eq!(i as i64, value);
 
         // Reads idx[i], checks it is equal to write_value and writes back i on idx[i].
-        let value = memory.read_and_write(&ring, &idx, i as u64, true);
+        let value = memory.read_and_write(&module, &idx, i as i64, true);
         assert_eq!(write_value, value);
     });
 

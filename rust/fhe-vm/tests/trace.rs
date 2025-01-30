@@ -1,16 +1,15 @@
-use fhevm::trace::{a_apply_trace_into_a, gen_auto_perms};
-use math::poly::Poly;
-use math::ring::Ring;
+use base2k::{Module, VecZnx, FFT64};
+use fhevm::trace::{trace, trace_inplace};
 
 #[test]
 fn trace_u64() {
     let n: usize = 1 << 5;
-    let q_base: u64 = 65537u64;
-    let q_power: usize = 1usize;
-    let ring: Ring<u64> = Ring::new(n, q_base, q_power);
+    let log_base2k: usize = 15;
+    let log_q: usize = 54;
+    let module: Module = Module::new::<FFT64>(n);
 
     sub_test("test_trace::<INV:false, NTT:false>", || {
-        test_trace_u64::<false, false>(&ring)
+        test_trace::<false>(&module, log_base2k, log_q)
     });
     //sub_test("test_trace::<INV:false, NTT:true>", || {
     //    test_trace_u64::<false, true>(&ring)
@@ -28,69 +27,62 @@ fn sub_test<F: FnOnce()>(name: &str, f: F) {
     f();
 }
 
-fn test_trace_u64<const INV: bool, const NTT: bool>(ring: &Ring<u64>) {
-    let mut poly: Poly<u64> = ring.new_poly();
-    let mut buf0: Poly<u64> = ring.new_poly();
-    let mut buf1: Poly<u64> = ring.new_poly();
+fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, log_q: usize) {
+    let mut a: VecZnx = module.new_vec_znx(log_base2k, log_q);
+    let mut buf_a: VecZnx = module.new_vec_znx(log_base2k, log_q);
+    let mut buf_b: VecZnx = module.new_vec_znx(log_base2k, log_q);
+    let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n()];
 
-    poly.0
-        .iter_mut()
+    let mut have: Vec<i64> = vec![i64::default(); module.n()];
+    have.iter_mut()
         .enumerate()
-        .for_each(|(i, x)| *x = (i + 1) as u64);
+        .for_each(|(i, x)| *x = (i + 1) as i64);
 
-    if NTT {
-        ring.ntt_inplace::<false>(&mut poly);
-    }
+    a.from_i64(&have, 32);
 
     let step_start: usize = 2;
-    let step_end: usize = ring.log_n();
+    let step_end: usize = module.log_n();
 
-    let (auto_perms, trace_gal_els) = gen_auto_perms::<NTT>(ring);
-
-    a_apply_trace_into_a::<INV, NTT>(
-        ring,
+    trace_inplace::<INV>(
+        module,
         step_start,
         step_start + 1,
-        &trace_gal_els,
-        &auto_perms,
-        &mut buf0,
-        &mut buf1,
-        &mut poly,
+        &mut a,
+        Some(&mut buf_a),
+        &mut buf_b,
+        &mut buf_bytes,
     );
 
-    a_apply_trace_into_a::<INV, NTT>(
-        ring,
+    trace_inplace::<INV>(
+        module,
         step_start + 1,
         step_end,
-        &trace_gal_els,
-        &auto_perms,
-        &mut buf0,
-        &mut buf1,
-        &mut poly,
+        &mut a,
+        Some(&mut buf_a),
+        &mut buf_b,
+        &mut buf_bytes,
     );
 
-    if NTT {
-        ring.intt_inplace::<false>(&mut poly);
-    }
+    let gap: usize = 1 << (module.log_n() - step_start);
 
-    println!("{:?}", poly);
+    let mut have = vec![i64::default(); module.n()];
 
-    let gap: usize = 1 << (ring.log_n() - step_start);
+    a.to_i64(&mut have);
 
     if INV {
-        poly.0.iter().enumerate().for_each(|(i, x)| {
+        have.iter().enumerate().for_each(|(i, x)| {
             if i % gap == 0 {
-                assert_eq!(*x, 0u64)
+                assert_eq!(*x, 0i64)
             } else {
-                assert_eq!(*x, 1 + i as u64)
+                assert_eq!(*x, 1 + i as i64)
             }
         });
     } else {
-        poly.0.iter().enumerate().for_each(|(i, x)| {
+        have.iter().enumerate().for_each(|(i, x)| {
             if i % gap == 0 {
-                assert_eq!(*x, 1 + i as u64)
+                assert_eq!(*x, 1 + i as i64)
             } else {
-                assert_eq!(*x, 0u64)
+                assert_eq!(*x, 0i64)
             }
         });
     }

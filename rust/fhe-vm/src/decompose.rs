@@ -1,6 +1,6 @@
 use crate::test_vector::{self, TestVector};
-use math::poly::Poly;
-use math::ring::Ring;
+use rns::poly::Poly;
+use rns::ring::Ring;
 
 pub struct Decomposer {
     pub test_vector_msb: TestVector,
@@ -18,17 +18,17 @@ impl Decomposer {
 
         let mut test_vector_quo: Vec<TestVector> = Vec::new();
 
-        log_bases.iter().enumerate().for_each(|(i, log_base)|{
+        log_bases.iter().enumerate().for_each(|(i, log_base)| {
             let log_base = *log_base;
-            let mut shift : usize= 1;
-            if i == log_bases.len()-1{
+            let mut shift: usize = 1;
+            if i == log_bases.len() - 1 {
                 shift = 0
             }
-            let f_quo =
-                Box::new(move |x: usize| (x >> (log_n - log_base - shift)) << (log_n - log_base - shift));
+            let f_quo = Box::new(move |x: usize| {
+                (x >> (log_n - log_base - shift)) << (log_n - log_base - shift)
+            });
             test_vector_quo.push(TestVector::new(&ring, f_quo))
         });
-
 
         Self {
             test_vector_msb,
@@ -59,14 +59,17 @@ impl Decomposer {
         let mut sum_bases: usize = 0;
 
         self.log_bases.iter().enumerate().for_each(|(i, base)| {
-
             let last: bool = i == self.log_bases.len() - 1;
 
             sum_bases += *base;
 
             println!("{} {}", sum_bases, base);
 
-            println!("before         : {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
+            println!(
+                "before         : {:032b} {:032b}",
+                value_u64 >> 32,
+                value_u64 & 0xffffffff
+            );
 
             // 1) From mod Q to mod 2N, with scaling by drift = N/Base
             // Example:
@@ -77,13 +80,13 @@ impl Decomposer {
             // x mod 2N: [1] [111111] [00000]
             let mut shift: usize = 32 - sum_bases;
 
-            if !last{
+            if !last {
                 shift -= 1
             }
 
             println!("shift {}", shift);
 
-            let mut x: i32 = ((value_u64<<shift)>>(64 - log_2n)) as i32;
+            let mut x: i32 = ((value_u64 << shift) >> (64 - log_2n)) as i32;
 
             println!("x              : {:032b} {:032b}", 0, x);
 
@@ -116,18 +119,21 @@ impl Decomposer {
                 digits += sign_bit;
             }
 
-            println!("digits         : {:032b} {:032b}", digits>>32, digits&0xffffffff);
+            println!(
+                "digits         : {:032b} {:032b}",
+                digits >> 32,
+                digits & 0xffffffff
+            );
 
             // Stores i-th diit
-            if last{
+            if last {
                 vec.push(digits >> (log_2n - base));
-            }else{
+            } else {
                 vec.push(digits >> (log_2n - base - 1));
             }
-            
 
             //println!("out            : {:032b} {:032b}", vec[i]>>32, vec[i]&0xffffffff);
-           
+
             //println!("value_u64      : {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
 
             // 6) Subtracts i-th digit to prepare for next iteration

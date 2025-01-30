@@ -1,13 +1,11 @@
 use crate::address::Address;
-use crate::decompose::Decomposer;
-use crate::gadget::Gadget;
-use crate::parameters::GADGETDECOMP;
-use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
-use math::automorphism::AutoPermMap;
-use math::modulus::montgomery::Montgomery;
-use math::modulus::{WordOps, ONCE};
-use math::poly::Poly;
-use math::ring::Ring;
+//use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b};
+use base2k::VmpPMat;
+use rns::automorphism::AutoPermMap;
+use rns::modulus::montgomery::Montgomery;
+use rns::modulus::{WordOps, ONCE};
+use rns::poly::Poly;
+use rns::ring::Ring;
 
 pub struct CircuitBootstrapper {
     pub test_vectors: Vec<Poly<Montgomery<u64>>>,
@@ -81,7 +79,7 @@ impl CircuitBootstrapper {
         buf0: &mut Poly<u64>,
         buf1: &mut Poly<u64>,
         buf2: &mut Poly<u64>,
-        a: &mut Gadget<Poly<u64>>,
+        a: &mut VmpPMat,
     ) {
         buf0.zero();
 
@@ -101,6 +99,7 @@ impl CircuitBootstrapper {
 
         ring.ntt_inplace::<true>(buf0);
 
+        /*
         self.test_vectors
             .iter()
             .enumerate()
@@ -108,6 +107,7 @@ impl CircuitBootstrapper {
                 ring.a_mul_b_montgomery_into_c::<ONCE>(test_vector, buf0, buf1);
                 ring.switch_degree::<true>(buf1, buf2, a.at_mut(i));
             });
+        */
     }
 
     pub fn post_process(
@@ -118,8 +118,9 @@ impl CircuitBootstrapper {
         trace_gal_els: &[usize],
         auto_perms: &AutoPermMap,
         buf: &mut [Poly<u64>; 6],
-        a: &mut Gadget<Poly<u64>>,
+        a: &mut VmpPMat,
     ) {
+        /*
         a.value.iter_mut().for_each(|ai| {
             self.post_process_core(
                 ring,
@@ -131,6 +132,7 @@ impl CircuitBootstrapper {
                 ai,
             );
         })
+        */
     }
 
     fn post_process_core(
@@ -148,6 +150,7 @@ impl CircuitBootstrapper {
 
         let [buf0, buf1, buf2, buf3, buf4, buf5] = buf;
 
+        /*
         // First partial trace, vanishes all coefficients which are not multiples of gap_in
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
         a_apply_trace_into_a::<false, true>(
@@ -160,6 +163,7 @@ impl CircuitBootstrapper {
             buf1,
             a,
         );
+        */
 
         // If gap_out < gap_in, then we need to repack, i.e. reduce the cap between
         // coefficients.
@@ -191,6 +195,7 @@ impl CircuitBootstrapper {
                 }
 
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
+                /*
                 a_apply_trace_into_b::<false, true>(
                     ring,
                     step_start,
@@ -202,6 +207,7 @@ impl CircuitBootstrapper {
                     buf1,
                     buf2,
                 );
+                */
 
                 // Aggregates on the output which gets shifted by X^{-gap_out}
                 if i != steps - 1 {

@@ -50,6 +50,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
 
 [[package]]
+name = "base2k"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "itertools 0.14.0",
+ "rand",
+ "rand_core",
+ "rand_distr",
+ "sampling",
+ "utils",
+]
+
+[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -202,8 +215,10 @@ checksum = "60b1af1c220855b6ceac025d3f6ecdd2b7c4894bfe9cd9bda4fbb4bc7c0d4cf0"
 name = "fhevm"
 version = "0.1.0"
 dependencies = [
+ "base2k",
  "itertools 0.14.0",
- "math",
+ "rns",
+ "sampling",
 ]
 
 [[package]]
@@ -307,24 +322,6 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
-
-[[package]]
-name = "math"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "itertools 0.14.0",
- "num",
- "num-bigint",
- "num-integer",
- "num-traits",
- "primality-test",
- "prime_factorization",
- "rand_distr",
- "sampling",
- "sprs",
- "utils",
-]
 
 [[package]]
 name = "matrixmultiply"
@@ -646,6 +643,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b15c43186be67a4fd63bee50d0303afffcef381492ebe2c5d87f324e1b8815c"
 
 [[package]]
+name = "rns"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "itertools 0.14.0",
+ "num",
+ "num-bigint",
+ "num-integer",
+ "num-traits",
+ "primality-test",
+ "prime_factorization",
+ "rand_distr",
+ "sampling",
+ "sprs",
+ "utils",
+]
+
+[[package]]
 name = "ryu"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -666,6 +681,7 @@ version = "0.1.0"
 dependencies = [
  "rand_chacha",
  "rand_core",
+ "rand_distr",
 ]
 
 [[package]]
@@ -723,9 +739,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.95"
+version = "2.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46f71c0377baf4ef1cc3e3402ded576dccc315800fbc62dfc7fe04b009773b4a"
+checksum = "d5d0adab1ae378d7f53bdebc67a39f1f151407ef230f0ce2883572f5d8985c80"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -1,54 +1,58 @@
 use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
-use crate::trace::{a_apply_trace_into_a, a_apply_trace_into_b, gen_auto_perms};
-use math::automorphism::AutoPermMap;
-use math::modulus::{WordOps, ONCE};
-use math::poly::Poly;
-use math::ring::Ring;
+use crate::reverse_bits_msb;
+use crate::trace::{trace, trace_inplace};
+use base2k::{Module, VecZnx};
 
 pub struct Memory {
-    pub data: Vec<Poly<u64>>,
-    gal_els: Vec<usize>,
-    auto_perms: AutoPermMap,
+    pub data: Vec<VecZnx>,
+    pub log_n: usize,
+    pub log_base2k: usize,
+    pub log_q: usize,
 }
 
 impl Memory {
-    pub fn new(ring: &Ring<u64>) -> Self {
-        let (auto_perms, gal_els) = gen_auto_perms::<true>(ring);
+    pub fn new(log_n: usize, log_base2k: usize, log_q: usize) -> Self {
         Self {
             data: Vec::new(),
-            gal_els: gal_els,
-            auto_perms: auto_perms,
+            log_n: log_n,
+            log_base2k: log_base2k,
+            log_q: log_q,
         }
     }
 
-    pub fn set(&mut self, ring: &Ring<u64>, data: &Vec<u64>) {
-        let mut polys: Vec<Poly<u64>> = Vec::new();
-        for chunk in data.chunks(ring.n()) {
-            let mut poly: Poly<u64> = ring.new_poly();
-            poly.set(chunk);
-            ring.ntt_inplace::<false>(&mut poly);
-            polys.push(poly);
+    pub fn set(&mut self, data: &Vec<i64>) {
+        let mut vectors: Vec<VecZnx> = Vec::new();
+        for chunk in data.chunks(1 << self.log_n) {
+            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, self.log_base2k, self.log_q);
+            vector.from_i64(chunk, 32);
+            vectors.push(vector);
         }
 
-        self.data = polys
+        self.data = vectors
     }
 
-    pub fn read(&self, ring: &Ring<u64>, address: &Address) -> u64 {
-        let log_n: usize = ring.log_n();
+    pub fn read(&self, module: &Module, address: &Address) -> i64 {
+        let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(ring);
-        let mut results: Vec<Poly<u64>> = Vec::new();
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.log_q);
+        let mut results: Vec<VecZnx> = Vec::new();
 
-        let mut buf0: Poly<u64> = ring.new_poly();
-        let mut buf1: Poly<u64> = ring.new_poly();
-        let mut buf2: Poly<u64> = ring.new_poly();
-        let mut buf3: Poly<u64> = ring.new_poly();
+        let limbs: usize = (self.log_q + self.log_base2k - 1) / self.log_base2k;
+
+        let mut tmp_b_dft: base2k::VecZnxDft = module.new_vec_znx_dft(limbs);
+        let mut tmp_bytes: Vec<u8> =
+            vec![
+                u8::default();
+                module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
+            ];
+
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
 
         for i in 0..address.dims_n() {
-            let coordinate: &Coordinate = address.at(i);
+            let coordinate: &Coordinate = address.at_lsh(i);
 
-            let result_prev: &Vec<Poly<u64>>;
+            let result_prev: &Vec<VecZnx>;
 
             if i == 0 {
                 result_prev = &self.data;
@@ -57,73 +61,80 @@ impl Memory {
             }
 
             if i < address.dims_n() - 1 {
-                let mut result_next: Vec<Poly<u64>> = Vec::new();
+                let mut result_next: Vec<VecZnx> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
-                for chunk in result_prev.chunks(ring.n()) {
-                    for j in 0..ring.n() {
-                        let j_rev: usize = j.reverse_bits_msb(log_n as u32);
+                for chunk in result_prev.chunks(module.n()) {
+                    for j in 0..module.n() {
+                        let j_rev: usize = reverse_bits_msb(j, log_n as u32);
                         if j_rev < chunk.len() {
                             // Shift polynomial by X^{-idx} and then pack
                             coordinate.product(
-                                &ring,
+                                &module,
+                                &mut tmp_vec_znx,
                                 &chunk[j_rev],
-                                &mut buf0,
-                                &mut buf1,
-                                &mut buf2,
-                                &mut buf3,
+                                &mut tmp_b_dft,
+                                &mut tmp_bytes,
                             );
-                            packer.add::<true>(ring, Some(&buf3), &mut result_next);
+                            packer.add(module, Some(&tmp_vec_znx), &mut result_next);
                         } else {
-                            packer.add::<true>(ring, None, &mut result_next);
+                            packer.add(module, None, &mut result_next);
                         }
                     }
                 }
 
-                packer.flush::<true>(ring, &mut result_next);
+                packer.flush(module, &mut result_next);
                 packer.reset();
                 results = result_next.clone();
             } else {
                 // Shift polynomial by X^{-idx} and then pack
                 coordinate.product(
-                    &ring,
+                    &module,
+                    &mut tmp_vec_znx,
                     &results[0],
-                    &mut buf0,
-                    &mut buf1,
-                    &mut buf2,
-                    &mut buf3,
+                    &mut tmp_b_dft,
+                    &mut tmp_bytes,
                 );
             }
         }
-
-        ring.intt_inplace::<false>(&mut buf3);
-        buf3.0[0]
+        tmp_vec_znx.to_i64_single(0)
     }
 
     pub fn read_and_write(
         &mut self,
-        ring: &Ring<u64>,
+        module: &Module,
         address: &Address,
-        write_value: u64,
+        write_value: i64,
         write_bool: bool,
-    ) -> u64 {
-        let log_n: usize = ring.log_n();
+    ) -> i64 {
+        let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(ring);
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.log_q);
 
-        let mut results: Vec<Vec<Poly<u64>>> = Vec::new();
+        let mut results: Vec<Vec<VecZnx>> = Vec::new();
 
-        let mut buf0: Poly<u64> = ring.new_poly();
-        let mut buf1: Poly<u64> = ring.new_poly();
-        let mut buf2: Poly<u64> = ring.new_poly();
+        let limbs: usize = (self.log_q + self.log_base2k - 1) / self.log_base2k;
 
-        let mut coordinate_buf: Coordinate =
-            Coordinate::new(&ring, address.log_base(), address.dims_n_decomp());
+        let mut tmp_a_dft: base2k::VecZnxDft = module.new_vec_znx_dft(limbs);
+        let mut tmp_bytes: Vec<u8> =
+            vec![
+                u8::default();
+                module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
+            ];
+
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+
+        let mut buf0: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+        let mut buf1: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+        let mut buf2: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+
+        //let mut coordinate_buf: Coordinate =
+        //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
 
         for i in 0..address.dims_n() {
-            let coordinate: &Coordinate = &address.at(i);
+            let coordinate: &Coordinate = &address.at_lsh(i);
 
-            let result_prev: &mut Vec<Poly<u64>>;
+            let result_prev: &mut Vec<VecZnx>;
 
             if i == 0 {
                 result_prev = &mut self.data;
@@ -133,25 +144,25 @@ impl Memory {
 
             // Shift polynomial of the last iteration by X^{-i}
             result_prev.iter_mut().for_each(|poly| {
-                coordinate.product_inplace(ring, &mut buf0, &mut buf1, &mut buf2, poly);
+                coordinate.product_inplace(module, poly, &mut tmp_a_dft, &mut tmp_bytes);
             });
 
             if i < address.dims_n() - 1 {
-                let mut result_next: Vec<Poly<u64>> = Vec::new();
+                let mut result_next: Vec<VecZnx> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
-                for chunk in result_prev.chunks(ring.n()) {
-                    for i in 0..ring.n() {
-                        let i_rev: usize = i.reverse_bits_msb(log_n as u32);
+                for chunk in result_prev.chunks(module.n()) {
+                    for i in 0..module.n() {
+                        let i_rev: usize = reverse_bits_msb(i, log_n as u32);
                         if i_rev < chunk.len() {
-                            packer.add::<true>(ring, Some(&chunk[i_rev]), &mut result_next);
+                            packer.add(module, Some(&chunk[i_rev]), &mut result_next);
                         } else {
-                            packer.add::<true>(ring, None, &mut result_next)
+                            packer.add(module, None, &mut result_next)
                         }
                     }
                 }
 
-                packer.flush::<true>(ring, &mut result_next);
+                packer.flush(module, &mut result_next);
                 packer.reset();
 
                 // Stores the packed polynomial
@@ -160,34 +171,27 @@ impl Memory {
         }
 
         let size: usize = results.len();
-        let read_value: u64;
+        let read_value: i64;
 
         if size != 0 {
-            let mut result = &mut results[size - 1][0];
+            let result: &mut VecZnx = &mut results[size - 1][0];
 
             // READ value
-            ring.intt_inplace::<false>(&mut result);
-
-            read_value = result.0[0];
+            read_value = result.to_i64_single(0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                result.0[0] = write_value
+                result.from_i64_single(0, write_value, 32);
             }
-
-            ring.ntt_inplace::<false>(&mut result);
         } else {
             // READ value
-            ring.intt_inplace::<false>(&mut self.data[0]);
 
-            read_value = self.data[0].0[0];
+            read_value = self.data[0].to_i64_single(0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                self.data[0].0[0] = write_value
+                self.data[0].from_i64_single(0, write_value, 32)
             }
-
-            ring.ntt_inplace::<false>(&mut self.data[0]);
         }
 
         /*
@@ -200,21 +204,15 @@ impl Memory {
         }
          */
 
-        let mut x_inv: Poly<u64> = ring.new_poly();
-        x_inv.0[ring.n() - 1] = ring.modulus.montgomery.minus_one();
-        ring.ntt_inplace::<false>(&mut x_inv);
-
-        let gal_el_inv: usize = self.gal_els[0];
-
         // Walk back the tree in reverse order, repacking the coefficients
         // where the read coefficient has been conditionally replaced by
         // the write value based on the write boolean.
         for i in (0..address.dims_n() - 1).rev() {
             // Index polynomial X^{-i}
-            let coordinate: &Coordinate = &address.at(i + 1);
+            let coordinate: &Coordinate = &address.at_rsh(i + 1);
 
-            let result_hi: &mut Vec<Poly<u64>>; // Above level
-            let result_lo: &mut Vec<Poly<u64>>; // Current level
+            let result_hi: &mut Vec<VecZnx>; // Above level
+            let result_lo: &mut Vec<VecZnx>; // Current level
 
             //println!("i: {}", i);
 
@@ -228,72 +226,59 @@ impl Memory {
                 result_lo = &mut right[0];
             }
 
-            // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
-            // Will be used to apply the reverse cyclic shift.
-            if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-                coordinate.reverse(&ring, auto_perm, &mut coordinate_buf);
-            } else {
-                panic!("galois element {} not found in AutoPermMap", gal_el_inv)
-            }
-
             // Iterates over the set of chuncks of n polynomials of the level above
             result_hi
-                .chunks_mut(ring.n())
+                .chunks_mut(module.n())
                 .enumerate()
                 .for_each(|(j, chunk)| {
                     // Retrieve the associated polynomial to extract and pack related to the current chunk
-                    let poly_lo: &mut Poly<u64> = &mut result_lo[j];
+                    let poly_lo: &mut VecZnx = &mut result_lo[j];
 
+                    // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
                     // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-                    coordinate_buf.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+                    coordinate.product_inplace(&module, poly_lo, &mut tmp_a_dft, &mut tmp_bytes);
 
                     // Iterates over the polynomial of the current chunk of the level above
                     chunk.iter_mut().for_each(|poly_hi| {
                         // Extract the first coefficient poly_lo
                         // [a, b, c, d] -> [a, 0, 0, 0]
-                        a_apply_trace_into_b::<false, true>(
-                            &ring,
+                        trace::<false>(
+                            module,
                             0,
                             log_n,
-                            &self.gal_els,
-                            &self.auto_perms,
-                            poly_lo,
-                            &mut buf0,
-                            &mut buf1,
                             &mut buf2,
+                            poly_lo,
+                            &mut tmp_vec_znx,
+                            &mut tmp_bytes,
                         );
 
                         // Zeroes the first coefficient of poly_j
                         // [a, b, c, d] -> [0, b, c, d]
-                        a_apply_trace_into_a::<true, true>(
-                            &ring,
+                        trace_inplace::<true>(
+                            module,
                             0,
                             log_n,
-                            &self.gal_els,
-                            &self.auto_perms,
-                            &mut buf0,
-                            &mut buf1,
                             poly_hi,
+                            Some(&mut buf0),
+                            &mut buf1,
+                            &mut tmp_bytes,
                         );
 
                         // Adds TRACE(poly_lo) + TRACEINV(poly_hi)
-                        ring.a_add_b_into_b::<ONCE>(&buf2, poly_hi);
+                        module.vec_znx_add_inplace(poly_hi, &buf2);
 
                         // Cyclic shift poly_lo by X^-1
-                        ring.a_mul_b_montgomery_into_a::<ONCE>(&x_inv, poly_lo);
+                        module.vec_znx_rotate_inplace(-1, poly_lo);
                     });
                 });
         }
 
-        // Get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
-        // Will be used to apply the reverse cyclic shift.
-        if let Some(auto_perm) = self.auto_perms.get(&gal_el_inv) {
-            address.at(0).reverse(&ring, auto_perm, &mut coordinate_buf);
-        }
-
+        // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
         // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
         self.data.iter_mut().for_each(|poly_lo| {
-            coordinate_buf.product_inplace(&ring, &mut buf0, &mut buf1, &mut buf2, poly_lo);
+            address
+                .at_rsh(0)
+                .product_inplace(&module, poly_lo, &mut tmp_a_dft, &mut tmp_bytes);
         });
 
         read_value
