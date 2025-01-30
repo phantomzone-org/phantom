@@ -105,15 +105,12 @@ impl Coordinate {
             vec![u8::default(); module.vmp_prepare_contiguous_tmp_bytes(rows, cols)];
         let mut buf_i64: Vec<i64> = vec![i64::default(); n];
 
-        
-
         self.0.iter_mut().enumerate().for_each(|(i, vmp_pmat)| {
-
             let chunk: usize = (remain & mask) << (i * log_base);
 
             if sign < 0 && chunk != 0 {
-                buf_i64[n-chunk] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
-            } else  {
+                buf_i64[n - chunk] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
+            } else {
                 buf_i64[chunk] = 1;
             }
 
@@ -124,8 +121,8 @@ impl Coordinate {
             module.vmp_prepare_contiguous(vmp_pmat, &data_mat.data, &mut buf);
 
             if sign < 0 && chunk != 0 {
-                buf_i64[n-chunk] = 0;
-            } else  {
+                buf_i64[n - chunk] = 0;
+            } else {
                 buf_i64[chunk] = 0;
             }
 
@@ -147,10 +144,11 @@ impl Coordinate {
             } else {
                 module.vmp_apply_dft_to_dft_inplace(tmp_b_dft, vmp_pmat, buf);
             }
-            let mut tmp_b_big: VecZnxBig = tmp_b_dft.as_vec_znx_big();
-            module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_b_dft, b.limbs());
-            module.vec_znx_big_normalize(b, &tmp_b_big, buf);
         });
+
+        let mut tmp_b_big: VecZnxBig = tmp_b_dft.as_vec_znx_big();
+        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_b_dft, b.limbs());
+        module.vec_znx_big_normalize(b, &tmp_b_big, buf);
     }
 
     pub fn product_inplace(
@@ -166,9 +164,9 @@ impl Coordinate {
             } else {
                 module.vmp_apply_dft_to_dft_inplace(tmp_a_dft, vmp_pmat, buf);
             }
-            let mut tmp_b_big: VecZnxBig = tmp_a_dft.as_vec_znx_big();
-            module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_a_dft, a.limbs());
-            module.vec_znx_big_normalize(a, &tmp_b_big, buf);
         });
+        let mut tmp_b_big: VecZnxBig = tmp_a_dft.as_vec_znx_big();
+        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_a_dft, a.limbs());
+        module.vec_znx_big_normalize(a, &tmp_b_big, buf);
     }
 }

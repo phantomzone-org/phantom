@@ -76,6 +76,7 @@ impl Memory {
                                 &mut tmp_b_dft,
                                 &mut tmp_bytes,
                             );
+
                             packer.add(module, Some(&tmp_vec_znx), &mut result_next);
                         } else {
                             packer.add(module, None, &mut result_next);
@@ -177,7 +178,6 @@ impl Memory {
         if size != 0 {
             let result: &mut VecZnx = &mut results[size - 1][0];
 
-            // READ value
             read_value = result.to_i64_single(0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
@@ -185,8 +185,6 @@ impl Memory {
                 result.from_i64_single(0, write_value, 32);
             }
         } else {
-            // READ value
-
             read_value = self.data[0].to_i64_single(0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
@@ -194,16 +192,6 @@ impl Memory {
                 self.data[0].from_i64_single(0, write_value, 32)
             }
         }
-
-        /*
-        for i in 0..results.len(){
-            for j in 0..results[i].len(){
-                ring.intt::<false>(&results[i][j], &mut buf0);
-                println!("TREE[{}][{}]: {:?}", i+1, j, buf0);
-            }
-            println!();
-        }
-         */
 
         // Walk back the tree in reverse order, repacking the coefficients
         // where the read coefficient has been conditionally replaced by

@@ -28,11 +28,10 @@ fn sub_test<F: FnOnce()>(name: &str, f: F) {
 }
 
 fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, log_q: usize) {
-
     let mut a: VecZnx = module.new_vec_znx(log_base2k, log_q);
     let mut buf_a: VecZnx = module.new_vec_znx(log_base2k, log_q);
     let mut buf_b: VecZnx = module.new_vec_znx(log_base2k, log_q);
-    let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n()*8];
+    let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n() * 8];
 
     let mut have: Vec<i64> = vec![i64::default(); module.n()];
     have.iter_mut()
