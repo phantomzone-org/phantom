@@ -5,18 +5,18 @@ use fhevm::parameters::{GADGETDECOMP, LOGNLWE};
 
 #[test]
 fn memory() {
-    let log_n: usize = 4;
+    let log_n: usize = 7;
     let n: usize = 1 << log_n;
     let log_q: usize = 54;
     let log_base2k: usize = 15;
-    let log_base_n: usize = 7;
+    let log_base_n: usize = 6;
 
     let rows: usize = (log_q + log_base2k - 1) / log_base2k;
     let cols: usize = rows;
 
     let module = Module::new::<FFT64>(n);
 
-    let size: usize = n * n * n * n;
+    let size: usize = 2*n-37;
     let mut data: Vec<i64> = vec![i64::default(); size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
 
@@ -30,7 +30,7 @@ fn memory() {
     (0..size).for_each(|i| {
         idx.set(&module, i);
 
-        //println!("{:?}", i);
+        println!("{:?}", i);
 
         // Reads idx[i] check it is equal to i.
         let value: i64 = memory.read(&module, &idx);
@@ -41,7 +41,7 @@ fn memory() {
     (0..size).for_each(|i| {
         idx.set(&module, i);
 
-        //println!("{:?}", i);
+        println!("{:?}", i);
 
         // Reads idx[i] check it is equal to i, and writes write_value on idx[i]
         let value: i64 = memory.read_and_write(&module, &idx, write_value, true);

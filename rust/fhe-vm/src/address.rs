@@ -1,4 +1,4 @@
-use base2k::{Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat};
+use base2k::{ffi::vmp::vmp_pmat_t, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat};
 use itertools::izip;
 
 pub struct Address {
@@ -93,24 +93,28 @@ impl Coordinate {
 
     pub fn encode(&mut self, module: &Module, value: i64, log_base: usize) {
         let n: usize = module.n();
-        let mask: i64 = (1 << log_base) - 1;
+        let mask: usize = (1 << log_base) - 1;
         let rows: usize = self.0[0].rows();
         let cols: usize = self.0[0].cols();
 
-        let mut remain: i64 = value;
+        let sign: i64 = value.signum();
+        let mut remain: usize = value.abs() as usize;
 
         let mut data_mat: Matrix3D<i64> = Matrix3D::new(rows, cols, module.n());
         let mut buf: Vec<u8> =
             vec![u8::default(); module.vmp_prepare_contiguous_tmp_bytes(rows, cols)];
         let mut buf_i64: Vec<i64> = vec![i64::default(); n];
 
-        self.0.iter_mut().enumerate().for_each(|(i, vmp_pmat)| {
-            let chunk: i64 = (remain & mask) << (i * log_base) as i64;
+        
 
-            if chunk < 0 {
-                buf_i64[n + (-chunk as usize)] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
-            } else if chunk >= 0 {
-                buf_i64[chunk as usize] = 1;
+        self.0.iter_mut().enumerate().for_each(|(i, vmp_pmat)| {
+
+            let chunk: usize = (remain & mask) << (i * log_base);
+
+            if sign < 0 && chunk != 0 {
+                buf_i64[n-chunk] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
+            } else  {
+                buf_i64[chunk] = 1;
             }
 
             (0..data_mat.rows).for_each(|i| {
@@ -119,10 +123,10 @@ impl Coordinate {
 
             module.vmp_prepare_contiguous(vmp_pmat, &data_mat.data, &mut buf);
 
-            if chunk < 0 {
-                buf_i64[n + (-chunk as usize)] = 0; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
-            } else if chunk >= 0 {
-                buf_i64[chunk as usize] = 0;
+            if sign < 0 && chunk != 0 {
+                buf_i64[n-chunk] = 0;
+            } else  {
+                buf_i64[chunk] = 0;
             }
 
             remain >>= log_base;

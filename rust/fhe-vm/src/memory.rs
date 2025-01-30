@@ -97,6 +97,7 @@ impl Memory {
                 );
             }
         }
+        tmp_b_dft.delete();
         tmp_vec_znx.to_i64_single(0)
     }
 

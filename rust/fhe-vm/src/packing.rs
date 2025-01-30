@@ -36,7 +36,7 @@ impl StreamRepacker {
             accumulators: accumulators,
             tmp_a: module.new_vec_znx(log_base2k, log_q),
             tmp_b: module.new_vec_znx(log_base2k, log_q),
-            carry: vec![u8::default(); module.n()],
+            carry: vec![u8::default(); module.n() * 8],
             counter: 0,
         }
     }
@@ -132,6 +132,8 @@ fn combine(
     carry: &mut [u8],
     i: usize,
 ) {
+
+    let log_n = module.log_n();
     let a: &mut VecZnx = &mut acc.buf;
 
     let gal_el: i64;
@@ -143,11 +145,13 @@ fn combine(
     }
 
     if acc.value {
+
         a.rsh(1, carry);
 
         if let Some(b) = b {
+
             // tmp_a = b * X^t
-            module.vec_znx_rotate(1 << i, tmp_a, b);
+            module.vec_znx_rotate(1 << (log_n-i-1), tmp_a, b);
 
             tmp_a.rsh(1, carry);
 
@@ -171,7 +175,7 @@ fn combine(
     } else {
         if let Some(b) = b {
             // tmp_b = b * X^t
-            module.vec_znx_rotate(1 << i, tmp_b, b);
+            module.vec_znx_rotate(1 << (log_n-i-1), tmp_b, b);
             tmp_b.rsh(1, carry);
 
             // tmp_a = phi(b * X^t)

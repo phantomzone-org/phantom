@@ -33,26 +33,11 @@ fn main() {
 
     (0..a.limbs()).for_each(|i| println!("{}: {:?}", i, a.at(i)));
 
-    let mask = (2 << log_n) - 1;
-    let mut gal_el: i64;
-    for i in 0..log_n {
-        if i == 0 {
-            gal_el = -1;
-        } else {
-            gal_el = 1;
-            for _ in 0..(1 << (i - 1)) {
-                gal_el *= 5;
-                gal_el &= mask;
-            }
-        }
+    let mut buf_bytes: Vec<u8> = vec![u8::default(); module.vec_znx_big_normalize_tmp_bytes()];
+    let mut buf_b: VecZnx = VecZnx::new(n, log_base2k, log_q);
+    trace_inplace::<false>(&module, 0, log_n, &mut a, None, &mut buf_b, &mut buf_bytes);
 
-        println!("gal_el: {}", gal_el);
-
-        let mut buf_bytes: Vec<u8> = vec![u8::default(); module.vec_znx_big_normalize_tmp_bytes()];
-        let mut buf_b: VecZnx = VecZnx::new(n, log_base2k, log_q);
-        trace_inplace::<false>(&module, 0, log_n, &mut a, None, &mut buf_b, &mut buf_bytes);
-
-        a.to_i64(&mut values);
-        println!("{:?}", values);
-    }
+    a.to_i64(&mut values);
+    (0..a.limbs()).for_each(|i| println!("{}: {:?}", i, a.at(i)));
+    println!("{:?}", values);
 }
