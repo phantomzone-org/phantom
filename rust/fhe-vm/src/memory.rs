@@ -8,24 +8,29 @@ pub struct Memory {
     pub data: Vec<VecZnx>,
     pub log_n: usize,
     pub log_base2k: usize,
-    pub log_q: usize,
+    pub log_k: usize,
 }
 
 impl Memory {
-    pub fn new(log_n: usize, log_base2k: usize, log_q: usize) -> Self {
+    pub fn new(log_n: usize, log_base2k: usize, log_k: usize) -> Self {
         Self {
             data: Vec::new(),
             log_n: log_n,
             log_base2k: log_base2k,
-            log_q: log_q,
+            log_k: log_k,
         }
+    }
+
+    pub fn limbs(&self) -> usize {
+        (self.log_k + self.log_base2k - 1) / self.log_base2k
     }
 
     pub fn set(&mut self, data: &Vec<i64>) {
         let mut vectors: Vec<VecZnx> = Vec::new();
+        let limbs = (self.log_k + self.log_base2k - 1) / self.log_base2k;
         for chunk in data.chunks(1 << self.log_n) {
-            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, self.log_base2k, self.log_q);
-            vector.from_i64(chunk, 32);
+            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, self.log_base2k, limbs);
+            vector.from_i64(chunk, 32, self.log_k);
             vectors.push(vector);
         }
 
@@ -35,10 +40,10 @@ impl Memory {
     pub fn read(&self, module: &Module, address: &Address) -> i64 {
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.log_q);
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.limbs());
         let mut results: Vec<VecZnx> = Vec::new();
 
-        let limbs: usize = (self.log_q + self.log_base2k - 1) / self.log_base2k;
+        let limbs: usize = (self.log_k + self.log_base2k - 1) / self.log_base2k;
 
         let mut tmp_b_dft: base2k::VecZnxDft = module.new_vec_znx_dft(limbs);
         let mut tmp_bytes: Vec<u8> =
@@ -47,7 +52,7 @@ impl Memory {
                 module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
             ];
 
-        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.limbs());
 
         for i in 0..address.dims_n() {
             let coordinate: &Coordinate = address.at_lsh(i);
@@ -99,7 +104,7 @@ impl Memory {
             }
         }
         tmp_b_dft.delete();
-        tmp_vec_znx.to_i64_single(0)
+        tmp_vec_znx.to_i64_single(0, self.log_k)
     }
 
     pub fn read_and_write(
@@ -111,11 +116,11 @@ impl Memory {
     ) -> i64 {
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.log_q);
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.limbs());
 
         let mut results: Vec<Vec<VecZnx>> = Vec::new();
 
-        let limbs: usize = (self.log_q + self.log_base2k - 1) / self.log_base2k;
+        let limbs: usize = self.limbs();
 
         let mut tmp_a_dft: base2k::VecZnxDft = module.new_vec_znx_dft(limbs);
         let mut tmp_bytes: Vec<u8> =
@@ -124,11 +129,11 @@ impl Memory {
                 module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
             ];
 
-        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
 
-        let mut buf0: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
-        let mut buf1: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
-        let mut buf2: VecZnx = module.new_vec_znx(self.log_base2k, self.log_q);
+        let mut buf0: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
+        let mut buf1: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
+        let mut buf2: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
 
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
@@ -178,18 +183,18 @@ impl Memory {
         if size != 0 {
             let result: &mut VecZnx = &mut results[size - 1][0];
 
-            read_value = result.to_i64_single(0);
+            read_value = result.to_i64_single(0, self.log_k);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                result.from_i64_single(0, write_value, 32);
+                result.from_i64_single(0, write_value, 32, self.log_k);
             }
         } else {
-            read_value = self.data[0].to_i64_single(0);
+            read_value = self.data[0].to_i64_single(0, self.log_k);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                self.data[0].from_i64_single(0, write_value, 32)
+                self.data[0].from_i64_single(0, write_value, 32, self.log_k)
             }
         }
 

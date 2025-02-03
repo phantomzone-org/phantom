@@ -15,9 +15,9 @@ pub struct Accumulator {
 }
 
 impl Accumulator {
-    pub fn new(module: &Module, log_base2k: usize, log_q: usize) -> Self {
+    pub fn new(module: &Module, log_base2k: usize, limbs: usize) -> Self {
         Self {
-            buf: module.new_vec_znx(log_base2k, log_q),
+            buf: module.new_vec_znx(log_base2k, limbs),
             value: false,
             control: false,
         }
@@ -25,17 +25,17 @@ impl Accumulator {
 }
 
 impl StreamRepacker {
-    pub fn new(module: &Module, log_base2k: usize, log_q: usize) -> Self {
+    pub fn new(module: &Module, log_base2k: usize, limbs: usize) -> Self {
         let mut accumulators: Vec<Accumulator> = Vec::<Accumulator>::new();
 
         let log_n: usize = module.log_n();
 
-        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, log_base2k, log_q)));
+        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, log_base2k, limbs)));
 
         Self {
             accumulators: accumulators,
-            tmp_a: module.new_vec_znx(log_base2k, log_q),
-            tmp_b: module.new_vec_znx(log_base2k, log_q),
+            tmp_a: module.new_vec_znx(log_base2k, limbs),
+            tmp_b: module.new_vec_znx(log_base2k, limbs),
             carry: vec![u8::default(); module.n() * 8],
             counter: 0,
         }

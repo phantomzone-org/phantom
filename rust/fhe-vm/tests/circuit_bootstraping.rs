@@ -6,14 +6,13 @@ use itertools::izip;
 fn circuit_bootstrapping() {
     let n: usize = 1 << 5;
     let n_acc = n << 2;
-    let log_q: usize = 30;
-    let log_base2k: usize = 5;
+    let log_base2k: usize = 17;
+    let limbs: usize = 4;
+    let log_k: usize = limbs * log_base2k - 5;
     let module: Module = Module::new::<FFT64>(n);
 
     let module_acc: Module = Module::new::<FFT64>(n_acc);
     let log_gap: usize = 3;
-
-    let limbs = (log_q + log_base2k - 1) / log_base2k;
 
     let rows: usize = limbs;
     let cols: usize = limbs + 1;
@@ -67,8 +66,8 @@ fn circuit_bootstrapping() {
 
         let mut buf: Vec<u8> = vec![0; tmp_bytes];
 
-        let mut vec_have: VecZnx = module.new_vec_znx(log_base2k, log_q);
-        vec_have.from_i64_single(0, 1, 32);
+        let mut vec_have: VecZnx = module.new_vec_znx(log_base2k, limbs);
+        vec_have.from_i64_single(0, 1, 32, log_k);
         vec_have.normalize(&mut buf);
 
         //println!("INPUT");
@@ -83,9 +82,8 @@ fn circuit_bootstrapping() {
         let mut c_big: VecZnxBig = c_dft.as_vec_znx_big();
         module.vec_znx_idft_tmp_a(&mut c_big, &mut c_dft, cols);
 
-        let mut res: VecZnx = module.new_vec_znx(log_base2k, log_q + log_base2k);
+        let mut res: VecZnx = module.new_vec_znx(log_base2k, cols);
         module.vec_znx_big_normalize(&mut res, &c_big, &mut buf);
-        res.rsh(log_base2k, &mut buf);
 
         //println!("OUTPUT");
         //(0..res.limbs()).for_each(|i|{
@@ -93,14 +91,14 @@ fn circuit_bootstrapping() {
         //});
         //println!();
 
-        let mut vec_want: VecZnx = module.new_vec_znx(log_base2k, log_q);
-        vec_want.from_i64_single(value << log_gap_out, 1, 2);
+        let mut vec_want: VecZnx = module.new_vec_znx(log_base2k, limbs);
+        vec_want.from_i64_single(value << log_gap_out, 1, 2, log_k);
 
         let mut have: Vec<i64> = vec![i64::default(); module.n()];
         let mut want: Vec<i64> = vec![i64::default(); module.n()];
 
-        res.to_i64(&mut have);
-        vec_want.to_i64(&mut want);
+        res.to_i64(&mut have, log_k);
+        vec_want.to_i64(&mut want, log_k);
 
         //println!("{:?}", want);
         //println!("{:?}", have);

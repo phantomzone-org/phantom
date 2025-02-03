@@ -22,9 +22,10 @@ fn sub_test<F: FnOnce()>(name: &str, f: F) {
     f();
 }
 
-fn test_packing_streaming_dense(module: &Module, log_base2k: usize, log_q: usize) {
+fn test_packing_streaming_dense(module: &Module, log_base2k: usize, limbs: usize) {
     let n: usize = module.n();
     let log_n: usize = module.log_n();
+    let log_k = limbs * log_base2k - 5;
 
     let mut values: Vec<i64> = vec![0; n];
     values
@@ -34,15 +35,15 @@ fn test_packing_streaming_dense(module: &Module, log_base2k: usize, log_q: usize
 
     let gap: usize = 3;
 
-    let mut packer = StreamRepacker::new(module, log_base2k, log_q);
+    let mut packer = StreamRepacker::new(module, log_base2k, limbs);
 
     let mut results: Vec<VecZnx> = Vec::new();
 
-    let mut tmp: VecZnx = module.new_vec_znx(log_base2k, log_q);
+    let mut tmp: VecZnx = module.new_vec_znx(log_base2k, limbs);
     for i in 0..n {
         let i_rev: usize = reverse_bits_msb(i, log_n as u32);
         if i_rev % gap == 0 {
-            tmp.from_i64(&vec![values[i_rev]; n], 32);
+            tmp.from_i64(&vec![values[i_rev]; n], 32, log_k);
             packer.add(module, Some(&tmp), &mut results)
         } else {
             packer.add(module, None, &mut results)
@@ -52,7 +53,7 @@ fn test_packing_streaming_dense(module: &Module, log_base2k: usize, log_q: usize
     packer.flush(module, &mut results);
 
     let mut have: Vec<i64> = vec![0; n];
-    results[0].to_i64(&mut have);
+    results[0].to_i64(&mut have, log_k);
 
     println!("{:?}", have);
 

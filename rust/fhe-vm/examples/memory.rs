@@ -5,12 +5,13 @@ use fhevm::memory::Memory;
 fn main() {
     let log_n: usize = 4;
     let n: usize = 1 << log_n;
-    let log_q: usize = 54;
+    let limbs: usize = 4;
     let log_base2k: usize = 15;
+    let log_k = limbs * log_base2k - 5;
     let log_base_n: usize = 7;
 
-    let rows: usize = (log_q + log_base2k - 1) / log_base2k;
-    let cols: usize = rows;
+    let rows: usize = limbs;
+    let cols: usize = limbs + 1;
 
     let module = Module::new::<FFT64>(n);
 
@@ -18,7 +19,7 @@ fn main() {
     let mut data: Vec<i64> = vec![i64::default(); size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
 
-    let mut memory: Memory = Memory::new(log_n, log_base2k, log_q);
+    let mut memory: Memory = Memory::new(log_n, log_base2k, log_k);
     memory.set(&data);
     let mut idx: Address = Address::new(&module, log_base_n, size, rows, cols);
 
