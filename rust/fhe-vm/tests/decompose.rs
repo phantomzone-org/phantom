@@ -1,24 +1,22 @@
+use base2k::{Module, FFT64};
 use fhevm::decompose::Decomposer;
-use fhevm::parameters::ADDRESSBASE;
-use rns::ring::Ring;
 
-/*
 #[test]
 fn decompose_u32() {
     let n: usize = 1 << 12;
-    let q_base: u64 = 65537;
-    let q_power: usize = 1usize;
-    let ring: Ring<u64> = Ring::new(n, q_base, q_power);
+    let log_base2k: usize = 15;
+    let limbs: usize = 4;
+    let module = Module::new::<FFT64>(n);
 
     let log_base: Vec<usize> = [6, 6, 6, 6, 6, 2].to_vec();
 
-    let mut decomposer: Decomposer = Decomposer::new(&ring, &log_base);
+    let mut decomposer: Decomposer = Decomposer::new(&module, &log_base, log_base2k, limbs);
 
     let value: u32 = 0xf0f0f0ff;
 
-    let result: Vec<u64> = decomposer.decompose(&ring, value);
+    let result: Vec<i64> = decomposer.decompose(&module, value);
 
-    println!("{:?}", result);
+    //println!("{:?}", result);
 
     let mut have: u32 = 0;
 
@@ -29,4 +27,3 @@ fn decompose_u32() {
     });
     assert_eq!(value, have);
 }
-*/

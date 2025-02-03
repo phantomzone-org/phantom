@@ -1,21 +1,21 @@
 use crate::test_vector::{self, TestVector};
-use rns::poly::Poly;
-use rns::ring::Ring;
+use base2k::{Module, VecZnx};
 
 pub struct Decomposer {
     pub test_vector_msb: TestVector,
     pub test_vector_quo: Vec<TestVector>,
+    pub limbs: usize,
+    pub log_base2k: usize,
     pub log_bases: Vec<usize>,
-    pub buf: Poly<u64>,
+    pub buf: VecZnx,
 }
 
-/*
 impl Decomposer {
-    pub fn new(ring: &Ring<u64>, log_bases: &Vec<usize>) -> Self {
-        let log_n: usize = ring.log_n();
+    pub fn new(module: &Module, log_bases: &Vec<usize>, log_base2k: usize, limbs: usize) -> Self {
+        let log_n: usize = module.log_n();
 
-        let f_sign = Box::new(move |x: usize| (x >> (log_n - 1)) << (log_n - 1));
-        let test_vector_msb: TestVector = TestVector::new(&ring, f_sign);
+        let f_sign = Box::new(move |x: i64| (x >> (log_n - 1)) << (log_n - 1));
+        let test_vector_msb: TestVector = TestVector::new(&module, f_sign, log_base2k, limbs);
 
         let mut test_vector_quo: Vec<TestVector> = Vec::new();
 
@@ -25,22 +25,24 @@ impl Decomposer {
             if i == log_bases.len() - 1 {
                 shift = 0
             }
-            let f_quo = Box::new(move |x: usize| {
+            let f_quo = Box::new(move |x: i64| {
                 (x >> (log_n - log_base - shift)) << (log_n - log_base - shift)
             });
-            test_vector_quo.push(TestVector::new(&ring, f_quo))
+            test_vector_quo.push(TestVector::new(&module, f_quo, log_base2k, limbs))
         });
 
         Self {
             test_vector_msb,
             test_vector_quo,
-            buf: ring.new_poly(),
+            limbs,
+            log_base2k,
+            buf: module.new_vec_znx(log_base2k, limbs),
             log_bases: log_bases.clone(),
         }
     }
 
-    pub fn decompose(&mut self, ring: &Ring<u64>, value: u32) -> Vec<u64> {
-        let n: usize = ring.n();
+    pub fn decompose(&mut self, module: &Module, value: u32) -> Vec<i64> {
+        let n: usize = module.n();
 
         assert!(
             n == self.test_vector_quo[0].0.n(),
@@ -49,13 +51,13 @@ impl Decomposer {
             self.test_vector_quo[0].0.n()
         );
 
-        let log_2n: usize = ring.log_n();
+        let log_2n: usize = module.log_n();
 
-        let mut vec: Vec<u64> = Vec::new();
+        let mut vec: Vec<i64> = Vec::new();
 
         let mut value_u64: u64 = (value as u64) << 32;
 
-        let buf: &mut Poly<u64> = &mut self.buf;
+        let buf: &mut VecZnx = &mut self.buf;
 
         let mut sum_bases: usize = 0;
 
@@ -64,13 +66,15 @@ impl Decomposer {
 
             sum_bases += *base;
 
-            println!("{} {}", sum_bases, base);
+            //println!("{} {}", sum_bases, base);
 
+            /*
             println!(
                 "before         : {:032b} {:032b}",
                 value_u64 >> 32,
                 value_u64 & 0xffffffff
             );
+            */
 
             // 1) From mod Q to mod 2N, with scaling by drift = N/Base
             // Example:
@@ -85,52 +89,52 @@ impl Decomposer {
                 shift -= 1
             }
 
-            println!("shift {}", shift);
+            //println!("shift {}", shift);
 
             let mut x: i32 = ((value_u64 << shift) >> (64 - log_2n)) as i32;
 
-            println!("x              : {:032b} {:032b}", 0, x);
+            //println!("x              : {:032b} {:032b}", 0, x);
 
             // 2) Padd with drift/2 such that value cannot be negative
             // [1] [111111] [00000] -> [1] [111111] [10000]
             x += 1 << (log_2n - base - 2);
 
-            println!("extrac & pad   : {:032b} {:032b}", 0, x);
+            //println!("extrac & pad   : {:032b} {:032b}", 0, x);
 
             // 3) PBS to extract msb
             // [1] [111111] [10000] -> [1] [00000] [00000]
-            buf.copy_from(&self.test_vector_msb.0);
-            ring.a_mul_by_x_pow_b_into_a(x, buf);
+            module.vec_znx_rotate(x as i64, buf, &self.test_vector_msb.0);
 
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
-            let sign_bit: u64 = buf.0[0];
+            let sign_bit: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
             x -= sign_bit as i32;
 
-            println!("x - sign(x)    : {:032b} {:032b}", 0, x);
+            //println!("x - sign(x)    : {:032b} {:032b}", 0, x);
 
             // 5) PBS bit-extraction
             // [0] [111111] [10000] ->  [0] [111111] [00000]
-            buf.copy_from(&self.test_vector_quo[i].0);
-            ring.a_mul_by_x_pow_b_into_a(x, buf);
+            module.vec_znx_rotate(x as i64, buf, &self.test_vector_quo[i].0);
 
             // Adds back MSB if this is the last iteration
-            let mut digits: u64 = buf.0[0];
+            let mut digits: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
             if last {
                 digits += sign_bit;
             }
 
+            /*
             println!(
                 "digits         : {:032b} {:032b}",
                 digits >> 32,
                 digits & 0xffffffff
             );
+             */
 
             // Stores i-th diit
             if last {
-                vec.push(digits >> (log_2n - base));
+                vec.push((digits >> (log_2n - base)) as i64);
             } else {
-                vec.push(digits >> (log_2n - base - 1));
+                vec.push((digits >> (log_2n - base - 1)) as i64);
             }
 
             //println!("out            : {:032b} {:032b}", vec[i]>>32, vec[i]&0xffffffff);
@@ -152,4 +156,3 @@ impl Decomposer {
         vec
     }
 }
-*/
