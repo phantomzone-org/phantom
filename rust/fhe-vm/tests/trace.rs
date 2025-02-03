@@ -1,5 +1,5 @@
 use base2k::{Module, VecZnx, FFT64};
-use fhevm::trace::{trace, trace_inplace};
+use fhevm::trace::trace_inplace;
 
 #[test]
 fn trace_u64() {
@@ -11,15 +11,6 @@ fn trace_u64() {
     sub_test("test_trace::<INV:false, NTT:false>", || {
         test_trace::<false>(&module, log_base2k, limbs)
     });
-    //sub_test("test_trace::<INV:false, NTT:true>", || {
-    //    test_trace_u64::<false, true>(&ring)
-    //});
-    //sub_test("test_trace::<INV:true, NTT:false>", || {
-    //    test_trace_u64::<true, false>(&ring)
-    //});
-    //sub_test("test_trace::<INV:true, NTT:true>", || {
-    //    test_trace_u64::<true, true>(&ring)
-    //});
 }
 
 fn sub_test<F: FnOnce()>(name: &str, f: F) {

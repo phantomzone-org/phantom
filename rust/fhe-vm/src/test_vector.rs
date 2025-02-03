@@ -12,9 +12,8 @@ impl TestVector {
         let mut test_vector: VecZnx = module.new_vec_znx(log_bas2k, limbs);
 
         let last: &mut [i64] = test_vector.at_mut(test_vector.limbs() - 1);
-        let n = module.n() as i64;
         last.iter_mut().enumerate().for_each(|(i, x)| {
-            *x = -f(n - i as i64);
+            *x = -f(-(i as i64));
         });
 
         let mut carry: Vec<u8> = vec![u8::default(); module.n() << 3];

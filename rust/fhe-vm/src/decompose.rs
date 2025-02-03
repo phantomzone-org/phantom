@@ -1,4 +1,4 @@
-use crate::test_vector::{self, TestVector};
+use crate::test_vector::TestVector;
 use base2k::{Module, VecZnx};
 
 pub struct Decomposer {
@@ -14,7 +14,13 @@ impl Decomposer {
     pub fn new(module: &Module, log_bases: &Vec<usize>, log_base2k: usize, limbs: usize) -> Self {
         let log_n: usize = module.log_n();
 
-        let f_sign = Box::new(move |x: i64| (x >> (log_n - 1)) << (log_n - 1));
+        let f_sign = Box::new(move |x: i64| {
+            if x + (1 << log_n) < 0 {
+                1 << (log_n - 1)
+            } else {
+                0
+            }
+        });
         let test_vector_msb: TestVector = TestVector::new(&module, f_sign, log_base2k, limbs);
 
         let mut test_vector_quo: Vec<TestVector> = Vec::new();
@@ -25,8 +31,14 @@ impl Decomposer {
             if i == log_bases.len() - 1 {
                 shift = 0
             }
+
+            let n: i64 = (1 << log_n) as i64;
             let f_quo = Box::new(move |x: i64| {
-                (x >> (log_n - log_base - shift)) << (log_n - log_base - shift)
+                let mut y: i64 = x;
+                if y < 0 {
+                    y = n + y;
+                }
+                (y >> (log_n - log_base - shift)) << (log_n - log_base - shift)
             });
             test_vector_quo.push(TestVector::new(&module, f_quo, log_base2k, limbs))
         });
@@ -68,13 +80,11 @@ impl Decomposer {
 
             //println!("{} {}", sum_bases, base);
 
-            /*
-            println!(
-                "before         : {:032b} {:032b}",
-                value_u64 >> 32,
-                value_u64 & 0xffffffff
-            );
-            */
+            //println!(
+            //    "before         : {:032b} {:032b}",
+            //    value_u64 >> 32,
+            //    value_u64 & 0xffffffff
+            //);
 
             // 1) From mod Q to mod 2N, with scaling by drift = N/Base
             // Example:
@@ -108,6 +118,9 @@ impl Decomposer {
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
             let sign_bit: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
+
+            //println!("    sign(x)    : {:032b} {:032b}", 0, sign_bit);
+
             x -= sign_bit as i32;
 
             //println!("x - sign(x)    : {:032b} {:032b}", 0, x);
@@ -118,17 +131,16 @@ impl Decomposer {
 
             // Adds back MSB if this is the last iteration
             let mut digits: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
+
             if last {
                 digits += sign_bit;
             }
 
-            /*
-            println!(
-                "digits         : {:032b} {:032b}",
-                digits >> 32,
-                digits & 0xffffffff
-            );
-             */
+            //println!(
+            //    "digits         : {:032b} {:032b}",
+            //    digits >> 32,
+            //    digits & 0xffffffff
+            //);
 
             // Stores i-th diit
             if last {
@@ -148,7 +160,6 @@ impl Decomposer {
             // x mod Q : [11110000111100001111000011] [1] [00000] [0...0] [e..e]
             value_u64 -= digits << (32 - log_2n + sum_bases + 1);
 
-            //println!("k              : {:032b} {:032b}", k>>32, k&0xffffffff);
             //println!("value_u64 final: {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
             //println!();
         });

@@ -1,4 +1,4 @@
-use base2k::{ffi::vmp::vmp_pmat_t, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat};
+use base2k::{Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat};
 use itertools::izip;
 
 pub struct Address {
