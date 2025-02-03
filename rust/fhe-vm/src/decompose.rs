@@ -9,6 +9,7 @@ pub struct Decomposer {
     pub buf: Poly<u64>,
 }
 
+/*
 impl Decomposer {
     pub fn new(ring: &Ring<u64>, log_bases: &Vec<usize>) -> Self {
         let log_n: usize = ring.log_n();
@@ -151,3 +152,4 @@ impl Decomposer {
         vec
     }
 }
+*/

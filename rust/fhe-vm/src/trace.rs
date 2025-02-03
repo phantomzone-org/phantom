@@ -37,6 +37,7 @@ pub fn trace_inplace<const INV: bool>(
             panic!("invalid buf_a: should note be NONE if INV=true")
         }
     } else {
+        let mut data: Vec<i64> = vec![i64::default(); module.n()];
         trace_inplace_core(module, step_start, step_end, a, buf, carry);
     }
     a.normalize(carry);
@@ -50,6 +51,13 @@ pub fn trace_inplace_core(
     buf: &mut VecZnx,
     carry: &mut [u8],
 ) {
+    assert!(
+        buf.limbs() >= a.limbs(),
+        "invalid buf: buf.limbs={} < a.limbs()={}",
+        buf.limbs(),
+        a.limbs()
+    );
+
     (step_start..step_end).for_each(|i| {
         a.rsh(1, carry);
 

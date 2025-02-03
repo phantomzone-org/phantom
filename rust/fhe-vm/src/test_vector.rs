@@ -1,17 +1,25 @@
-use rns::modulus::ONCE;
-use rns::poly::Poly;
-use rns::ring::Ring;
+use base2k::{Module, VecZnx};
 
-pub struct TestVector(pub Poly<u64>);
+pub struct TestVector(pub VecZnx);
 
 impl TestVector {
-    pub fn new(ring: &Ring<u64>, f: Box<dyn Fn(usize) -> usize>) -> Self {
-        let mut test_vector: Poly<u64> = ring.new_poly();
-        let n: usize = ring.n();
-        let q: u64 = ring.modulus.q();
-        test_vector.0.iter_mut().enumerate().for_each(|(i, x)| {
-            *x = ring.modulus.montgomery.reduce::<ONCE>(q - f(n - i) as u64);
+    pub fn new(
+        module: &Module,
+        f: Box<dyn Fn(i64) -> i64>,
+        log_bas2k: usize,
+        log_q: usize,
+    ) -> Self {
+        let mut test_vector: VecZnx = module.new_vec_znx(log_bas2k, log_q);
+
+        let last: &mut [i64] = test_vector.at_mut(test_vector.limbs() - 1);
+
+        last.iter_mut().enumerate().for_each(|(i, x)| {
+            *x = -f(-(i as i64));
         });
+
+        let mut carry: Vec<u8> = vec![u8::default(); module.n() << 3];
+        test_vector.normalize(&mut carry);
+
         Self { 0: test_vector }
     }
 
