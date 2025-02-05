@@ -1,7 +1,6 @@
 pub mod address;
 pub mod circuit_bootstrapping;
 pub mod decompose;
-pub mod integer;
 pub mod interpreter;
 pub mod memory;
 pub mod packing;

@@ -1,4 +1,4 @@
-use base2k::{Infos, Module, VecZnx, VecZnxOps};
+use base2k::{Module, VecZnx, VecZnxOps};
 
 pub struct StreamRepacker {
     log_base2k: usize,

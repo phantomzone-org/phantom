@@ -32,13 +32,15 @@ fn circuit_bootstrapping() {
 
     let mut vmp_pmat: VmpPMat = module.new_vmp_pmat(rows, cols);
 
+    let max_value: usize = n;
+
     // value in [0, n_acc/2^{log_gap} - 1]
     (0..n_acc / (1 << log_gap)).for_each(|value| {
         // value in [0, n_acc - 2^log_gap]
         let value_scaled: i64 = (value << log_gap) as i64;
 
         // Maps value in [0, n_acc - 2^log_gap] to X^{value * (2^log_gap*n/n_acc) +/- drift/2^{log_gap-1}}
-        acc.circuit_bootstrap(&module_acc, value_scaled, &mut buf_acc, &mut vec_gadget);
+        acc.circuit_bootstrap(&module_acc, value_scaled, &mut vec_gadget, &mut buf_acc);
 
         let mut buf: [VecZnx; 4] = [
             module.new_vec_znx(cols),
@@ -58,7 +60,7 @@ fn circuit_bootstrapping() {
             &module,
             log_gap_in,
             log_gap_out,
-            &mut vmp_pmat,
+            max_value,
             &mut vec_gadget,
             &mut buf,
         );
@@ -67,6 +69,8 @@ fn circuit_bootstrapping() {
             | module.vmp_apply_dft_tmp_bytes(limbs, limbs, rows, cols);
 
         let mut buf: Vec<u8> = vec![0; tmp_bytes];
+
+        module.vmp_prepare_dblptr(&mut vmp_pmat, &vec_gadget, &mut buf);
 
         let mut vec_have: VecZnx = module.new_vec_znx(limbs);
         vec_have.encode_coeff_i64(log_base2k, log_k, 0, 1, 32);

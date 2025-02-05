@@ -4,7 +4,7 @@ use fhevm::memory::Memory;
 
 #[test]
 fn memory() {
-    let log_n: usize = 8;
+    let log_n: usize = 5;
     let n: usize = 1 << log_n;
     let log_q: usize = 54;
     let log_base2k: usize = 15;
