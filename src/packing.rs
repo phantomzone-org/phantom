@@ -1,6 +1,7 @@
-use base2k::{Module, VecZnx};
+use base2k::{Infos, Module, VecZnx, VecZnxOps};
 
 pub struct StreamRepacker {
+    log_base2k: usize,
     accumulators: Vec<Accumulator>,
     tmp_a: VecZnx,
     tmp_b: VecZnx,
@@ -15,9 +16,9 @@ pub struct Accumulator {
 }
 
 impl Accumulator {
-    pub fn new(module: &Module, log_base2k: usize, limbs: usize) -> Self {
+    pub fn new(module: &Module, limbs: usize) -> Self {
         Self {
-            buf: module.new_vec_znx(log_base2k, limbs),
+            buf: module.new_vec_znx(limbs),
             value: false,
             control: false,
         }
@@ -30,12 +31,13 @@ impl StreamRepacker {
 
         let log_n: usize = module.log_n();
 
-        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, log_base2k, limbs)));
+        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, limbs)));
 
         Self {
+            log_base2k: log_base2k,
             accumulators: accumulators,
-            tmp_a: module.new_vec_znx(log_base2k, limbs),
-            tmp_b: module.new_vec_znx(log_base2k, limbs),
+            tmp_a: module.new_vec_znx(limbs),
+            tmp_b: module.new_vec_znx(limbs),
             carry: vec![u8::default(); module.n() * 8],
             counter: 0,
         }
@@ -52,6 +54,7 @@ impl StreamRepacker {
     pub fn add(&mut self, module: &Module, a: Option<&VecZnx>, result: &mut Vec<VecZnx>) {
         pack_core(
             module,
+            self.log_base2k,
             a,
             &mut self.accumulators,
             &mut self.tmp_a,
@@ -77,6 +80,7 @@ impl StreamRepacker {
 
 fn pack_core(
     module: &Module,
+    log_base2k: usize,
     a: Option<&VecZnx>,
     accumulators: &mut [Accumulator],
     tmp_a: &mut VecZnx,
@@ -103,13 +107,23 @@ fn pack_core(
         }
         acc_mut_ref.control = true;
     } else {
-        combine(module, &mut acc_prev[0], a, tmp_a, tmp_b, carry, i);
+        combine(
+            module,
+            log_base2k,
+            &mut acc_prev[0],
+            a,
+            tmp_a,
+            tmp_b,
+            carry,
+            i,
+        );
 
         acc_prev[0].control = false;
 
         if acc_prev[0].value {
             pack_core(
                 module,
+                log_base2k,
                 Some(&acc_prev[0].buf),
                 acc_next,
                 tmp_a,
@@ -118,13 +132,23 @@ fn pack_core(
                 i + 1,
             );
         } else {
-            pack_core(module, None, acc_next, tmp_a, tmp_b, carry, i + 1);
+            pack_core(
+                module,
+                log_base2k,
+                None,
+                acc_next,
+                tmp_a,
+                tmp_b,
+                carry,
+                i + 1,
+            );
         }
     }
 }
 
 fn combine(
     module: &Module,
+    log_base2k: usize,
     acc: &mut Accumulator,
     b: Option<&VecZnx>,
     tmp_a: &mut VecZnx,
@@ -144,13 +168,13 @@ fn combine(
     }
 
     if acc.value {
-        a.rsh(1, carry);
+        a.rsh(log_base2k, 1, carry);
 
         if let Some(b) = b {
             // tmp_a = b * X^t
             module.vec_znx_rotate(1 << (log_n - i - 1), tmp_a, b);
 
-            tmp_a.rsh(1, carry);
+            tmp_a.rsh(log_base2k, 1, carry);
 
             // tmp_b = a - b*X^t
             module.vec_znx_sub(tmp_b, a, tmp_a);
@@ -173,7 +197,7 @@ fn combine(
         if let Some(b) = b {
             // tmp_b = b * X^t
             module.vec_znx_rotate(1 << (log_n - i - 1), tmp_b, b);
-            tmp_b.rsh(1, carry);
+            tmp_b.rsh(log_base2k, 1, carry);
 
             // tmp_a = phi(b * X^t)
             module.vec_znx_automorphism(gal_el, tmp_a, tmp_b);

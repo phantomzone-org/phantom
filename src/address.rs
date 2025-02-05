@@ -1,4 +1,6 @@
-use base2k::{Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat};
+use base2k::{
+    Infos, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VecZnxOps, VmpPMat, VmpPMatOps,
+};
 use itertools::izip;
 
 pub struct Address {
@@ -133,6 +135,7 @@ impl Coordinate {
     pub fn product(
         &self,
         module: &Module,
+        log_base2k: usize,
         b: &mut VecZnx,
         a: &VecZnx,
         tmp_b_dft: &mut VecZnxDft,
@@ -148,12 +151,13 @@ impl Coordinate {
 
         let mut tmp_b_big: VecZnxBig = tmp_b_dft.as_vec_znx_big();
         module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_b_dft, b.limbs());
-        module.vec_znx_big_normalize(b, &tmp_b_big, buf);
+        module.vec_znx_big_normalize(log_base2k, b, &tmp_b_big, buf);
     }
 
     pub fn product_inplace(
         &self,
         module: &Module,
+        log_base2k: usize,
         a: &mut VecZnx,
         tmp_a_dft: &mut VecZnxDft,
         buf: &mut [u8],
@@ -167,6 +171,6 @@ impl Coordinate {
         });
         let mut tmp_b_big: VecZnxBig = tmp_a_dft.as_vec_znx_big();
         module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_a_dft, a.limbs());
-        module.vec_znx_big_normalize(a, &tmp_b_big, buf);
+        module.vec_znx_big_normalize(log_base2k, a, &tmp_b_big, buf);
     }
 }

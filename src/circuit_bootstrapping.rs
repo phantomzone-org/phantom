@@ -1,6 +1,6 @@
 use crate::address::Address;
 use crate::trace::{trace, trace_inplace};
-use base2k::{Module, VecZnx, VmpPMat};
+use base2k::{Infos, Module, VecZnx, VecZnxOps, VmpPMat, VmpPMatOps};
 use itertools::izip;
 
 pub struct CircuitBootstrapper {
@@ -27,7 +27,7 @@ impl CircuitBootstrapper {
         });
 
         (0..limbs).for_each(|i| {
-            let mut tv: VecZnx = module.new_vec_znx(log_base2k, limbs * log_base2k);
+            let mut tv: VecZnx = module.new_vec_znx(limbs * log_base2k);
             tv.at_mut(i).copy_from_slice(&ones);
             test_vectors.push(tv)
         });
@@ -128,6 +128,7 @@ impl CircuitBootstrapper {
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
         trace_inplace::<false>(
             module,
+            self.log_base2k,
             step_start,
             step_end,
             a,
@@ -152,7 +153,16 @@ impl CircuitBootstrapper {
                 }
 
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
-                trace::<false>(module, step_start, step_end, a, buf0, buf1, &mut carry);
+                trace::<false>(
+                    module,
+                    self.log_base2k,
+                    step_start,
+                    step_end,
+                    a,
+                    buf0,
+                    buf1,
+                    &mut carry,
+                );
 
                 // Aggregates on the output which gets shifted by X^{-gap_out}
                 if i != steps - 1 {
@@ -162,7 +172,7 @@ impl CircuitBootstrapper {
                 }
             });
 
-            a.normalize(&mut carry);
+            a.normalize(self.log_base2k, &mut carry);
 
             // Cyclic shift the output back to its original position
             module.vec_znx_rotate_inplace((1 << log_gap_out) * (steps - 1) as i64, a);

@@ -2,7 +2,7 @@ use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace};
-use base2k::{Module, VecZnx};
+use base2k::{Encoding, Free, Module, VecZnx, VecZnxOps, VmpPMatOps};
 
 pub struct Memory {
     pub data: Vec<VecZnx>,
@@ -29,8 +29,8 @@ impl Memory {
         let mut vectors: Vec<VecZnx> = Vec::new();
         let limbs = (self.log_k + self.log_base2k - 1) / self.log_base2k;
         for chunk in data.chunks(1 << self.log_n) {
-            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, self.log_base2k, limbs);
-            vector.from_i64(chunk, 32, self.log_k);
+            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, limbs);
+            vector.encode_vec_i64(self.log_base2k, self.log_k, chunk, 32);
             vectors.push(vector);
         }
 
@@ -52,7 +52,7 @@ impl Memory {
                 module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
             ];
 
-        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, self.limbs());
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.limbs());
 
         for i in 0..address.dims_n() {
             let coordinate: &Coordinate = address.at_lsh(i);
@@ -76,6 +76,7 @@ impl Memory {
                             // Shift polynomial by X^{-idx} and then pack
                             coordinate.product(
                                 &module,
+                                self.log_base2k,
                                 &mut tmp_vec_znx,
                                 &chunk[j_rev],
                                 &mut tmp_b_dft,
@@ -96,6 +97,7 @@ impl Memory {
                 // Shift polynomial by X^{-idx} and then pack
                 coordinate.product(
                     &module,
+                    self.log_base2k,
                     &mut tmp_vec_znx,
                     &results[0],
                     &mut tmp_b_dft,
@@ -103,8 +105,8 @@ impl Memory {
                 );
             }
         }
-        tmp_b_dft.delete();
-        tmp_vec_znx.to_i64_single(0, self.log_k)
+        tmp_b_dft.free();
+        tmp_vec_znx.decode_coeff_i64(self.log_base2k, self.log_k, 0)
     }
 
     pub fn read_and_write(
@@ -129,11 +131,11 @@ impl Memory {
                 module.vmp_apply_dft_tmp_bytes(limbs, limbs, address.rows(), address.cols())
             ];
 
-        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
+        let mut tmp_vec_znx: VecZnx = module.new_vec_znx(limbs);
 
-        let mut buf0: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
-        let mut buf1: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
-        let mut buf2: VecZnx = module.new_vec_znx(self.log_base2k, limbs);
+        let mut buf0: VecZnx = module.new_vec_znx(limbs);
+        let mut buf1: VecZnx = module.new_vec_znx(limbs);
+        let mut buf2: VecZnx = module.new_vec_znx(limbs);
 
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
@@ -151,7 +153,13 @@ impl Memory {
 
             // Shift polynomial of the last iteration by X^{-i}
             result_prev.iter_mut().for_each(|poly| {
-                coordinate.product_inplace(module, poly, &mut tmp_a_dft, &mut tmp_bytes);
+                coordinate.product_inplace(
+                    module,
+                    self.log_base2k,
+                    poly,
+                    &mut tmp_a_dft,
+                    &mut tmp_bytes,
+                );
             });
 
             if i < address.dims_n() - 1 {
@@ -183,18 +191,18 @@ impl Memory {
         if size != 0 {
             let result: &mut VecZnx = &mut results[size - 1][0];
 
-            read_value = result.to_i64_single(0, self.log_k);
+            read_value = result.decode_coeff_i64(self.log_base2k, self.log_k, 0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                result.from_i64_single(0, write_value, 32, self.log_k);
+                result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32);
             }
         } else {
-            read_value = self.data[0].to_i64_single(0, self.log_k);
+            read_value = self.data[0].decode_coeff_i64(self.log_base2k, self.log_k, 0);
 
             // CMUX(read_value, write_value, write_bool) -> read_value/write_value
             if write_bool {
-                self.data[0].from_i64_single(0, write_value, 32, self.log_k)
+                self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32)
             }
         }
 
@@ -230,7 +238,13 @@ impl Memory {
 
                     // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
                     // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-                    coordinate.product_inplace(&module, poly_lo, &mut tmp_a_dft, &mut tmp_bytes);
+                    coordinate.product_inplace(
+                        &module,
+                        self.log_base2k,
+                        poly_lo,
+                        &mut tmp_a_dft,
+                        &mut tmp_bytes,
+                    );
 
                     // Iterates over the polynomial of the current chunk of the level above
                     chunk.iter_mut().for_each(|poly_hi| {
@@ -238,6 +252,7 @@ impl Memory {
                         // [a, b, c, d] -> [a, 0, 0, 0]
                         trace::<false>(
                             module,
+                            self.log_base2k,
                             0,
                             log_n,
                             &mut buf2,
@@ -250,6 +265,7 @@ impl Memory {
                         // [a, b, c, d] -> [0, b, c, d]
                         trace_inplace::<true>(
                             module,
+                            self.log_base2k,
                             0,
                             log_n,
                             poly_hi,
@@ -270,22 +286,15 @@ impl Memory {
         // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
         // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
         self.data.iter_mut().for_each(|poly_lo| {
-            address
-                .at_rsh(0)
-                .product_inplace(&module, poly_lo, &mut tmp_a_dft, &mut tmp_bytes);
+            address.at_rsh(0).product_inplace(
+                &module,
+                self.log_base2k,
+                poly_lo,
+                &mut tmp_a_dft,
+                &mut tmp_bytes,
+            );
         });
 
         read_value
     }
 }
-
-/*
-address_i.iter().for_each(|gadget|{
-                    gadget.product_inplace(
-                        &ring,
-                        &mut buf0,
-                        &mut buf1,
-                        &mut buf2,
-                        poly,
-                    );
-                }); */

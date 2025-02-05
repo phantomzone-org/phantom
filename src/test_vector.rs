@@ -1,4 +1,4 @@
-use base2k::{Module, VecZnx};
+use base2k::{Infos, Module, VecZnx, VecZnxOps};
 
 pub struct TestVector(pub VecZnx);
 
@@ -9,7 +9,7 @@ impl TestVector {
         log_bas2k: usize,
         limbs: usize,
     ) -> Self {
-        let mut test_vector: VecZnx = module.new_vec_znx(log_bas2k, limbs);
+        let mut test_vector: VecZnx = module.new_vec_znx(limbs);
 
         let last: &mut [i64] = test_vector.at_mut(test_vector.limbs() - 1);
         last.iter_mut().enumerate().for_each(|(i, x)| {
@@ -17,7 +17,7 @@ impl TestVector {
         });
 
         let mut carry: Vec<u8> = vec![u8::default(); module.n() << 3];
-        test_vector.normalize(&mut carry);
+        test_vector.normalize(log_bas2k, &mut carry);
 
         Self { 0: test_vector }
     }

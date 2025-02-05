@@ -1,4 +1,4 @@
-use base2k::{Module, VecZnx, FFT64};
+use base2k::{Encoding, Infos, Module, Sampling, VecZnx, VecZnxOps, FFT64};
 use fhevm::trace::trace_inplace;
 use sampling::source::Source;
 
@@ -13,7 +13,7 @@ fn main() {
 
     let mut source = Source::new([0; 32]);
 
-    let mut a: VecZnx = VecZnx::new(n, log_base2k, limbs);
+    let mut a: VecZnx = module.new_vec_znx(limbs);
 
     let mut values: Vec<i64> = vec![i64::default(); n];
 
@@ -24,20 +24,29 @@ fn main() {
 
     let mut carry: Vec<u8> = vec![0; module.vec_znx_big_normalize_tmp_bytes()];
 
-    a.from_i64(&values, 54, log_k);
-    a.add_normal(&mut source, 3.2, 19.0, limbs * log_base2k);
-    a.normalize(&mut carry);
+    a.encode_vec_i64(log_base2k, log_k, &values, 54);
+    a.add_normal(log_base2k, limbs * log_base2k, &mut source, 3.2, 19.0);
+    a.normalize(log_base2k, &mut carry);
 
-    a.to_i64(&mut values, log_k);
+    a.decode_vec_i64(log_base2k, log_k, &mut values);
     println!("{:?}", values);
 
     (0..a.limbs()).for_each(|i| println!("{}: {:?}", i, a.at(i)));
 
     let mut buf_bytes: Vec<u8> = vec![u8::default(); module.vec_znx_big_normalize_tmp_bytes()];
-    let mut buf_b: VecZnx = VecZnx::new(n, log_base2k, limbs);
-    trace_inplace::<false>(&module, 0, log_n, &mut a, None, &mut buf_b, &mut buf_bytes);
+    let mut buf_b: VecZnx = module.new_vec_znx(limbs);
+    trace_inplace::<false>(
+        &module,
+        log_base2k,
+        0,
+        log_n,
+        &mut a,
+        None,
+        &mut buf_b,
+        &mut buf_bytes,
+    );
 
-    a.to_i64(&mut values, log_k);
+    a.decode_vec_i64(log_base2k, log_k, &mut values);
     (0..a.limbs()).for_each(|i| println!("{}: {:?}", i, a.at(i)));
     println!("{:?}", values);
 }

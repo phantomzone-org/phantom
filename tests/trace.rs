@@ -1,4 +1,4 @@
-use base2k::{Module, VecZnx, FFT64};
+use base2k::{Encoding, Module, VecZnx, VecZnxOps, FFT64};
 use fhevm::trace::trace_inplace;
 
 #[test]
@@ -21,9 +21,9 @@ fn sub_test<F: FnOnce()>(name: &str, f: F) {
 fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize) {
     let log_k: usize = limbs * log_base2k - 5;
 
-    let mut a: VecZnx = module.new_vec_znx(log_base2k, limbs);
-    let mut buf_a: VecZnx = module.new_vec_znx(log_base2k, limbs);
-    let mut buf_b: VecZnx = module.new_vec_znx(log_base2k, limbs);
+    let mut a: VecZnx = module.new_vec_znx(limbs);
+    let mut buf_a: VecZnx = module.new_vec_znx(limbs);
+    let mut buf_b: VecZnx = module.new_vec_znx(limbs);
     let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n() * 8];
 
     let mut have: Vec<i64> = vec![i64::default(); module.n()];
@@ -31,13 +31,14 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
         .enumerate()
         .for_each(|(i, x)| *x = (i + 1) as i64);
 
-    a.from_i64(&have, 32, log_k);
+    a.encode_vec_i64(log_base2k, log_k, &have, 32);
 
     let step_start: usize = 2;
     let step_end: usize = module.log_n();
 
     trace_inplace::<INV>(
         module,
+        log_base2k,
         step_start,
         step_start + 1,
         &mut a,
@@ -48,6 +49,7 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
 
     trace_inplace::<INV>(
         module,
+        log_base2k,
         step_start + 1,
         step_end,
         &mut a,
@@ -60,7 +62,7 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
 
     let mut have = vec![i64::default(); module.n()];
 
-    a.to_i64(&mut have, log_k);
+    a.decode_vec_i64(log_base2k, log_k, &mut have);
 
     if INV {
         have.iter().enumerate().for_each(|(i, x)| {

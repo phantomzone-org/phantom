@@ -1,7 +1,4 @@
-use base2k::{
-    module::{Module, FFT64},
-    VecZnx,
-};
+use base2k::{Encoding, Module, VecZnx, VecZnxOps, FFT64};
 use fhevm::packing::StreamRepacker;
 use fhevm::reverse_bits_msb;
 
@@ -39,11 +36,11 @@ fn test_packing_streaming_dense(module: &Module, log_base2k: usize, limbs: usize
 
     let mut results: Vec<VecZnx> = Vec::new();
 
-    let mut tmp: VecZnx = module.new_vec_znx(log_base2k, limbs);
+    let mut tmp: VecZnx = module.new_vec_znx(limbs);
     for i in 0..n {
         let i_rev: usize = reverse_bits_msb(i, log_n as u32);
         if i_rev % gap == 0 {
-            tmp.from_i64(&vec![values[i_rev]; n], 32, log_k);
+            tmp.encode_vec_i64(log_base2k, log_k, &vec![values[i_rev]; n], 32);
             packer.add(module, Some(&tmp), &mut results)
         } else {
             packer.add(module, None, &mut results)
@@ -53,7 +50,7 @@ fn test_packing_streaming_dense(module: &Module, log_base2k: usize, limbs: usize
     packer.flush(module, &mut results);
 
     let mut have: Vec<i64> = vec![0; n];
-    results[0].to_i64(&mut have, log_k);
+    results[0].decode_vec_i64(log_base2k, log_k, &mut have);
 
     println!("{:?}", have);
 

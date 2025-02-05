@@ -2,8 +2,7 @@
 //use crate::circuit_bootstrapping::CircuitBootstrapper;
 use crate::address::Address;
 use crate::memory::Memory;
-use rns::poly::Poly;
-use rns::ring::Ring;
+use base2k::VecZnx;
 
 pub struct Interpreter {
     pub log_base_rgsw: usize,
@@ -15,7 +14,7 @@ pub struct Interpreter {
     pub op_it_memory: Memory,
     pub op_id_counter: Memory,
     pub rd: Memory,
-    pub register: Poly<u64>,
+    pub register: VecZnx,
     pub memory: Memory,
     pub ret: bool,
 }

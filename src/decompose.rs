@@ -1,5 +1,5 @@
 use crate::test_vector::TestVector;
-use base2k::{Module, VecZnx};
+use base2k::{Encoding, Infos, Module, VecZnx, VecZnxOps};
 
 pub struct Decomposer {
     pub test_vector_msb: TestVector,
@@ -48,7 +48,7 @@ impl Decomposer {
             test_vector_quo,
             limbs,
             log_base2k,
-            buf: module.new_vec_znx(log_base2k, limbs),
+            buf: module.new_vec_znx(limbs),
             log_bases: log_bases.clone(),
         }
     }
@@ -117,7 +117,8 @@ impl Decomposer {
 
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
-            let sign_bit: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
+            let sign_bit: u64 =
+                buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0) as u64;
 
             //println!("    sign(x)    : {:032b} {:032b}", 0, sign_bit);
 
@@ -130,7 +131,8 @@ impl Decomposer {
             module.vec_znx_rotate(x as i64, buf, &self.test_vector_quo[i].0);
 
             // Adds back MSB if this is the last iteration
-            let mut digits: u64 = buf.to_i64_single(0, self.limbs * self.log_base2k) as u64;
+            let mut digits: u64 =
+                buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0) as u64;
 
             if last {
                 digits += sign_bit;
