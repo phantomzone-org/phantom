@@ -1,5 +1,6 @@
 use base2k::{
-    ffi::vmp::vmp_pmat_t, vmp, Infos, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat, VmpPMatOps
+    ffi::vmp::vmp_pmat_t, vmp, Infos, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat,
+    VmpPMatOps,
 };
 use itertools::izip;
 
@@ -13,7 +14,6 @@ pub struct Address {
 }
 
 impl Address {
-
     pub fn new(
         module: &Module,
         log_n_decomp: usize,
@@ -31,13 +31,13 @@ impl Address {
         (0..dims_n).for_each(|_| {
             coordinates_lsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
             coordinates_rsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
-            
+
             let mut sub_decomp: Vec<usize> = Vec::new();
             let mut k = log_n;
-            (0..dims_n_decomp).for_each(|_|{
-                if k < log_n_decomp{
+            (0..dims_n_decomp).for_each(|_| {
+                if k < log_n_decomp {
                     sub_decomp.push(k)
-                }else{
+                } else {
                     sub_decomp.push(log_n_decomp);
                     k -= log_n_decomp
                 }
@@ -56,10 +56,10 @@ impl Address {
         }
     }
 
-    pub fn decomp(&self) -> Vec<usize>{
+    pub fn decomp(&self) -> Vec<usize> {
         let mut decomp: Vec<usize> = Vec::new();
-        for i in 0..self.decomp_size.len(){
-            for j in 0..self.decomp_size[i].len(){
+        for i in 0..self.decomp_size.len() {
+            for j in 0..self.decomp_size[i].len() {
                 decomp.push(self.decomp_size[i][j])
             }
         }
@@ -123,8 +123,12 @@ impl Coordinate {
     }
 
     pub fn encode(&mut self, module: &Module, value: i64, decomp: &Vec<usize>) {
-
-        assert!(decomp.len() == self.0.len(), "invalid decomp: decomp.len()={} != self.0.len()={}", decomp.len(), self.0.len());
+        assert!(
+            decomp.len() == self.0.len(),
+            "invalid decomp: decomp.len()={} != self.0.len()={}",
+            decomp.len(),
+            self.0.len()
+        );
 
         let n: usize = module.n();
         let rows: usize = self.0[0].rows();
@@ -139,8 +143,7 @@ impl Coordinate {
         let mut buf_i64: Vec<i64> = vec![i64::default(); n];
 
         let mut tot_base: usize = 0;
-        izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)|{
-
+        izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)| {
             let mask: usize = (1 << base) - 1;
 
             let chunk: usize = (remain & mask) << tot_base;
@@ -166,7 +169,6 @@ impl Coordinate {
             remain >>= base;
             tot_base += base
         });
-
     }
 
     pub fn product(

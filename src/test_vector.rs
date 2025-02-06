@@ -14,7 +14,7 @@ impl TestVector {
 
         let last: &mut [i64] = test_vector.at_mut(test_vector.limbs() - 1);
         last.iter_mut().enumerate().for_each(|(i, x)| {
-            *x = -f(n-i as i64);
+            *x = -f(n - i as i64);
         });
         last[0] = f(0);
 

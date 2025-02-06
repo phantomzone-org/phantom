@@ -1,7 +1,6 @@
 use crate::address::Address;
 use crate::decompose::Decomposer;
 use crate::memory::Memory;
-use crate::parameters::ADDRESSBASE;
 use crate::trace::{trace, trace_inplace};
 use base2k::{Encoding, Infos, Module, VecZnx, VecZnxOps, VmpPMat, VmpPMatOps};
 use itertools::izip;
@@ -53,7 +52,7 @@ impl CircuitBootstrapper {
         buf_pbs: &mut VecZnx,
     ) {
         // 1) RGSW -> LWE
-        let log_k: usize = self.log_base2k * (address.cols-1) - 5;
+        let log_k: usize = self.log_base2k * (address.cols - 1) - 5;
         let mut mem: Memory = Memory::new(module_lwe.log_n(), self.log_base2k, log_k);
         let mut data: Vec<i64> = vec![i64::default(); max_address];
         data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
@@ -72,13 +71,11 @@ impl CircuitBootstrapper {
             address.cols,
         );
 
-        println!("{:?}", address.decomp());
-
         let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, adr as u32);
 
-        println!("addr_decomp: {:?}", addr_decomp);
+        //println!("addr_decomp: {:?}", addr_decomp);
 
-        println!("cols: {}", address.cols);
+        //println!("cols: {}", address.cols);
 
         // buf RGSW
         let mut buf_addr: Vec<VecZnx> = Vec::new();
@@ -95,25 +92,31 @@ impl CircuitBootstrapper {
         let log_gap: usize = 3;
         let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
 
-        let dims_n_decomp = address.dims_n_decomp();
+        let dims_n_decomp: usize = address.dims_n_decomp();
 
         let mut buf: Vec<u8> =
-                    vec![u8::default(); module_lwe.vmp_prepare_contiguous_tmp_bytes(address.rows(), address.cols())];
+            vec![
+                u8::default();
+                module_lwe.vmp_prepare_contiguous_tmp_bytes(address.rows(), address.cols())
+            ];
 
         let mut values: Vec<i64> = vec![i64::default(); module_lwe.n()];
 
-        println!();
+        //println!();
 
         let mut i: usize = 0;
         (0..address.dims_n()).for_each(|hi| {
-            (0..dims_n_decomp).for_each(|lo: usize| {
+            let mut sum_base: usize = 0;
 
-                println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, ADDRESSBASE[i] * (dims_n_decomp - lo-1), addr_decomp[size-i-1]);
+            (0..dims_n_decomp).for_each(|lo: usize| {
+                let base: usize = address.decomp_size[hi][lo];
+
+                //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
 
                 // 4) LWE[i] -> RGSW
                 self.circuit_bootstrap(
                     module_pbs,
-                    addr_decomp[size-i-1] << log_gap,
+                    addr_decomp[i] << log_gap,
                     &mut buf_addr,
                     buf_pbs,
                 );
@@ -121,29 +124,40 @@ impl CircuitBootstrapper {
                 self.post_process(
                     module_lwe,
                     log_gap_in,
-                    ADDRESSBASE[i] * (dims_n_decomp - lo-1),
-                    1<<ADDRESSBASE[i],
+                    sum_base,
+                    (1 << base) - 1,
                     &mut buf_addr,
                     &mut buf_post_process,
                 );
 
+                /*
                 let mut j: usize = 0;
                 buf_addr.iter_mut().for_each(|buf_addr| {
                     buf_addr.decode_vec_i64(self.log_base2k, self.log_base2k*(buf_addr.limbs()-1), &mut values);
                     println!("{}: {:?}", j, &values[..85]);
                     j += 1;
                 });
+                */
 
-                module_lwe.vmp_prepare_dblptr(&mut address.coordinates_rsh[hi].0[lo], &buf_addr, &mut buf);
+                module_lwe.vmp_prepare_dblptr(
+                    &mut address.coordinates_rsh[hi].0[lo],
+                    &buf_addr,
+                    &mut buf,
+                );
 
                 buf_addr.iter_mut().for_each(|buf_addr_i| {
                     module_lwe.vec_znx_automorphism_inplace(-1, buf_addr_i);
                 });
 
-                module_lwe.vmp_prepare_dblptr(&mut address.coordinates_lsh[hi].0[lo], &buf_addr, &mut buf);
+                module_lwe.vmp_prepare_dblptr(
+                    &mut address.coordinates_lsh[hi].0[lo],
+                    &buf_addr,
+                    &mut buf,
+                );
 
                 i += 1;
-                println!();
+                sum_base += base;
+                //println!();
             })
         });
     }
@@ -227,14 +241,13 @@ impl CircuitBootstrapper {
 
         // If gap_out < gap_in, then we need to repack, i.e. reduce the cap between
         // coefficients.
-        if log_gap_in > log_gap_out {
+        if log_gap_in != log_gap_out {
             let step_end: usize = step_start;
             let step_start: usize = 0;
             let steps: usize = max(max_value, 1 << (module.log_n() - log_gap_in));
 
             // For each coefficients that can be packed, i.e. n / gap_in
             (0..steps).for_each(|i: usize| {
-
                 // Cyclic shift the input and output by their respective X^{-gap_in} and X^{-gap_out}
                 if i != 0 {
                     module.vec_znx_rotate_inplace(-(1 << log_gap_in), a);
@@ -242,7 +255,7 @@ impl CircuitBootstrapper {
                 }
 
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
-                if i == 0{
+                if i == 0 {
                     trace::<false>(
                         module,
                         self.log_base2k,
@@ -253,7 +266,7 @@ impl CircuitBootstrapper {
                         buf1,
                         &mut carry,
                     );
-                }else{
+                } else {
                     trace::<false>(
                         module,
                         self.log_base2k,
@@ -274,10 +287,6 @@ impl CircuitBootstrapper {
 
             // Cyclic shift the output back to its original position
             module.vec_znx_rotate_inplace((1 << log_gap_out) * (steps - 1) as i64, a);
-
-            
         }
-
-        
     }
 }

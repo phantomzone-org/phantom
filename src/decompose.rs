@@ -14,9 +14,9 @@ impl Decomposer {
     pub fn new(module: &Module, log_bases: &Vec<usize>, log_base2k: usize, limbs: usize) -> Self {
         let log_n: usize = module.log_n();
         let f_sign = Box::new(move |x: i64| {
-            if x == 0{
+            if x == 0 {
                 1 << (log_n)
-            }else{
+            } else {
                 -(1 << (log_n))
             }
         });
@@ -63,7 +63,7 @@ impl Decomposer {
         );
 
         let log_n: usize = module.log_n();
-        let log_2n: usize = log_n+1;
+        let log_2n: usize = log_n + 1;
 
         let mut vec: Vec<i64> = Vec::new();
 
@@ -76,8 +76,12 @@ impl Decomposer {
         //println!("log_2n: {}", log_2n);
 
         self.log_bases.iter().enumerate().for_each(|(i, base)| {
-
-            assert!(log_2n - 2 > *base, "invalid module: log_2n={} < base+2={}", log_2n, base+2);
+            assert!(
+                log_2n - 2 > *base,
+                "invalid module: log_2n={} < base+2={}",
+                log_2n,
+                base + 2
+            );
 
             let last: bool = i == self.log_bases.len() - 1;
 
@@ -121,7 +125,9 @@ impl Decomposer {
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
             let sign_bit: u64 =
-                ((buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0)+(1<<log_n))>>1) as u64;
+                ((buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0)
+                    + (1 << log_n))
+                    >> 1) as u64;
 
             //println!("    sign(x)    : {:032b} {:032b}", 0, sign_bit);
 
@@ -167,8 +173,6 @@ impl Decomposer {
             //println!("digit final    : {:032b} {:032b}", digits>>32, digits&0xffffffff);
 
             value_u64 -= digits;
-
-
 
             //println!("value_u64 final: {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
             //println!();

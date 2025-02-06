@@ -38,7 +38,6 @@ impl Memory {
     }
 
     pub fn read(&self, module: &Module, address: &Address) -> i64 {
-
         let log_n: usize = module.log_n();
 
         let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.limbs());
@@ -56,7 +55,6 @@ impl Memory {
         let mut tmp_vec_znx: VecZnx = module.new_vec_znx(self.limbs());
 
         for i in 0..address.dims_n() {
-
             let coordinate: &Coordinate = address.at_lsh(i);
 
             let result_prev: &Vec<VecZnx>;
@@ -96,8 +94,7 @@ impl Memory {
                 packer.reset();
                 results = result_next.clone();
             } else {
-
-                if i == 0{
+                if i == 0 {
                     // Shift polynomial by X^{-idx} and then pack
                     coordinate.product(
                         &module,
@@ -107,7 +104,7 @@ impl Memory {
                         &mut tmp_b_dft,
                         &mut tmp_bytes,
                     );
-                }else{
+                } else {
                     // Shift polynomial by X^{-idx} and then pack
                     coordinate.product(
                         &module,
