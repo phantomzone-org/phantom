@@ -13,19 +13,14 @@ pub struct Decomposer {
 impl Decomposer {
     pub fn new(module: &Module, log_bases: &Vec<usize>, log_base2k: usize, limbs: usize) -> Self {
         let log_n: usize = module.log_n();
-        let half: i64 = 1<<(log_n-1);
-
         let f_sign = Box::new(move |x: i64| {
-            if x >= half{
-                -(1 << (log_n))
+            if x == 0{
+                1 << (log_n)
             }else{
-                0
+                -(1 << (log_n))
             }
         });
         let test_vector_msb: TestVector = TestVector::new(&module, f_sign, log_base2k, limbs);
-
-        println!("test_vector_msb: {:?}", test_vector_msb.0.at(test_vector_msb.0.limbs()-1));
-
 
         let mut test_vector_quo: Vec<TestVector> = Vec::new();
 
@@ -67,7 +62,8 @@ impl Decomposer {
             self.test_vector_quo[0].0.n()
         );
 
-        let log_2n: usize = module.log_n()+1;
+        let log_n: usize = module.log_n();
+        let log_2n: usize = log_n+1;
 
         let mut vec: Vec<i64> = Vec::new();
 
@@ -77,7 +73,7 @@ impl Decomposer {
 
         let mut sum_bases: usize = 0;
 
-        println!("log_2n: {}", log_2n);
+        //println!("log_2n: {}", log_2n);
 
         self.log_bases.iter().enumerate().for_each(|(i, base)| {
 
@@ -87,13 +83,13 @@ impl Decomposer {
 
             sum_bases += *base;
 
-            println!("{} {}", sum_bases, base);
+            //println!("{} {}", sum_bases, base);
 
-            println!(
-                "before         : {:032b} {:032b}",
-                value_u64 >> 32,
-                value_u64 & 0xffffffff
-            );
+            //println!(
+            //    "before         : {:032b} {:032b}",
+            //    value_u64 >> 32,
+            //    value_u64 & 0xffffffff
+            //);
 
             // 1) From mod Q to mod 2N, with scaling by drift = N/Base
             // Example:
@@ -110,30 +106,28 @@ impl Decomposer {
 
             let mut x: i32 = ((value_u64 << shift) >> (64 - log_2n)) as i32;
 
-            println!("x              : {:032b} {:032b}", 0, x);
+            //println!("x              : {:032b} {:032b}", 0, x);
 
             // 2) Padd with drift/2 such that value cannot be negative
             // [1] [111111] [00000] -> [1] [111111] [10000]
             x += 1 << (log_2n - base - 2);
 
-            println!("extrac & pad   : {:032b} {:032b}", 0, x);
+            //println!("extrac & pad   : {:032b} {:032b}", 0, x);
 
             // 3) PBS to extract msb
             // [1] [111111] [10000] -> [1] [00000] [00000]
-            println!("x: {}", x);
-            println!("t: {}", self.test_vector_msb.0.n());
             module.vec_znx_rotate(x as i64, buf, &self.test_vector_msb.0);
 
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
             let sign_bit: u64 =
-                buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0) as u64;
+                ((buf.decode_coeff_i64(self.log_base2k, self.limbs * self.log_base2k, 0)+(1<<log_n))>>1) as u64;
 
-            println!("    sign(x)    : {:032b} {:032b}", 0, sign_bit);
+            //println!("    sign(x)    : {:032b} {:032b}", 0, sign_bit);
 
             x -= sign_bit as i32;
 
-            println!("x - sign(x)    : {:032b} {:032b}", 0, x);
+            //println!("x - sign(x)    : {:032b} {:032b}", 0, x);
 
             // 5) PBS bit-extraction
             // [0] [111111] [10000] ->  [0] [111111] [00000]
@@ -147,11 +141,11 @@ impl Decomposer {
                 digits += sign_bit;
             }
 
-            println!(
-                "digits         : {:032b} {:032b}",
-                digits >> 32,
-                digits & 0xffffffff
-            );
+            //println!(
+            //    "digits         : {:032b} {:032b}",
+            //    digits >> 32,
+            //    digits & 0xffffffff
+            //);
 
             // Stores i-th diit
             if last {
@@ -160,8 +154,8 @@ impl Decomposer {
                 vec.push((digits >> (log_2n - base - 1)) as i64);
             }
 
-            println!("out            : {:032b} {:032b}", vec[i]>>32, vec[i]&0xffffffff);
-            println!("value_u64      : {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
+            //println!("out            : {:032b} {:032b}", vec[i]>>32, vec[i]&0xffffffff);
+            //println!("value_u64      : {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
 
             // 6) Subtracts i-th digit to prepare for next iteration
             // x mod Q : [11110000111100001111000011] [1] [11111] [0...0] [e..e]
@@ -170,14 +164,14 @@ impl Decomposer {
             // x mod Q : [11110000111100001111000011] [1] [00000] [0...0] [e..e]
 
             digits = digits << (32 - log_2n + sum_bases + 1);
-            println!("digit final    : {:032b} {:032b}", digits>>32, digits&0xffffffff);
+            //println!("digit final    : {:032b} {:032b}", digits>>32, digits&0xffffffff);
 
             value_u64 -= digits;
 
 
 
-            println!("value_u64 final: {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
-            println!();
+            //println!("value_u64 final: {:032b} {:032b}", value_u64>>32, value_u64&0xffffffff);
+            //println!();
         });
 
         vec
