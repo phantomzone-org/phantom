@@ -9,6 +9,7 @@ pub struct Interpreter {
     pub log_k: usize,
     pub log_base2k: usize,
     pub max_address: usize,
+    pub max_pc: usize,
     pub counter: Address,
     pub rs1_addresses: Memory,
     pub rs2_addresses: Memory,
@@ -29,6 +30,7 @@ impl Interpreter {
         limbs: usize,
         max_counter: usize,
         max_address: usize,
+        max_pc: usize,
     ) -> Self {
         let log_n: usize = module.log_n();
         let log_k: usize = log_base2k * limbs;
@@ -36,6 +38,7 @@ impl Interpreter {
             log_k: log_k,
             log_base2k: log_base2k,
             max_address: max_address,
+            max_pc: max_pc,
             counter: Address::new(module, LOGN_DECOMP, max_counter, VMPPMAT_ROWS, limbs + 1),
             rs1_addresses: Memory::new(log_n, log_base2k, log_k),
             rs2_addresses: Memory::new(log_n, log_base2k, log_k),
@@ -141,6 +144,21 @@ impl Interpreter {
 
         let imm_lwe = self.register.read(module_lwe, &imm_address);
 
-        // Evaluates all OPS
+        // TODO Evaluates all OPS f[i](rs1_lwe, rs2_lwe, imm_lwe);
+
+        // Packs all OPS, rs1, rs2, read register, read memory
+
+        // Select from pack_ops
+
+        // Updates program-counter
+        let pc_offset: u32 = 0;
+        circuit_bootstrapper.bootstrap_address(
+            module_pbs,
+            module_lwe,
+            pc_offset,
+            self.max_pc,
+            &mut self.counter,
+            &mut &mut buf_pbs,
+        );
     }
 }

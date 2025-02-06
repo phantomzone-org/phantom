@@ -7,6 +7,7 @@ pub mod packing;
 pub mod parameters;
 pub mod test_vector;
 pub mod trace;
+pub mod instructions;
 
 #[inline(always)]
 pub fn reverse_bits_msb(x: usize, n: u32) -> usize {

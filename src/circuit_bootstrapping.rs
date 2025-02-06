@@ -2,7 +2,7 @@ use crate::address::Address;
 use crate::decompose::Decomposer;
 use crate::memory::Memory;
 use crate::trace::{trace, trace_inplace};
-use base2k::{Encoding, Infos, Module, VecZnx, VecZnxOps, VmpPMat, VmpPMatOps};
+use base2k::{Module, VecZnx, VecZnxOps, VmpPMatOps};
 use itertools::izip;
 use std::cmp::max;
 
