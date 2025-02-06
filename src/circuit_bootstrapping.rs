@@ -42,27 +42,83 @@ impl CircuitBootstrapper {
         }
     }
 
-    pub fn bootstrap_address(
+    /// bootstraps `value` to `Address`
+    ///
+    /// # Arguments
+    ///
+    /// * `module_pbs`: module for programmable bootstrapping
+    /// * `module_lwe`: module for address-level ops
+    /// * `value`: value to bootstrap to address
+    /// * `address`: address receiver
+    /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`
+    ///
+    /// Adds an offset to an address
+    ///
+    /// # Arguments
+    ///
+    /// * `module_pbs`: module for the programmable bootstrapping.
+    /// * `module_lwe`: module of the [Address].
+    /// * `offset`: value to add to the [Address].
+    /// * `max_address`: maximum value of the [Address].
+    /// * `address`: [Address] on which to add the offset.
+    /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`.
+    ///
+    /// # Example
+    /// ```
+    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64};
+    /// use fhevm::address::Address;
+    /// use fhevm::circuit_bootstrapping::CircuitBootstrapper;
+    /// use fhevm::memory::Memory;
+    ///
+    /// let n_lwe: usize = 1 << 8;
+    /// let n_pbs = n_lwe << 2;
+    /// let log_base2k: usize = 17;
+    /// let limbs: usize = 3;
+    /// let log_base_n: usize = 6;
+    /// let max_address: usize = 2 * n_lwe - 37;
+    /// let module_lwe: Module = Module::new::<FFT64>(n_lwe);
+    ///
+    /// let module_pbs: Module = Module::new::<FFT64>(n_pbs);
+    ///
+    /// let rows: usize = limbs;
+    /// let cols: usize = limbs + 1;
+    ///
+    /// let acc: CircuitBootstrapper =
+    ///     CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, cols);
+    ///
+    /// let value: u32 = 73;
+    ///
+    /// let mut buf_pbs: VecZnx = module_pbs.new_vec_znx(cols);
+    ///
+    /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, rows, cols);
+    ///
+    /// acc.bootstrap_to_address(
+    ///     &module_pbs,
+    ///     &module_lwe,
+    ///     value,
+    ///     &mut address,
+    ///     &mut buf_pbs,
+    /// );
+    ///
+    /// let mut data: Vec<i64> = vec![i64::default(); 2 * n_lwe];
+    /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+    /// let log_k = limbs * log_base2k - 5;
+    /// let mut memory: Memory = Memory::new(module_lwe.log_n(), log_base2k, log_k);
+    /// memory.set(&data);
+    ///
+    /// let out: i64 = memory.read(&module_lwe, &address);
+    ///
+    /// assert_eq!(out as u32, value);
+    ///
+    /// ```
+    pub fn bootstrap_to_address(
         &self,
         module_pbs: &Module,
         module_lwe: &Module,
-        offset: u32,
-        max_address: usize,
+        value: u32,
         address: &mut Address,
         buf_pbs: &mut VecZnx,
     ) {
-        // 1) RGSW -> LWE
-        let log_k: usize = self.log_base2k * (address.cols - 1) - 5;
-        let mut mem: Memory = Memory::new(module_lwe.log_n(), self.log_base2k, log_k);
-        let mut data: Vec<i64> = vec![i64::default(); max_address];
-        data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-        mem.set(&data);
-
-        // 2) LWE + offset
-        let mut adr: i64 = mem.read(module_lwe, address);
-
-        adr += offset as i64;
-
         // 3) LWE -> [LWE, LWE, LWE, ...]
         let mut decomposer: Decomposer = Decomposer::new(
             &module_pbs,
@@ -71,7 +127,7 @@ impl CircuitBootstrapper {
             address.cols,
         );
 
-        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, adr as u32);
+        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, value);
 
         //println!("addr_decomp: {:?}", addr_decomp);
 
@@ -88,7 +144,6 @@ impl CircuitBootstrapper {
             module_lwe.new_vec_znx(address.cols),
         ];
 
-        let size: usize = addr_decomp.len();
         let log_gap: usize = 3;
         let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
 
@@ -99,8 +154,6 @@ impl CircuitBootstrapper {
                 u8::default();
                 module_lwe.vmp_prepare_contiguous_tmp_bytes(address.rows(), address.cols())
             ];
-
-        let mut values: Vec<i64> = vec![i64::default(); module_lwe.n()];
 
         //println!();
 
@@ -160,6 +213,95 @@ impl CircuitBootstrapper {
                 //println!();
             })
         });
+    }
+
+    /// Adds an offset to an address
+    ///
+    /// # Arguments
+    ///
+    /// * `module_pbs`: module for the programmable bootstrapping.
+    /// * `module_lwe`: module of the [Address].
+    /// * `offset`: value to add to the [Address].
+    /// * `max_address`: maximum value of the [Address].
+    /// * `address`: [Address] on which to add the offset.
+    /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`.
+    ///
+    /// # Example
+    /// ```
+    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64};
+    /// use fhevm::address::Address;
+    /// use fhevm::circuit_bootstrapping::CircuitBootstrapper;
+    /// use fhevm::memory::Memory;
+    ///
+    /// let n_lwe: usize = 1 << 8;
+    /// let n_pbs = n_lwe << 2;
+    /// let log_base2k: usize = 17;
+    /// let limbs: usize = 3;
+    /// let log_base_n: usize = 6;
+    /// let max_address: usize = 2 * n_lwe - 37;
+    /// let module_lwe: Module = Module::new::<FFT64>(n_lwe);
+    ///
+    /// let module_pbs: Module = Module::new::<FFT64>(n_pbs);
+    ///
+    /// let rows: usize = limbs;
+    /// let cols: usize = limbs + 1;
+    ///
+    /// let acc: CircuitBootstrapper =
+    ///     CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, cols);
+    ///
+    /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, rows, cols);
+    ///
+    /// let idx: usize = 73;
+    ///
+    /// address.set(&module_lwe, idx);
+    ///
+    /// let offset: u32 = 45;
+    ///
+    /// let mut buf_pbs: VecZnx = module_pbs.new_vec_znx(cols);
+    ///
+    /// acc.bootstrap_address(
+    ///     &module_pbs,
+    ///     &module_lwe,
+    ///     offset,
+    ///     max_address,
+    ///     &mut address,
+    ///     &mut buf_pbs,
+    /// );
+    ///
+    /// let mut data: Vec<i64> = vec![i64::default(); 2 * n_lwe];
+    /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+    /// let log_k = limbs * log_base2k - 5;
+    /// let mut memory: Memory = Memory::new(module_lwe.log_n(), log_base2k, log_k);
+    /// memory.set(&data);
+    ///
+    /// let out: i64 = memory.read(&module_lwe, &address);
+    ///
+    /// assert_eq!(out as usize, idx + offset as usize);
+    ///
+    /// ```
+    pub fn bootstrap_address(
+        &self,
+        module_pbs: &Module,
+        module_lwe: &Module,
+        offset: u32,
+        max_address: usize,
+        address: &mut Address,
+        buf_pbs: &mut VecZnx,
+    ) {
+        // 1) RGSW -> LWE
+        let log_k: usize = self.log_base2k * (address.cols - 1) - 5;
+        let mut mem: Memory = Memory::new(module_lwe.log_n(), self.log_base2k, log_k);
+        let mut data: Vec<i64> = vec![i64::default(); max_address];
+        data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+        mem.set(&data);
+
+        // 2) LWE + offset
+        let mut adr: i64 = mem.read(module_lwe, address);
+
+        adr += offset as i64;
+
+        // 3) LWE -> RGSW
+        self.bootstrap_to_address(module_pbs, module_lwe, adr as u32, address, buf_pbs);
     }
 
     pub fn circuit_bootstrap(
