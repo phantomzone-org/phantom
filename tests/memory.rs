@@ -1,6 +1,6 @@
 use base2k::{Module, FFT64};
 use fhevm::address::Address;
-use fhevm::memory::Memory;
+use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 
 #[test]
 fn memory() {
@@ -19,35 +19,38 @@ fn memory() {
     let mut data: Vec<i64> = vec![i64::default(); size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
 
-    let mut memory: Memory = Memory::new(log_n, log_base2k, log_q);
-    memory.set(&data);
-    let mut idx: Address = Address::new(&module, log_base_n, size, rows, cols);
+    let mut memory: Memory = Memory::new(&module, log_base2k, cols, size);
+    memory.set(&data, log_q);
+    let mut address: Address = Address::new(&module, log_base_n, size, rows, cols);
 
     let write_value: i64 = 255;
 
-    // Read & Write
-    (0..size).for_each(|i| {
-        idx.set(&module, i);
+    let mut tmp_bytes = vec![
+        u8::default();
+        read_tmp_bytes(&module, cols, rows, cols)
+            | read_prepare_write_tmp_bytes(&module, cols, rows, cols)
+            | write_tmp_bytes(&module, cols, rows, cols)
+    ];
 
+    (0..size).for_each(|i| {
         //println!("{:?}", i);
 
-        // Reads idx[i] check it is equal to i.
-        let value: i64 = memory.read(&module, &idx);
-        assert_eq!(i as i64, value);
-    });
+        // Sets the address to i
+        address.set(&module, i);
 
-    // Read & Write
-    (0..size).for_each(|i| {
-        idx.set(&module, i);
-
-        //println!("{:?}", i);
-
-        // Reads idx[i] check it is equal to i, and writes write_value on idx[i]
-        let value: i64 = memory.read_and_write(&module, &idx, write_value, true);
+        // Read only idx[i] and check it is equal to i
+        let value: i64 = memory.read(&module, &address, &mut tmp_bytes);
         assert_eq!(i as i64, value);
 
-        // Reads idx[i], checks it is equal to write_value and writes back i on idx[i].
-        let value: i64 = memory.read_and_write(&module, &idx, i as i64, true);
+        // Reads idx[i] with prepare for write  check it is equal to i
+        let value: i64 = memory.read_prepare_write(&module, &address, &mut tmp_bytes);
+        assert_eq!(i as i64, value);
+
+        // Writes write_value on idx[i]
+        memory.write(&module, &address, write_value, &mut tmp_bytes);
+
+        // Read only idx[i], checks it is equal to write_value.
+        let value: i64 = memory.read(&module, &address, &mut tmp_bytes);
         assert_eq!(write_value, value);
     });
 }
