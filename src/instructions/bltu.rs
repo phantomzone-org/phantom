@@ -4,7 +4,7 @@ use super::{Arithmetic, sext};
 
 pub struct Bltu();
 
-impl Arithmetic for Blut{
+impl Arithmetic for Bltu{
     fn apply(&self, imm_19: u32, imm_15: u32, imm_11: u32, imm_7: u32, imm_3: u32, x_rs1: u32, x_rs2: u32, pc: u32) -> (u32, u32){
         if x_rs1 < x_rs2{
             (0, sext(imm_19<<16 | imm_11<<12 | imm_11<<8 | imm_7<<4 | imm_3, 12))

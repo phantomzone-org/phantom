@@ -136,7 +136,7 @@ impl Coordinate {
 
         let mut data_mat: Matrix3D<i64> = Matrix3D::new(rows, cols, module.n());
         let mut buf: Vec<u8> =
-            vec![u8::default(); module.vmp_prepare_contiguous_tmp_bytes(rows, cols)];
+            vec![u8::default(); module.vmp_prepare_tmp_bytes(rows, cols)];
         let mut buf_i64: Vec<i64> = vec![i64::default(); n];
 
         let mut tot_base: usize = 0;

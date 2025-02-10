@@ -16,7 +16,7 @@ use super::{Arithmetic, sext};
 pub struct Addi();
 
 impl Arithmetic for Addi{
-    fn apply(&self,  imm_19: u32, imm_15: u32, imm_11: u32, imm_7: u32, imm_3: u32, x_rs1: u32, xs_rs2: u32) -> (u32, u32){
+    fn apply(&self,  imm_19: u32, imm_15: u32, imm_11: u32, imm_7: u32, imm_3: u32, x_rs1: u32, xs_rs2: u32, pc: u32) -> (u32, u32){
         (x_rs1.wrapping_add(sext(imm_11<<8 | imm_7<<4 | imm_3, 12)), 0)
     }
 }

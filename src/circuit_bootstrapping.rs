@@ -152,7 +152,7 @@ impl CircuitBootstrapper {
         let mut buf: Vec<u8> =
             vec![
                 u8::default();
-                module_lwe.vmp_prepare_contiguous_tmp_bytes(address.rows(), address.cols())
+                module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols())
             ];
 
         //println!();
