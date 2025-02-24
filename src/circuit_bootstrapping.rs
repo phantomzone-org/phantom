@@ -2,7 +2,9 @@ use crate::address::Address;
 use crate::decompose::Decomposer;
 use crate::memory::Memory;
 use crate::trace::{trace, trace_inplace};
-use base2k::{Infos, Module, VecZnx, VecZnxOps, VmpPMatOps};
+use base2k::{
+    switch_degree, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxOps, VecZnxVec, VmpPMatOps,
+};
 use itertools::izip;
 use std::cmp::max;
 
@@ -184,17 +186,17 @@ impl CircuitBootstrapper {
 
                 module_lwe.vmp_prepare_dblptr(
                     &mut address.coordinates_rsh[hi].0[lo],
-                    &buf_addr,
+                    &buf_addr.dblptr(),
                     &mut buf,
                 );
 
                 buf_addr.iter_mut().for_each(|buf_addr_i| {
-                    module_lwe.vec_znx_automorphism_inplace(-1, buf_addr_i);
+                    module_lwe.vec_znx_automorphism_inplace(-1, buf_addr_i, buf_addr_i.cols());
                 });
 
                 module_lwe.vmp_prepare_dblptr(
                     &mut address.coordinates_lsh[hi].0[lo],
-                    &buf_addr,
+                    &buf_addr.dblptr(),
                     &mut buf,
                 );
 
@@ -324,7 +326,7 @@ impl CircuitBootstrapper {
             self.test_vectors.len()
         );
 
-        let limbs = a[0].limbs();
+        let limbs = a[0].cols();
 
         assert!(
             tmp_bytes.len() >= circuit_bootstrap_tmp_bytes(module, limbs),
@@ -333,11 +335,11 @@ impl CircuitBootstrapper {
             circuit_bootstrap_tmp_bytes(module, limbs)
         );
 
-        let mut buf_pbs: VecZnx = VecZnx::from_bytes(n, limbs, tmp_bytes);
+        let mut buf_pbs: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes);
 
         izip!(a.iter_mut(), self.test_vectors.iter()).for_each(|(ai, ti)| {
             module.vec_znx_rotate(value, &mut buf_pbs, ti);
-            buf_pbs.switch_degree(ai);
+            switch_degree(ai, &buf_pbs);
         });
     }
 
@@ -365,39 +367,34 @@ impl CircuitBootstrapper {
         tmp_bytes: &mut [u8],
     ) {
         assert!(
-            tmp_bytes.len() >= post_process_tmp_bytes(module, a.limbs()),
+            tmp_bytes.len() >= post_process_tmp_bytes(module, a.cols()),
             "invalid tmp_bytes: tmp_bytes.len() < post_process_tmp_bytes"
         );
 
         let n: usize = module.n();
-        let limbs: usize = a.limbs();
+        let limbs: usize = a.cols();
 
         let step_start: usize = module.log_n() - log_gap_in;
         let step_end = module.log_n();
 
         let bytes_of_vec_znx = module.bytes_of_vec_znx(limbs);
 
-        let mut ptr: usize = 0;
-        let mut buf0: VecZnx = VecZnx::from_bytes(n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-        let mut buf1: VecZnx = VecZnx::from_bytes(n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-        let mut buf2: VecZnx = VecZnx::from_bytes(n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-        let mut buf3: VecZnx = VecZnx::from_bytes(n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
+        let (tmp_bytes_buf0, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_buf2, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_buf3, carry) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
 
-        let carry: &mut [u8] = &mut tmp_bytes[ptr..];
+        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf0);
+        let mut buf2: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf2);
+        let mut buf3: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf3);
 
         // First partial trace, vanishes all coefficients which are not multiples of gap_in
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
-        trace_inplace::<false>(
+        trace_inplace(
             module,
             self.log_base2k,
             step_start,
             step_end,
             a,
-            Some(&mut buf1),
             &mut buf0,
             carry,
         );
@@ -419,25 +416,23 @@ impl CircuitBootstrapper {
 
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
                 if i == 0 {
-                    trace::<false>(
+                    trace(
                         module,
                         self.log_base2k,
                         step_start,
                         step_end,
                         &mut buf3,
                         a,
-                        &mut buf1,
                         carry,
                     );
                 } else {
-                    trace::<false>(
+                    trace(
                         module,
                         self.log_base2k,
                         step_start,
                         step_end,
                         &mut buf2,
                         a,
-                        &mut buf1,
                         carry,
                     );
                     module.vec_znx_add_inplace(&mut buf3, &mut buf2);

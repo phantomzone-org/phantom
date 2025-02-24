@@ -1,4 +1,7 @@
-use base2k::{Infos, Matrix3D, Module, VecZnx, VecZnxBig, VecZnxDft, VmpPMat, VmpPMatOps};
+use base2k::{
+    Infos, Module, VecZnx, VecZnxBig, VecZnxBigOps, VecZnxCommon, VecZnxDft, VecZnxDftOps, VmpPMat,
+    VmpPMatOps,
+};
 use itertools::izip;
 
 pub struct Address {
@@ -134,8 +137,7 @@ impl Coordinate {
         let sign: i64 = value.signum();
         let mut remain: usize = value.abs() as usize;
 
-        let mut data_mat: Matrix3D<i64> = Matrix3D::new(rows, cols, module.n());
-        let mut buf: Vec<u8> = vec![u8::default(); module.vmp_prepare_tmp_bytes(rows, cols)];
+        let mut tmp_bytes: Vec<u8> = vec![u8::default(); module.vmp_prepare_tmp_bytes(rows, cols)];
         let mut buf_i64: Vec<i64> = vec![i64::default(); n];
 
         let mut tot_base: usize = 0;
@@ -150,11 +152,9 @@ impl Coordinate {
                 buf_i64[chunk] = 1;
             }
 
-            (0..data_mat.rows).for_each(|i| {
-                data_mat.at_mut(i, i).copy_from_slice(&buf_i64);
+            (0..rows).for_each(|row_i| {
+                module.vmp_prepare_row(vmp_pmat, &buf_i64, row_i, &mut tmp_bytes);
             });
-
-            module.vmp_prepare_contiguous(vmp_pmat, &data_mat.data, &mut buf);
 
             if sign < 0 && chunk != 0 {
                 buf_i64[n - chunk] = 0;
@@ -167,12 +167,12 @@ impl Coordinate {
         });
     }
 
-    pub fn product(
+    pub fn product<A: VecZnxCommon, B: VecZnxCommon>(
         &self,
         module: &Module,
         log_base2k: usize,
-        b: &mut VecZnx,
-        a: &VecZnx,
+        b: &mut B,
+        a: &A,
         tmp_b_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {
@@ -185,15 +185,15 @@ impl Coordinate {
         });
 
         let mut tmp_b_big: VecZnxBig = tmp_b_dft.as_vec_znx_big();
-        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_b_dft, b.limbs());
+        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_b_dft, b.cols());
         module.vec_znx_big_normalize(log_base2k, b, &tmp_b_big, buf);
     }
 
-    pub fn product_inplace(
+    pub fn product_inplace<A: VecZnxCommon>(
         &self,
         module: &Module,
         log_base2k: usize,
-        a: &mut VecZnx,
+        a: &mut A,
         tmp_a_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {
@@ -205,7 +205,7 @@ impl Coordinate {
             }
         });
         let mut tmp_b_big: VecZnxBig = tmp_a_dft.as_vec_znx_big();
-        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_a_dft, a.limbs());
+        module.vec_znx_idft_tmp_a(&mut tmp_b_big, tmp_a_dft, a.cols());
         module.vec_znx_big_normalize(log_base2k, a, &tmp_b_big, buf);
     }
 }

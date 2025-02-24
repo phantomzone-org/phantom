@@ -43,7 +43,7 @@ fn test_packing_streaming_dense(module: &Module, log_base2k: usize, limbs: usize
             tmp.encode_vec_i64(log_base2k, log_k, &vec![values[i_rev]; n], 32);
             packer.add(module, Some(&tmp), &mut results)
         } else {
-            packer.add(module, None, &mut results)
+            packer.add(module, None::<&VecZnx>, &mut results)
         }
     }
 

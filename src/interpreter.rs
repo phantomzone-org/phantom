@@ -6,7 +6,7 @@ use crate::parameters::{
     LIMBS, LOGBASE2K, LOGN_DECOMP, LOGN_LWE, MAXMEMORYADDRESS, MAXOPSADDRESS, VMPPMAT_COLS,
     VMPPMAT_ROWS,
 };
-use base2k::{Module, VecZnx, VecZnxOps};
+use base2k::Module;
 
 pub struct Interpreter {
     pub max_address: usize,

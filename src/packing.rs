@@ -1,11 +1,11 @@
-use base2k::{Module, VecZnx, VecZnxOps};
+use base2k::{
+    alloc_aligned, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxCommon, VecZnxOps,
+};
 
 pub struct StreamRepacker {
     log_base2k: usize,
     accumulators: Vec<Accumulator>,
-    tmp_a: VecZnx,
-    tmp_b: VecZnx,
-    carry: Vec<u8>,
+    tmp_bytes: Vec<u8>,
     counter: usize,
 }
 
@@ -26,19 +26,14 @@ impl Accumulator {
 }
 
 impl StreamRepacker {
-    pub fn new(module: &Module, log_base2k: usize, limbs: usize) -> Self {
+    pub fn new(module: &Module, log_base2k: usize, cols: usize) -> Self {
         let mut accumulators: Vec<Accumulator> = Vec::<Accumulator>::new();
-
         let log_n: usize = module.log_n();
-
-        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, limbs)));
-
+        (0..log_n).for_each(|_| accumulators.push(Accumulator::new(module, cols)));
         Self {
             log_base2k: log_base2k,
             accumulators: accumulators,
-            tmp_a: module.new_vec_znx(limbs),
-            tmp_b: module.new_vec_znx(limbs),
-            carry: vec![u8::default(); module.n() * 8],
+            tmp_bytes: alloc_aligned(pack_core_tmp_bytes(module, cols), 64),
             counter: 0,
         }
     }
@@ -51,16 +46,19 @@ impl StreamRepacker {
         self.counter = 0;
     }
 
-    pub fn add(&mut self, module: &Module, a: Option<&VecZnx>, result: &mut Vec<VecZnx>) {
+    pub fn add<T: VecZnxCommon>(
+        &mut self,
+        module: &Module,
+        a: Option<&T>,
+        result: &mut Vec<VecZnx>,
+    ) {
         pack_core(
             module,
             self.log_base2k,
             a,
             &mut self.accumulators,
-            &mut self.tmp_a,
-            &mut self.tmp_b,
-            &mut self.carry,
             0,
+            &mut self.tmp_bytes,
         );
         self.counter += 1;
         if self.counter == module.n() {
@@ -72,21 +70,23 @@ impl StreamRepacker {
     pub fn flush(&mut self, module: &Module, result: &mut Vec<VecZnx>) {
         if self.counter != 0 {
             while self.counter != module.n() - 1 {
-                self.add(module, None, result);
+                self.add(module, None::<&VecZnx>, result);
             }
         }
     }
 }
 
-fn pack_core(
+pub fn pack_core_tmp_bytes(module: &Module, cols: usize) -> usize {
+    2 * VecZnxBorrow::bytes_of(module.n(), cols) + module.vec_znx_normalize_base2k_tmp_bytes()
+}
+
+fn pack_core<A: VecZnxCommon>(
     module: &Module,
     log_base2k: usize,
-    a: Option<&VecZnx>,
+    a: Option<&A>,
     accumulators: &mut [Accumulator],
-    tmp_a: &mut VecZnx,
-    tmp_b: &mut VecZnx,
-    carry: &mut [u8],
     i: usize,
+    tmp_bytes: &mut [u8],
 ) {
     let log_n = module.log_n();
 
@@ -107,16 +107,7 @@ fn pack_core(
         }
         acc_mut_ref.control = true;
     } else {
-        combine(
-            module,
-            log_base2k,
-            &mut acc_prev[0],
-            a,
-            tmp_a,
-            tmp_b,
-            carry,
-            i,
-        );
+        combine(module, log_base2k, &mut acc_prev[0], a, i, tmp_bytes);
 
         acc_prev[0].control = false;
 
@@ -126,38 +117,35 @@ fn pack_core(
                 log_base2k,
                 Some(&acc_prev[0].buf),
                 acc_next,
-                tmp_a,
-                tmp_b,
-                carry,
                 i + 1,
+                tmp_bytes,
             );
         } else {
             pack_core(
                 module,
                 log_base2k,
-                None,
+                None::<&VecZnx>,
                 acc_next,
-                tmp_a,
-                tmp_b,
-                carry,
                 i + 1,
+                tmp_bytes,
             );
         }
     }
 }
 
-fn combine(
+fn combine<A: VecZnxCommon>(
     module: &Module,
     log_base2k: usize,
     acc: &mut Accumulator,
-    b: Option<&VecZnx>,
-    tmp_a: &mut VecZnx,
-    tmp_b: &mut VecZnx,
-    carry: &mut [u8],
+    b: Option<&A>,
     i: usize,
+    tmp_bytes: &mut [u8],
 ) {
     let log_n = module.log_n();
     let a: &mut VecZnx = &mut acc.buf;
+
+    let cols: usize = a.cols();
+    assert!(tmp_bytes.len() >= pack_core_tmp_bytes(module, cols));
 
     let gal_el: i64;
 
@@ -167,43 +155,50 @@ fn combine(
         gal_el = module.galois_element(1 << (i - 1))
     }
 
+    let vec_znx_tmp_bytes = module.bytes_of_vec_znx(cols);
+    let (tmp_bytes_a, tmp_bytes) = tmp_bytes.split_at_mut(vec_znx_tmp_bytes);
+    let (tmp_bytes_b, tmp_bytes_carry) = tmp_bytes.split_at_mut(vec_znx_tmp_bytes);
+
+    let mut tmp_a: VecZnxBorrow = VecZnxBorrow::from_bytes(module.n(), cols, tmp_bytes_a);
+    let mut tmp_b: VecZnxBorrow = VecZnxBorrow::from_bytes(module.n(), cols, tmp_bytes_b);
+
     if acc.value {
-        a.rsh(log_base2k, 1, carry);
+        a.rsh(log_base2k, 1, tmp_bytes_carry);
 
         if let Some(b) = b {
             // tmp_a = b * X^t
-            module.vec_znx_rotate(1 << (log_n - i - 1), tmp_a, b);
+            module.vec_znx_rotate(1 << (log_n - i - 1), &mut tmp_a, b);
 
-            tmp_a.rsh(log_base2k, 1, carry);
+            tmp_a.rsh(log_base2k, 1, tmp_bytes_carry);
 
             // tmp_b = a - b*X^t
-            module.vec_znx_sub(tmp_b, a, tmp_a);
+            module.vec_znx_sub(&mut tmp_b, a, &tmp_a);
 
             // a = a + b * X^t
-            module.vec_znx_add_inplace(a, tmp_a);
+            module.vec_znx_add_inplace(a, &tmp_a);
 
             // tmp_b = phi(a - b * X^t)
-            module.vec_znx_automorphism_inplace(gal_el, tmp_b);
+            module.vec_znx_automorphism_inplace(gal_el, &mut tmp_b, cols);
 
             // a = a + b * X^t + phi(a - b * X^t)
-            module.vec_znx_add_inplace(a, tmp_b);
+            module.vec_znx_add_inplace(a, &tmp_b);
         } else {
             // tmp_a = phi(a)
-            module.vec_znx_automorphism(gal_el, tmp_a, a);
+            module.vec_znx_automorphism(gal_el, &mut tmp_a, a, cols);
             // a = a + phi(a)
-            module.vec_znx_add_inplace(a, tmp_a);
+            module.vec_znx_add_inplace(a, &tmp_a);
         }
     } else {
         if let Some(b) = b {
             // tmp_b = b * X^t
-            module.vec_znx_rotate(1 << (log_n - i - 1), tmp_b, b);
-            tmp_b.rsh(log_base2k, 1, carry);
+            module.vec_znx_rotate(1 << (log_n - i - 1), &mut tmp_b, b);
+            tmp_b.rsh(log_base2k, 1, tmp_bytes_carry);
 
             // tmp_a = phi(b * X^t)
-            module.vec_znx_automorphism(gal_el, tmp_a, tmp_b);
+            module.vec_znx_automorphism(gal_el, &mut tmp_a, &tmp_b, cols);
 
             // a = (b* X^t - phi(b* X^t))
-            module.vec_znx_sub(a, tmp_b, tmp_a);
+            module.vec_znx_sub(a, &tmp_b, &tmp_a);
             acc.value = true
         }
     }

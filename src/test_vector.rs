@@ -1,4 +1,4 @@
-use base2k::{Infos, Module, VecZnx, VecZnxOps};
+use base2k::{Infos, Module, VecZnx, VecZnxApi, VecZnxOps};
 
 pub struct TestVector(pub VecZnx);
 
@@ -12,7 +12,7 @@ impl TestVector {
         let n: i64 = module.n() as i64;
         let mut test_vector: VecZnx = module.new_vec_znx(limbs);
 
-        let last: &mut [i64] = test_vector.at_mut(test_vector.limbs() - 1);
+        let last: &mut [i64] = test_vector.at_mut(test_vector.cols() - 1);
         last.iter_mut().enumerate().for_each(|(i, x)| {
             *x = -f(n - i as i64);
         });

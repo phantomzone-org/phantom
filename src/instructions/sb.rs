@@ -1,10 +1,10 @@
 //! sb     | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | M[x[rs1] + sext(imm[11:0])] = x[rs2][7:0]
 
-use super::{decomp, reconstruct, sext, Store};
+use super::{reconstruct, sext, Store};
 use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
 use crate::memory::Memory;
-use crate::parameters::{U12DECOMP, U32DECOMP, U8DECOMP};
+use crate::parameters::{U12DECOMP, U32DECOMP};
 use base2k::Module;
 
 pub struct Ori();
@@ -18,7 +18,7 @@ impl Store for Sb {
         module_lwe: &Module,
         imm: &[u32],
         x_rs1: &[u32],
-        memory: &mut Memory,
+        _memory: &mut Memory,
         circuit_btp: &CircuitBootstrapper,
         address: &mut Address,
         tmp_bytes: &mut [u8],

@@ -1,5 +1,5 @@
 use base2k::{Encoding, Module, VecZnx, VecZnxOps, FFT64};
-use fhevm::trace::trace_inplace;
+use fhevm::trace::{trace_inplace, trace_inplace_inv};
 
 #[test]
 fn trace_u64() {
@@ -22,7 +22,6 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
     let log_k: usize = limbs * log_base2k - 5;
 
     let mut a: VecZnx = module.new_vec_znx(limbs);
-    let mut buf_a: VecZnx = module.new_vec_znx(limbs);
     let mut buf_b: VecZnx = module.new_vec_znx(limbs);
     let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n() * 8];
 
@@ -36,27 +35,48 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
     let step_start: usize = 2;
     let step_end: usize = module.log_n();
 
-    trace_inplace::<INV>(
-        module,
-        log_base2k,
-        step_start,
-        step_start + 1,
-        &mut a,
-        Some(&mut buf_a),
-        &mut buf_b,
-        &mut buf_bytes,
-    );
-
-    trace_inplace::<INV>(
-        module,
-        log_base2k,
-        step_start + 1,
-        step_end,
-        &mut a,
-        Some(&mut buf_a),
-        &mut buf_b,
-        &mut buf_bytes,
-    );
+    if INV {
+        let mut buf_a: VecZnx = module.new_vec_znx(limbs);
+        trace_inplace_inv(
+            module,
+            log_base2k,
+            step_start,
+            step_start + 1,
+            &mut a,
+            &mut buf_a,
+            &mut buf_b,
+            &mut buf_bytes,
+        );
+        trace_inplace_inv(
+            module,
+            log_base2k,
+            step_start + 1,
+            step_end,
+            &mut a,
+            &mut buf_a,
+            &mut buf_b,
+            &mut buf_bytes,
+        );
+    } else {
+        trace_inplace(
+            module,
+            log_base2k,
+            step_start,
+            step_start + 1,
+            &mut a,
+            &mut buf_b,
+            &mut buf_bytes,
+        );
+        trace_inplace(
+            module,
+            log_base2k,
+            step_start + 1,
+            step_end,
+            &mut a,
+            &mut buf_b,
+            &mut buf_bytes,
+        );
+    }
 
     let gap: usize = 1 << (module.log_n() - step_start);
 

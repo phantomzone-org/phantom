@@ -1,8 +1,11 @@
 use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
-use crate::trace::{trace, trace_inplace};
-use base2k::{Encoding, Module, VecZnx, VecZnxDft, VecZnxOps, VmpPMatOps};
+use crate::trace::{trace, trace_inplace_inv};
+use base2k::{
+    Encoding, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps, VecZnxOps,
+    VmpPMatOps,
+};
 use itertools::izip;
 
 pub struct Memory {
@@ -124,16 +127,15 @@ impl Memory {
 
         let limbs: usize = (self.log_k + self.log_base2k - 1) / self.log_base2k;
 
-        let mut ptr: usize = 0;
         let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(limbs);
-        let mut tmp_vec_znx: VecZnx = VecZnx::from_bytes(1 << log_n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
-        let mut tmp_b_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx_dft;
+        let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
+            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
 
-        let apply_dft_tmp_bytes: &mut [u8] = &mut tmp_bytes[ptr..];
+        let mut tmp_vec_znx: VecZnxBorrow =
+            VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_vec_znx);
+        let mut tmp_b_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
 
         for i in 0..address.dims_n() {
             let coordinate: &Coordinate = address.at_lsh(i);
@@ -161,12 +163,12 @@ impl Memory {
                                 &mut tmp_vec_znx,
                                 &chunk[j_rev],
                                 &mut tmp_b_dft,
-                                apply_dft_tmp_bytes,
+                                tmp_bytes_apply_dft,
                             );
 
                             packer.add(module, Some(&tmp_vec_znx), &mut result_next);
                         } else {
-                            packer.add(module, None, &mut result_next);
+                            packer.add(module, None::<&VecZnxBorrow>, &mut result_next);
                         }
                     }
                 }
@@ -183,7 +185,7 @@ impl Memory {
                         &mut tmp_vec_znx,
                         &self.data[0],
                         &mut tmp_b_dft,
-                        apply_dft_tmp_bytes,
+                        tmp_bytes_apply_dft,
                     );
                 } else {
                     // Shift polynomial by X^{-idx} and then pack
@@ -193,7 +195,7 @@ impl Memory {
                         &mut tmp_vec_znx,
                         &results[0],
                         &mut tmp_b_dft,
-                        apply_dft_tmp_bytes,
+                        tmp_bytes_apply_dft,
                     );
                 }
             }
@@ -216,12 +218,10 @@ impl Memory {
 
         let limbs: usize = self.limbs();
 
-        let mut ptr: usize = 0;
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx_dft;
-
-        let apply_dft_tmp_bytes: &mut [u8] = &mut tmp_bytes[ptr..];
+        let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
+            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
+        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
 
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
@@ -244,7 +244,7 @@ impl Memory {
                     self.log_base2k,
                     poly,
                     &mut tmp_a_dft,
-                    apply_dft_tmp_bytes,
+                    tmp_bytes_apply_dft,
                 );
             });
 
@@ -258,7 +258,7 @@ impl Memory {
                         if i_rev < chunk.len() {
                             packer.add(module, Some(&chunk[i_rev]), &mut result_next);
                         } else {
-                            packer.add(module, None, &mut result_next)
+                            packer.add(module, None::<&VecZnx>, &mut result_next)
                         }
                     }
                 }
@@ -299,25 +299,19 @@ impl Memory {
 
         let limbs: usize = self.limbs();
 
-        let mut ptr: usize = 0;
         let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(limbs);
-        let mut tmp_vec_znx: VecZnx = VecZnx::from_bytes(1 << log_n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-
-        let mut buf0: VecZnx = VecZnx::from_bytes(1 << log_n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-
-        let mut buf1: VecZnx = VecZnx::from_bytes(1 << log_n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-
-        let mut buf2: VecZnx = VecZnx::from_bytes(1 << log_n, limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx;
-
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, &mut tmp_bytes[ptr..]);
-        ptr += bytes_of_vec_znx_dft;
 
-        let apply_dft_tmp_bytes: &mut [u8] = &mut tmp_bytes[ptr..];
+        let (tmp_bytes_buf_0, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_buf_1, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_buf_2, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_vec_znx_dft, apply_dft_tmp_bytes) =
+            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
+
+        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_0);
+        let mut buf1: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_1);
+        let mut buf2: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_2);
+        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
 
         if address.dims_n() != 1 {
             let result: &mut VecZnx = &mut self.tree[address.dims_n() - 1][0];
@@ -370,26 +364,25 @@ impl Memory {
                     chunk.iter_mut().for_each(|poly_hi| {
                         // Extract the first coefficient poly_lo
                         // [a, b, c, d] -> [a, 0, 0, 0]
-                        trace::<false>(
+                        trace(
                             module,
                             self.log_base2k,
                             0,
                             log_n,
                             &mut buf2,
                             poly_lo,
-                            &mut tmp_vec_znx,
                             apply_dft_tmp_bytes,
                         );
 
                         // Zeroes the first coefficient of poly_j
                         // [a, b, c, d] -> [0, b, c, d]
-                        trace_inplace::<true>(
+                        trace_inplace_inv(
                             module,
                             self.log_base2k,
                             0,
                             log_n,
                             poly_hi,
-                            Some(&mut buf0),
+                            &mut buf0,
                             &mut buf1,
                             apply_dft_tmp_bytes,
                         );
