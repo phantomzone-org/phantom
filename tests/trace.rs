@@ -1,15 +1,15 @@
-use base2k::{Encoding, Module, VecZnx, VecZnxOps, FFT64};
-use fhevm::trace::{trace_inplace, trace_inplace_inv};
+use base2k::{alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxOps, FFT64};
+use fhevm::trace::{trace_inplace, trace_inplace_inv, trace_inv_tmp_bytes, trace_tmp_bytes};
 
 #[test]
 fn trace_u64() {
     let n: usize = 1 << 5;
     let log_base2k: usize = 15;
-    let limbs: usize = 3;
+    let cols: usize = 3;
     let module: Module = Module::new::<FFT64>(n);
 
     sub_test("test_trace::<INV:false, NTT:false>", || {
-        test_trace::<false>(&module, log_base2k, limbs)
+        test_trace::<false>(&module, log_base2k, cols)
     });
 }
 
@@ -18,12 +18,10 @@ fn sub_test<F: FnOnce()>(name: &str, f: F) {
     f();
 }
 
-fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize) {
-    let log_k: usize = limbs * log_base2k - 5;
+fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, cols: usize) {
+    let log_k: usize = cols * log_base2k - 5;
 
-    let mut a: VecZnx = module.new_vec_znx(limbs);
-    let mut buf_b: VecZnx = module.new_vec_znx(limbs);
-    let mut buf_bytes: Vec<u8> = vec![u8::default(); module.n() * 8];
+    let mut a: VecZnx = module.new_vec_znx(cols);
 
     let mut have: Vec<i64> = vec![i64::default(); module.n()];
     have.iter_mut()
@@ -36,16 +34,15 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
     let step_end: usize = module.log_n();
 
     if INV {
-        let mut buf_a: VecZnx = module.new_vec_znx(limbs);
+        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_inv_tmp_bytes(module, cols), 64);
+
         trace_inplace_inv(
             module,
             log_base2k,
             step_start,
             step_start + 1,
             &mut a,
-            &mut buf_a,
-            &mut buf_b,
-            &mut buf_bytes,
+            &mut tmp_bytes,
         );
         trace_inplace_inv(
             module,
@@ -53,19 +50,18 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
             step_start + 1,
             step_end,
             &mut a,
-            &mut buf_a,
-            &mut buf_b,
-            &mut buf_bytes,
+            &mut tmp_bytes,
         );
     } else {
+        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_tmp_bytes(module, cols), 64);
+
         trace_inplace(
             module,
             log_base2k,
             step_start,
             step_start + 1,
             &mut a,
-            &mut buf_b,
-            &mut buf_bytes,
+            &mut tmp_bytes,
         );
         trace_inplace(
             module,
@@ -73,8 +69,7 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, limbs: usize)
             step_start + 1,
             step_end,
             &mut a,
-            &mut buf_b,
-            &mut buf_bytes,
+            &mut tmp_bytes,
         );
     }
 
