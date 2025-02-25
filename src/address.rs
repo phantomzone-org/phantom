@@ -1,6 +1,6 @@
 use base2k::{
-    Infos, Module, VecZnx, VecZnxBig, VecZnxBigOps, VecZnxCommon, VecZnxDft, VecZnxDftOps, VmpPMat,
-    VmpPMatOps,
+    alloc_aligned, alloc_aligned_u8, Infos, Module, VecZnxBig, VecZnxBigOps, VecZnxCommon,
+    VecZnxDft, VecZnxDftOps, VmpPMat, VmpPMatOps,
 };
 use itertools::izip;
 
@@ -137,8 +137,8 @@ impl Coordinate {
         let sign: i64 = value.signum();
         let mut remain: usize = value.abs() as usize;
 
-        let mut tmp_bytes: Vec<u8> = vec![u8::default(); module.vmp_prepare_tmp_bytes(rows, cols)];
-        let mut buf_i64: Vec<i64> = vec![i64::default(); n * cols];
+        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(module.vmp_prepare_tmp_bytes(rows, cols));
+        let mut buf_i64: Vec<i64> = alloc_aligned::<i64>(n * cols);
 
         let mut tot_base: usize = 0;
         izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)| {

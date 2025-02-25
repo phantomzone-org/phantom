@@ -34,7 +34,7 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, cols: usize) 
     let step_end: usize = module.log_n();
 
     if INV {
-        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_inv_tmp_bytes(module, cols), 64);
+        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_inv_tmp_bytes(module, cols));
 
         trace_inplace_inv(
             module,
@@ -53,7 +53,7 @@ fn test_trace<const INV: bool>(module: &Module, log_base2k: usize, cols: usize) 
             &mut tmp_bytes,
         );
     } else {
-        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_tmp_bytes(module, cols), 64);
+        let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_tmp_bytes(module, cols));
 
         trace_inplace(
             module,

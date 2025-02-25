@@ -1,6 +1,6 @@
 use base2k::{
-    Encoding, Module, VecZnx, VecZnxApi, VecZnxBig, VecZnxBigOps, VecZnxDft, VecZnxDftOps,
-    VecZnxOps, VecZnxVec, VmpPMat, VmpPMatOps, FFT64,
+    alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxApi, VecZnxBig, VecZnxBigOps, VecZnxDft,
+    VecZnxDftOps, VecZnxOps, VecZnxVec, VmpPMat, VmpPMatOps, FFT64,
 };
 use fhevm::circuit_bootstrapping::{circuit_bootstrap_tmp_bytes, CircuitBootstrapper};
 use itertools::izip;
@@ -32,13 +32,11 @@ fn circuit_bootstrapping() {
 
     let max_value: usize = n;
 
-    let mut tmp_bytes: Vec<u8> = vec![
-        u8::default();
+    let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(
         circuit_bootstrap_tmp_bytes(&module_pbs, limbs)
-            | module_lwe
-                .vmp_apply_dft_tmp_bytes(limbs, limbs, rows, cols)
-            | module_lwe.vmp_prepare_tmp_bytes(rows, cols)
-    ];
+            | module_lwe.vmp_apply_dft_tmp_bytes(limbs, limbs, rows, cols)
+            | module_lwe.vmp_prepare_tmp_bytes(rows, cols),
+    );
 
     // value in [0, n_acc/2^{log_gap} - 1]
     (0..n_acc / (1 << log_gap)).for_each(|value| {
@@ -64,19 +62,13 @@ fn circuit_bootstrapping() {
             &mut tmp_bytes,
         );
 
-        println!("{:?}", vec_gadget.dblptr());
-
         (0..rows).for_each(|row_i| {
-            let mut row: Vec<i64> = vec![0i64; n * cols];
-            row.copy_from_slice(vec_gadget[row_i].raw());
-            let mut tmp_bytes: Vec<u8> =
-                vec![
-                    u8::default();
-                    circuit_bootstrap_tmp_bytes(&module_pbs, limbs)
-                        | module_lwe.vmp_apply_dft_tmp_bytes(limbs, limbs, rows, cols)
-                        | module_lwe.vmp_prepare_tmp_bytes(rows, cols)
-                ];
-            module_lwe.vmp_prepare_row(&mut vmp_pmat, &row, row_i, &mut tmp_bytes);
+            module_lwe.vmp_prepare_row(
+                &mut vmp_pmat,
+                &vec_gadget[row_i].raw(),
+                row_i,
+                &mut tmp_bytes,
+            );
         });
 
         let mut vec_have: VecZnx = module_lwe.new_vec_znx(limbs);

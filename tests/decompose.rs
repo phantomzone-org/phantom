@@ -16,8 +16,6 @@ fn decompose_u32() {
 
     let result: Vec<i64> = decomposer.decompose(&module, value);
 
-    //println!("{:?}", result);
-
     let mut have: u32 = 0;
 
     let mut sum_bases: usize = 0;

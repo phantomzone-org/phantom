@@ -43,7 +43,7 @@ fn main() {
 
     (0..a.cols()).for_each(|i| println!("{}: {:?}", i, a.at(i)));
 
-    let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_tmp_bytes(&module, cols), 64);
+    let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(trace_tmp_bytes(&module, cols));
     trace_inplace(&module, log_base2k, 0, log_n, &mut a, &mut tmp_bytes);
 
     a.decode_vec_i64(log_base2k, log_k, &mut values);

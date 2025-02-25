@@ -29,7 +29,6 @@ fn memory() {
         read_tmp_bytes(&module, cols, rows, cols)
             | read_prepare_write_tmp_bytes(&module, cols, rows, cols)
             | write_tmp_bytes(&module, cols, rows, cols),
-        64,
     );
 
     (0..size).for_each(|i| {

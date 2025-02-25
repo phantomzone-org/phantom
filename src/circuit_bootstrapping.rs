@@ -3,7 +3,8 @@ use crate::decompose::Decomposer;
 use crate::memory::Memory;
 use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
-    switch_degree, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxOps, VecZnxVec, VmpPMatOps,
+    alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxOps,
+    VecZnxVec, VmpPMatOps,
 };
 use itertools::izip;
 use std::cmp::max;
@@ -24,7 +25,7 @@ impl CircuitBootstrapper {
 
         let n: usize = module.n();
 
-        let mut ones: Vec<i64> = vec![i64::default(); module.n()];
+        let mut ones: Vec<i64> = alloc_aligned::<i64>(module.n());
         ones[0] = 1;
         (1..drift).for_each(|i| {
             ones[i] = 1;
@@ -67,7 +68,7 @@ impl CircuitBootstrapper {
     ///
     /// # Example
     /// ```
-    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64};
+    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64, alloc_aligned};
     /// use fhevm::address::Address;
     /// use fhevm::circuit_bootstrapping::{CircuitBootstrapper, bootstrap_to_address_tmp_bytes};
     /// use fhevm::memory::{Memory, read_tmp_bytes};
@@ -92,7 +93,7 @@ impl CircuitBootstrapper {
     ///
     /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, rows, cols);
     ///
-    /// let mut tmp_bytes: Vec<u8> = vec![u8::default(); bootstrap_to_address_tmp_bytes(&module_pbs, &module_lwe, cols) | read_tmp_bytes(&module_lwe, limbs, rows, cols)];
+    /// let mut tmp_bytes: Vec<u8> = alloc_aligned(bootstrap_to_address_tmp_bytes(&module_pbs, &module_lwe, cols) | read_tmp_bytes(&module_lwe, limbs, rows, cols));
     ///
     /// acc.bootstrap_to_address(
     ///     &module_pbs,
@@ -102,7 +103,7 @@ impl CircuitBootstrapper {
     ///     &mut tmp_bytes,
     /// );
     ///
-    /// let mut data: Vec<i64> = vec![i64::default(); 2 * n_lwe];
+    /// let mut data: Vec<i64> = alloc_aligned(2 * n_lwe);
     /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
     /// let log_k = limbs * log_base2k - 5;
     /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, limbs, data.len());
@@ -145,7 +146,7 @@ impl CircuitBootstrapper {
         let dims_n_decomp: usize = address.dims_n_decomp();
 
         let mut buf: Vec<u8> =
-            vec![u8::default(); module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols())];
+            alloc_aligned(module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols()));
 
         //println!();
 
@@ -220,7 +221,7 @@ impl CircuitBootstrapper {
     ///
     /// # Example
     /// ```
-    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64};
+    /// use base2k::{Module, VecZnx, VecZnxOps, FFT64, alloc_aligned};
     /// use fhevm::address::Address;
     /// use fhevm::circuit_bootstrapping::{CircuitBootstrapper, bootstrap_address_tmp_bytes};
     /// use fhevm::memory::{Memory, read_tmp_bytes};
@@ -249,7 +250,7 @@ impl CircuitBootstrapper {
     ///
     /// let offset: u32 = 45;
     ///
-    /// let mut tmp_bytes: Vec<u8> = vec![u8::default(); bootstrap_address_tmp_bytes(&module_pbs, &module_lwe, cols) | read_tmp_bytes(&module_lwe, limbs, rows, cols)];
+    /// let mut tmp_bytes: Vec<u8> = alloc_aligned(bootstrap_address_tmp_bytes(&module_pbs, &module_lwe, cols) | read_tmp_bytes(&module_lwe, limbs, rows, cols));
     ///
     /// acc.bootstrap_address(
     ///     &module_pbs,
@@ -260,7 +261,7 @@ impl CircuitBootstrapper {
     ///     &mut tmp_bytes,
     /// );
     ///
-    /// let mut data: Vec<i64> = vec![i64::default(); 2 * n_lwe];
+    /// let mut data: Vec<i64> = alloc_aligned(2 * n_lwe);
     /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
     /// let log_k = limbs * log_base2k - 5;
     /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, limbs, data.len());

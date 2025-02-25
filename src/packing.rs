@@ -33,7 +33,7 @@ impl StreamRepacker {
         Self {
             log_base2k: log_base2k,
             accumulators: accumulators,
-            tmp_bytes: alloc_aligned(pack_core_tmp_bytes(module, cols), 64),
+            tmp_bytes: alloc_aligned(pack_core_tmp_bytes(module, cols)),
             counter: 0,
         }
     }

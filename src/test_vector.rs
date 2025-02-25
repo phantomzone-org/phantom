@@ -1,4 +1,4 @@
-use base2k::{Infos, Module, VecZnx, VecZnxApi, VecZnxOps};
+use base2k::{alloc_aligned, Infos, Module, VecZnx, VecZnxApi, VecZnxOps};
 
 pub struct TestVector(pub VecZnx);
 
@@ -18,7 +18,7 @@ impl TestVector {
         });
         last[0] = f(0);
 
-        let mut carry: Vec<u8> = vec![u8::default(); module.n() << 3];
+        let mut carry: Vec<u8> = alloc_aligned(module.vec_znx_normalize_tmp_bytes());
         test_vector.normalize(log_bas2k, &mut carry);
 
         Self { 0: test_vector }
