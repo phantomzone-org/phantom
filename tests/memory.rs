@@ -1,4 +1,4 @@
-use base2k::{Module, FFT64};
+use base2k::{alloc_aligned_u8, Infos, Module, VecZnxApi, FFT64};
 use fhevm::address::Address;
 use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 
@@ -15,7 +15,7 @@ fn memory() {
 
     let module = Module::new::<FFT64>(n);
 
-    let size: usize = 2 * n - 37;
+    let size: usize = 2 * n + 1;
     let mut data: Vec<i64> = vec![i64::default(); size];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
 
@@ -25,12 +25,12 @@ fn memory() {
 
     let write_value: i64 = 255;
 
-    let mut tmp_bytes = vec![
-        u8::default();
+    let mut tmp_bytes = alloc_aligned_u8(
         read_tmp_bytes(&module, cols, rows, cols)
             | read_prepare_write_tmp_bytes(&module, cols, rows, cols)
-            | write_tmp_bytes(&module, cols, rows, cols)
-    ];
+            | write_tmp_bytes(&module, cols, rows, cols),
+        64,
+    );
 
     (0..size).for_each(|i| {
         //println!("{:?}", i);

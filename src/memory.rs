@@ -1,7 +1,7 @@
 use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
-use crate::trace::{trace, trace_inplace_inv};
+use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
 use base2k::{
     Encoding, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps, VecZnxOps,
     VmpPMatOps,
@@ -10,10 +10,10 @@ use itertools::izip;
 
 pub struct Memory {
     pub data: Vec<VecZnx>,
-    pub log_n: usize,
+    pub n: usize,
     pub log_base2k: usize,
     pub log_k: usize,
-    pub limbs: usize,
+    pub cols: usize,
     pub max_size: usize,
     pub tree: Vec<Vec<VecZnx>>,
     pub state: bool,
@@ -21,57 +21,56 @@ pub struct Memory {
 
 pub fn read_tmp_bytes(
     module: &Module,
-    limbs: usize,
+    cols: usize,
     address_rows: usize,
     address_cols: usize,
 ) -> usize {
     let mut tmp_bytes: usize = 0;
-    tmp_bytes += module.bytes_of_vec_znx(limbs);
-    tmp_bytes += module.bytes_of_vec_znx_dft(limbs);
-    tmp_bytes += module.vmp_apply_dft_tmp_bytes(limbs, limbs, address_rows, address_cols);
+    tmp_bytes += module.bytes_of_vec_znx(cols);
+    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
+    tmp_bytes += module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
     tmp_bytes
 }
 
 pub fn read_prepare_write_tmp_bytes(
     module: &Module,
-    limbs: usize,
+    cols: usize,
     address_rows: usize,
     address_cols: usize,
 ) -> usize {
     let mut tmp_bytes: usize = 0;
-    tmp_bytes += module.bytes_of_vec_znx_dft(limbs);
-    tmp_bytes += module.vmp_apply_dft_tmp_bytes(limbs, limbs, address_rows, address_cols);
+    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
+    tmp_bytes += module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
     tmp_bytes
 }
 
 pub fn write_tmp_bytes(
     module: &Module,
-    limbs: usize,
+    cols: usize,
     address_rows: usize,
     address_cols: usize,
 ) -> usize {
     let mut tmp_bytes: usize = 0;
-    tmp_bytes += 4 * module.bytes_of_vec_znx(limbs);
-    tmp_bytes += module.bytes_of_vec_znx_dft(limbs);
-    tmp_bytes += module.vmp_apply_dft_tmp_bytes(limbs, limbs, address_rows, address_cols);
+    tmp_bytes += 2 * module.bytes_of_vec_znx(cols);
+    tmp_bytes += trace_inv_tmp_bytes(module, cols)
+        | module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
+    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
     tmp_bytes
 }
 
 impl Memory {
-    pub fn new(module: &Module, log_base2k: usize, limbs: usize, max_size: usize) -> Self {
-        let log_n: usize = module.log_n();
-
+    pub fn new(module: &Module, log_base2k: usize, cols: usize, max_size: usize) -> Self {
+        let n: usize = module.n();
         let mut tree: Vec<Vec<VecZnx>> = Vec::new();
 
-        let n: usize = 1 << log_n;
-        let mut size: usize = max_size;
+        if max_size > n {
+            let mut size: usize = (max_size + n - 1) / n; // Skip first recursion as it is stored in data
 
-        if size > n {
             while size != 1 {
                 size = (size + n - 1) / n;
                 let mut tmp: Vec<VecZnx> = Vec::new();
                 (0..size).for_each(|_| {
-                    tmp.push(module.new_vec_znx(limbs));
+                    tmp.push(module.new_vec_znx(cols));
                 });
                 tree.push(tmp);
             }
@@ -79,9 +78,9 @@ impl Memory {
 
         Self {
             data: Vec::new(),
-            log_n: log_n,
+            n: n,
             log_base2k: log_base2k,
-            limbs: limbs,
+            cols: cols,
             log_k: 0,
             max_size: max_size,
             tree: tree,
@@ -97,8 +96,8 @@ impl Memory {
             self.max_size
         );
         let mut vectors: Vec<VecZnx> = Vec::new();
-        for chunk in data.chunks(1 << self.log_n) {
-            let mut vector: VecZnx = VecZnx::new(1 << self.log_n, self.limbs);
+        for chunk in data.chunks(self.n) {
+            let mut vector: VecZnx = VecZnx::new(self.n, self.cols);
             vector.encode_vec_i64(self.log_base2k, log_k, chunk, 32);
             vectors.push(vector);
         }
@@ -106,7 +105,7 @@ impl Memory {
         self.log_k = log_k;
     }
 
-    pub fn limbs(&self) -> usize {
+    pub fn cols(&self) -> usize {
         (self.log_k + self.log_base2k - 1) / self.log_base2k
     }
 
@@ -116,26 +115,26 @@ impl Memory {
             "invalid call to Memory.read: internal state is true -> requires calling Memory.write"
         );
         assert!(
-            tmp_bytes.len() >= read_tmp_bytes(module, self.limbs, address.rows(), address.cols()),
+            tmp_bytes.len() >= read_tmp_bytes(module, self.cols, address.rows(), address.cols()),
             "invalid tmp_bytes: must be of size greater or equal to self.read_tmp_bytes"
         );
 
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.limbs());
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols());
         let mut results: Vec<VecZnx> = Vec::new();
 
-        let limbs: usize = (self.log_k + self.log_base2k - 1) / self.log_base2k;
+        let cols: usize = self.cols();
 
-        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(limbs);
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
+        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
+        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
         let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
         let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
             tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
 
         let mut tmp_vec_znx: VecZnxBorrow =
-            VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_vec_znx);
-        let mut tmp_b_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
+            VecZnxBorrow::from_bytes(1 << log_n, cols, tmp_bytes_vec_znx);
+        let mut tmp_b_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
 
         for i in 0..address.dims_n() {
             let coordinate: &Coordinate = address.at_lsh(i);
@@ -210,18 +209,18 @@ impl Memory {
         tmp_bytes: &mut [u8],
     ) -> i64 {
         assert_eq!(self.state, false, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
-        assert!(tmp_bytes.len() >= read_prepare_write_tmp_bytes(module, self.limbs, address.rows(), address.cols()), "invalid tmp_bytes: must be of size greater or equal to self.read_prepare_write_tmp_bytes");
+        assert!(tmp_bytes.len() >= read_prepare_write_tmp_bytes(module, self.cols, address.rows(), address.cols()), "invalid tmp_bytes: must be of size greater or equal to self.read_prepare_write_tmp_bytes");
 
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.limbs());
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols());
 
-        let limbs: usize = self.limbs();
+        let cols: usize = self.cols();
 
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
+        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
         let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
             tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
+        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
 
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
@@ -276,7 +275,11 @@ impl Memory {
         self.state = true;
 
         if address.dims_n() != 1 {
-            self.tree[address.dims_n() - 1][0].decode_coeff_i64(self.log_base2k, self.log_k, 0);
+            return self.tree.last_mut().unwrap()[0].decode_coeff_i64(
+                self.log_base2k,
+                self.log_k,
+                0,
+            );
         }
 
         self.data[0].decode_coeff_i64(self.log_base2k, self.log_k, 0)
@@ -291,30 +294,25 @@ impl Memory {
     ) {
         assert_eq!(self.state, true, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
         assert!(
-            tmp_bytes.len() >= write_tmp_bytes(module, self.limbs, address.rows(), address.cols()),
+            tmp_bytes.len() >= write_tmp_bytes(module, self.cols, address.rows(), address.cols()),
             "invalid tmp_bytes: must be of size greater or equal to self.write_tmp_bytes"
         );
 
         let log_n: usize = module.log_n();
 
-        let limbs: usize = self.limbs();
+        let cols: usize = self.cols();
 
-        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(limbs);
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(limbs);
+        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
+        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
 
-        let (tmp_bytes_buf_0, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_buf_1, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_buf_2, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_vec_znx_dft, apply_dft_tmp_bytes) =
-            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
+        let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_vec_znx_dft, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
 
-        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_0);
-        let mut buf1: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_1);
-        let mut buf2: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, limbs, tmp_bytes_buf_2);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(limbs, tmp_bytes_vec_znx_dft);
+        let mut tmp_a: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, cols, tmp_bytes_vec_znx);
+        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
 
         if address.dims_n() != 1 {
-            let result: &mut VecZnx = &mut self.tree[address.dims_n() - 1][0];
+            let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
             result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32);
         } else {
             self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32)
@@ -329,8 +327,6 @@ impl Memory {
 
             let result_hi: &mut Vec<VecZnx>; // Above level
             let result_lo: &mut Vec<VecZnx>; // Current level
-
-            //println!("i: {}", i);
 
             // Top of the tree is not stored in results.
             if i == 0 {
@@ -357,7 +353,7 @@ impl Memory {
                         self.log_base2k,
                         poly_lo,
                         &mut tmp_a_dft,
-                        apply_dft_tmp_bytes,
+                        tmp_bytes,
                     );
 
                     // Iterates over the polynomial of the current chunk of the level above
@@ -369,26 +365,17 @@ impl Memory {
                             self.log_base2k,
                             0,
                             log_n,
-                            &mut buf2,
+                            &mut tmp_a,
                             poly_lo,
-                            apply_dft_tmp_bytes,
+                            tmp_bytes,
                         );
 
                         // Zeroes the first coefficient of poly_j
                         // [a, b, c, d] -> [0, b, c, d]
-                        trace_inplace_inv(
-                            module,
-                            self.log_base2k,
-                            0,
-                            log_n,
-                            poly_hi,
-                            &mut buf0,
-                            &mut buf1,
-                            apply_dft_tmp_bytes,
-                        );
+                        trace_inplace_inv(module, self.log_base2k, 0, log_n, poly_hi, tmp_bytes);
 
                         // Adds TRACE(poly_lo) + TRACEINV(poly_hi)
-                        module.vec_znx_add_inplace(poly_hi, &buf2);
+                        module.vec_znx_add_inplace(poly_hi, &tmp_a);
 
                         // Cyclic shift poly_lo by X^-1
                         module.vec_znx_rotate_inplace(-1, poly_lo);
@@ -404,7 +391,7 @@ impl Memory {
                 self.log_base2k,
                 poly_lo,
                 &mut tmp_a_dft,
-                apply_dft_tmp_bytes,
+                tmp_bytes,
             );
         });
 

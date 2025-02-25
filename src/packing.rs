@@ -77,7 +77,7 @@ impl StreamRepacker {
 }
 
 pub fn pack_core_tmp_bytes(module: &Module, cols: usize) -> usize {
-    2 * VecZnxBorrow::bytes_of(module.n(), cols) + module.vec_znx_normalize_base2k_tmp_bytes()
+    2 * VecZnxBorrow::bytes_of(module.n(), cols) + module.vec_znx_normalize_tmp_bytes()
 }
 
 fn pack_core<A: VecZnxCommon>(

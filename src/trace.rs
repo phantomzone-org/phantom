@@ -1,7 +1,7 @@
 use base2k::{Module, VecZnxApi, VecZnxBorrow, VecZnxCommon, VecZnxOps};
 
 pub fn trace_tmp_bytes(module: &Module, cols: usize) -> usize {
-    module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_base2k_tmp_bytes()
+    module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_tmp_bytes()
 }
 
 pub fn trace<A: VecZnxCommon, B: VecZnxCommon>(
@@ -46,7 +46,7 @@ pub fn trace_inplace<A: VecZnxCommon>(
 }
 
 pub fn trace_inv_tmp_bytes(module: &Module, cols: usize) -> usize {
-    2 * module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_base2k_tmp_bytes()
+    2 * module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_tmp_bytes()
 }
 
 pub fn trace_inplace_inv<A: VecZnxCommon>(
@@ -70,7 +70,7 @@ pub fn trace_inplace_inv<A: VecZnxCommon>(
 }
 
 pub fn trace_inplace_core_tmp_bytes(module: &Module, cols: usize) -> usize {
-    module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_base2k_tmp_bytes()
+    module.bytes_of_vec_znx(cols) + module.vec_znx_normalize_tmp_bytes()
 }
 
 pub fn trace_inplace_core<A: VecZnxCommon>(
