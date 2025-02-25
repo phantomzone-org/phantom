@@ -7,8 +7,6 @@ use crate::memory::Memory;
 use crate::parameters::{U12DECOMP, U32DECOMP};
 use base2k::Module;
 
-pub struct Ori();
-
 pub struct Sb();
 
 impl Store for Sb {

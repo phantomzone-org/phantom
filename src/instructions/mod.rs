@@ -163,3 +163,51 @@ pub trait Load {
         tmp_bytes: &mut [u8],
     ) -> Vec<u32>;
 }
+
+pub enum StoreOps{
+    Sb(sb::Sb),
+}
+
+pub enum LoadOps{
+    Lb(lb::Lb),
+    Lbu(lbu::Lbu),
+    Lh(lh::Lh),
+    Lhu(lhu::Lhu),
+    Lui(lui::Lui),
+    Lw(lw::Lw),
+}
+
+pub enum PcUpdatesOps{
+    Auipc(auipc::Auipc),
+    Beq(beq::Beq),
+    Bge(bge::Bge),
+    Bgeu(bgeu::Bgeu),
+    Blt(blt::Blt),
+    Bltu(bltu::Bltu),
+    Bne(bne::Bne),
+    Jal(jal::Jal),
+    Jalr(jalr::Jalr),
+}
+
+pub enum ArithmeticOps{
+    Add(add::Add),
+    Addi(addi::Addi),
+    And(and::And),
+    Andi(andi::Andi),
+    Or(or::Or),
+    Ori(ori::Ori),
+    //Sh(sh::Sh),
+    //Sll(sll::Sll),
+    //Slli(slli::Slli),
+    //Slt(slt::Slt),
+    //Slti(slti::Slti),
+    //Sltiu(sltiu::Sltiu),
+    //Sltu(sltu::Sltu),
+    //Sra(sra::Sra),
+    //Srai(srai::Srai),
+    //Srl(slr::Srl),
+    //Sub(sub::Sub),
+    //Sw(sw::Sw),
+    //Xor(xor::Xor),
+    //Xori(xori::Xori),
+}

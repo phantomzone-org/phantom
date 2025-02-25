@@ -1,6 +1,6 @@
 use base2k::{
     alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxApi, VecZnxBig, VecZnxBigOps, VecZnxDft,
-    VecZnxDftOps, VecZnxOps, VecZnxVec, VmpPMat, VmpPMatOps, FFT64,
+    VecZnxDftOps, VecZnxOps, VmpPMat, VmpPMatOps, FFT64,
 };
 use fhevm::circuit_bootstrapping::{circuit_bootstrap_tmp_bytes, CircuitBootstrapper};
 use itertools::izip;

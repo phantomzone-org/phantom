@@ -19,9 +19,9 @@
 use super::{decomp, reconstruct, sext, Arithmetic};
 use crate::parameters::{U20DECOMP, U32DECOMP};
 
-pub struct Bgeu();
+pub struct Lui();
 
-impl Arithmetic for Bgeu {
+impl Arithmetic for Lui {
     fn apply(&self, imm: &[u32], _x_rs1: &[u32], _x_rs2: &[u32]) -> Vec<u32> {
         decomp(sext(reconstruct(imm, &U20DECOMP), 20), &U32DECOMP)
     }

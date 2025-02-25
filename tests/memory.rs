@@ -1,4 +1,4 @@
-use base2k::{alloc_aligned_u8, Infos, Module, VecZnxApi, FFT64};
+use base2k::{alloc_aligned_u8, Module, FFT64};
 use fhevm::address::Address;
 use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 

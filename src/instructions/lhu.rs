@@ -7,9 +7,9 @@ use crate::memory::Memory;
 use crate::parameters::{U12DECOMP, U16DECOMP, U32DECOMP};
 use base2k::Module;
 
-pub struct Lh();
+pub struct Lhu();
 
-impl Load for Lh {
+impl Load for Lhu {
     fn apply(
         &self,
         module_pbs: &Module,
