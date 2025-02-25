@@ -1,7 +1,7 @@
 use crate::address::Address;
 use crate::decompose::Decomposer;
 use crate::memory::Memory;
-use crate::trace::{trace, trace_inplace};
+use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
     switch_degree, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxOps, VecZnxVec, VmpPMatOps,
 };
@@ -379,13 +379,11 @@ impl CircuitBootstrapper {
 
         let bytes_of_vec_znx = module.bytes_of_vec_znx(limbs);
 
-        let (tmp_bytes_buf0, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
         let (tmp_bytes_buf2, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_buf3, carry) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
+        let (tmp_bytes_buf3, trace_tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
 
-        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf0);
-        let mut buf2: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf2);
-        let mut buf3: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf3);
+        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf2);
+        let mut buf1: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf3);
 
         // First partial trace, vanishes all coefficients which are not multiples of gap_in
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
@@ -395,8 +393,7 @@ impl CircuitBootstrapper {
             step_start,
             step_end,
             a,
-            &mut buf0,
-            carry,
+            trace_tmp_bytes,
         );
 
         // If gap_out < gap_in, then we need to repack, i.e. reduce the cap between
@@ -411,7 +408,7 @@ impl CircuitBootstrapper {
                 // Cyclic shift the input and output by their respective X^{-gap_in} and X^{-gap_out}
                 if i != 0 {
                     module.vec_znx_rotate_inplace(-(1 << log_gap_in), a);
-                    module.vec_znx_rotate_inplace(-(1 << log_gap_out), &mut buf3);
+                    module.vec_znx_rotate_inplace(-(1 << log_gap_out), &mut buf0);
                 }
 
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
@@ -421,9 +418,9 @@ impl CircuitBootstrapper {
                         self.log_base2k,
                         step_start,
                         step_end,
-                        &mut buf3,
+                        &mut buf0,
                         a,
-                        carry,
+                        trace_tmp_bytes,
                     );
                 } else {
                     trace(
@@ -431,17 +428,17 @@ impl CircuitBootstrapper {
                         self.log_base2k,
                         step_start,
                         step_end,
-                        &mut buf2,
+                        &mut buf1,
                         a,
-                        carry,
+                        trace_tmp_bytes,
                     );
-                    module.vec_znx_add_inplace(&mut buf3, &mut buf2);
+                    module.vec_znx_add_inplace(&mut buf0, &mut buf1);
                 }
             });
 
-            a.copy_from(&buf3);
+            a.copy_from(&buf0);
 
-            a.normalize(self.log_base2k, carry);
+            a.normalize(self.log_base2k, trace_tmp_bytes);
 
             // Cyclic shift the output back to its original position
             module.vec_znx_rotate_inplace((1 << log_gap_out) * (steps - 1) as i64, a);
@@ -462,7 +459,7 @@ pub fn bootstrap_address_tmp_bytes(module_pbs: &Module, module_lwe: &Module, col
 }
 
 pub fn post_process_tmp_bytes(module: &Module, cols: usize) -> usize {
-    (module.n() << 3) + (module.bytes_of_vec_znx(cols) << 2)
+    module.bytes_of_vec_znx(cols) + trace_tmp_bytes(module, cols)
 }
 
 pub fn circuit_bootstrap_tmp_bytes(module: &Module, cols: usize) -> usize {
