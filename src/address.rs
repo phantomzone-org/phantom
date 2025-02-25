@@ -138,7 +138,7 @@ impl Coordinate {
         let mut remain: usize = value.abs() as usize;
 
         let mut tmp_bytes: Vec<u8> = vec![u8::default(); module.vmp_prepare_tmp_bytes(rows, cols)];
-        let mut buf_i64: Vec<i64> = vec![i64::default(); n];
+        let mut buf_i64: Vec<i64> = vec![i64::default(); n * cols];
 
         let mut tot_base: usize = 0;
         izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)| {
@@ -146,21 +146,23 @@ impl Coordinate {
 
             let chunk: usize = (remain & mask) << tot_base;
 
-            if sign < 0 && chunk != 0 {
-                buf_i64[n - chunk] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
-            } else {
-                buf_i64[chunk] = 1;
-            }
-
             (0..rows).for_each(|row_i| {
-                module.vmp_prepare_row(vmp_pmat, &buf_i64, row_i, &mut tmp_bytes);
-            });
+                let offset: usize = n * row_i;
 
-            if sign < 0 && chunk != 0 {
-                buf_i64[n - chunk] = 0;
-            } else {
-                buf_i64[chunk] = 0;
-            }
+                if sign < 0 && chunk != 0 {
+                    buf_i64[offset + n - chunk] = -1; // (X^i)^-1 = X^{2n-i} = -X^{n-i}
+                } else {
+                    buf_i64[offset + chunk] = 1;
+                }
+
+                module.vmp_prepare_row(vmp_pmat, &buf_i64, row_i, &mut tmp_bytes);
+
+                if sign < 0 && chunk != 0 {
+                    buf_i64[offset + n - chunk] = 0;
+                } else {
+                    buf_i64[offset + chunk] = 0;
+                }
+            });
 
             remain >>= base;
             tot_base += base
