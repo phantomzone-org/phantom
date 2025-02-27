@@ -23,3 +23,32 @@ impl PcUpdates for Bltu {
         }
     }
 }
+
+#[cfg(test)]
+use crate::instructions::{encode_1100011, Instructions};
+#[test]
+fn instruction_parsing() {
+    // imm[12|10:5] | rs2[24:20] | rs1[19:15] | 110 | imm[4:1|11] | 11000 | 11
+
+    let imm_19: u8 = 0;
+    let imm_15: u8 = 0;
+    let imm_11: u8 = 0b1011; // 12 11 10  9
+    let imm_7: u8 = 0b0111; //  8  7  6  5
+    let imm_3: u8 = 0b1001; //  4  3  2  1
+    let rs2: u8 = 0b01101;
+    let rs1: u8 = 0b01001;
+    let rd: u8 = 0;
+    let rd_w: u8 = 0;
+    let mem_w: u8 = 0;
+    let pc_w: u8 = 7;
+
+    let rv32: u32 = encode_1100011(imm_11, imm_7, imm_3, rs2, rs1, 0b110);
+    assert_eq!(rv32, 0xeed4e963);
+
+    let mut m: Instructions = Instructions::new();
+    m.add(rv32);
+    m.assert_size(1);
+    m.assert_instruction(
+        0, imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
+    );
+}
