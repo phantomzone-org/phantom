@@ -99,10 +99,6 @@ use crate::memory::Memory;
 use base2k::Module;
 use itertools::izip;
 
-pub fn sext(x: u32, i: u32) -> u32 {
-    x.wrapping_sub(1 << (i - 1))
-}
-
 pub fn reconstruct(x: &[u32], base: &[usize]) -> u32 {
     let mut y: u32 = 0;
     let mut sum_bases: u32 = 0;
@@ -208,7 +204,53 @@ pub enum ArithmeticOps {
     //Xori(xori::Xori),
 }
 
+#[non_exhaustive]
+pub struct OpID;
+
+impl OpID {
+    pub const LUI: (u8, u8, u8) = (1, 0, 0);
+    pub const AUIPC: (u8, u8, u8) = (2, 0, 0);
+    pub const ADDI: (u8, u8, u8) = (3, 0, 0);
+    pub const SLTI: (u8, u8, u8) = (4, 0, 0);
+    pub const SLTIU: (u8, u8, u8) = (5, 0, 0);
+    pub const XORI: (u8, u8, u8) = (6, 0, 0);
+    pub const ORI: (u8, u8, u8) = (7, 0, 0);
+    pub const ANDI: (u8, u8, u8) = (8, 0, 0);
+    pub const SLLI: (u8, u8, u8) = (9, 0, 0);
+    pub const SRLI: (u8, u8, u8) = (10, 0, 0);
+    pub const SRAI: (u8, u8, u8) = (11, 0, 0);
+    pub const ADD: (u8, u8, u8) = (12, 0, 0);
+    pub const SUB: (u8, u8, u8) = (13, 0, 0);
+    pub const SLL: (u8, u8, u8) = (14, 0, 0);
+    pub const SLT: (u8, u8, u8) = (15, 0, 0);
+    pub const SLTU: (u8, u8, u8) = (16, 0, 0);
+    pub const XOR: (u8, u8, u8) = (17, 0, 0);
+    pub const SRL: (u8, u8, u8) = (18, 0, 0);
+    pub const SRA: (u8, u8, u8) = (19, 0, 0);
+    pub const OR: (u8, u8, u8) = (20, 0, 0);
+    pub const AND: (u8, u8, u8) = (21, 0, 0);
+    pub const LB: (u8, u8, u8) = (22, 0, 0);
+    pub const LH: (u8, u8, u8) = (23, 0, 0);
+    pub const LW: (u8, u8, u8) = (24, 0, 0);
+    pub const LBU: (u8, u8, u8) = (25, 0, 0);
+    pub const LHU: (u8, u8, u8) = (26, 0, 0);
+    pub const SB: (u8, u8, u8) = (0, 1, 0);
+    pub const SH: (u8, u8, u8) = (0, 2, 0);
+    pub const SW: (u8, u8, u8) = (0, 3, 0);
+    pub const JAL: (u8, u8, u8) = (27, 0, 1);
+    pub const JALR: (u8, u8, u8) = (28, 0, 2);
+    pub const BEQ: (u8, u8, u8) = (0, 0, 3);
+    pub const BNE: (u8, u8, u8) = (0, 0, 4);
+    pub const BLT: (u8, u8, u8) = (0, 0, 5);
+    pub const BGE: (u8, u8, u8) = (0, 0, 6);
+    pub const BLTU: (u8, u8, u8) = (0, 0, 7);
+    pub const BGEU: (u8, u8, u8) = (0, 0, 8);
+}
+
 pub struct Instructions {
+    imm_31: Vec<u8>,
+    imm_27: Vec<u8>,
+    imm_23: Vec<u8>,
     imm_19: Vec<u8>,
     imm_15: Vec<u8>,
     imm_11: Vec<u8>,
@@ -225,6 +267,9 @@ pub struct Instructions {
 impl Instructions {
     pub fn new() -> Self {
         Instructions {
+            imm_31: Vec::new(),
+            imm_27: Vec::new(),
+            imm_23: Vec::new(),
             imm_19: Vec::new(),
             imm_15: Vec::new(),
             imm_11: Vec::new(),
@@ -240,120 +285,13 @@ impl Instructions {
     }
 
     pub fn add(&mut self, instruction: u32) {
-        let imm_19: u8;
-        let imm_15: u8;
-        let imm_11: u8;
-        let imm_7: u8;
-        let imm_3: u8;
-        let rs2: u8;
-        let rs1: u8;
-        let rd: u8;
-        let rd_w: u8;
-        let mem_w: u8;
-        let pc_w: u8;
-
-        let op_id: u32 = extract(instruction, 6, 0);
-
-        match op_id {
-            // lui imm[31:12] rd[11:7]
-            0b0110111 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0110111(instruction);
-            }
-
-            // auipc imm[31:12] rd[11:7]
-            0b0010111 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0010111(instruction);
-            }
-
-            // addi  | 00000| 000 |  3 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // slti  | 00000| 010 |  4 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // sltiu | 00000| 011 |  5 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // xori  | 00000| 100 |  6 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // ori   | 00000| 110 |  7 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // andi  | 00000| 111 |  8 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // slli  | 00000| 001 |  9 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // slri  | 00000| 101 | 10 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // srai  | 01000| 101 | 11 | imm[31:20] | rs1[19:15] | rd[11:7]
-            0b0010011 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0010011(instruction);
-            }
-
-            // add  | 12 | 00000 | 00 | 000 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // sub  | 13 | 01000 | 00 | 000 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // sll  | 14 | 00000 | 00 | 001 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // slt  | 15 | 00000 | 00 | 010 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // sltu | 16 | 00000 | 00 | 011 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // xor  | 17 | 00000 | 00 | 100 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // srl  | 18 | 00000 | 00 | 101 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // sra  | 19 | 01000 | 00 | 101 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // or   | 20 | 00000 | 00 | 110 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            // and  | 21 | 00000 | 00 | 111 | rs2[24:20] | rs1[19:15] | rd[11:7]
-            0b0110011 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0110011(instruction);
-            }
-
-            // lb   | 000 | 22 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // lh   | 001 | 23 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // lw   | 010 | 24 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // lbu  | 100 | 25 | imm[31:20] | rs1[19:15] | rd[11:7]
-            // lhu  | 101 | 26 | imm[31:20] | rs1[19:15] | rd[11:7]
-            0b0000011 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0000011(instruction);
-            }
-
-            // jal  | 27 | 1 | offset[20|10:1|11|19:12] | rd[11:7]
-            0b1101111 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_1101111(instruction);
-            }
-
-            // jalr | 28 | 2 | offset[11:0] | rs1[19:15] | rd[11:7]
-            0b1100111 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_1100111(instruction);
-            }
-
-            // beq  | 000 | 3 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            // bne  | 001 | 4 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            // blt  | 100 | 5 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            // bge  | 101 | 6 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            // bltu | 110 | 7 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            // bgeu | 111 | 8 | offset[12|10:5|4:1|11] | rs2[24:20] | rs1[19:15]
-            0b1100011 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_1100011(instruction);
-            }
-
-            // sb | 000 | 1 | offset[11:5] | rs2[24:20] | rs1[19:15] | offset[4:0]
-            // sh | 001 | 2 | offset[11:5] | rs2[24:20] | rs1[19:15] | offset[4:0]
-            // sw | 010 | 3 | offset[11:5] | rs2[24:20] | rs1[19:15] | offset[4:0]
-            0b0100011 => {
-                (
-                    imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-                ) = decode_0100011(instruction);
-            }
-
-            _ => {
-                panic!(
-                    "invalid instruction {:032b} -> unrecoginzed [6:0]: {:07b}",
-                    instruction, op_id
-                )
-            }
-        }
-
+        let i: Instruction = Instruction::new(instruction);
+        let (imm_31, imm_27, imm_23, imm_19, imm_15, imm_11, imm_7, imm_3) = i.decode_immediate();
+        let (rs2, rs1, rd) = i.decode_registers();
+        let (rd_w, mem_w, pc_w) = i.decode_opcode();
+        self.imm_31.push(imm_31);
+        self.imm_27.push(imm_27);
+        self.imm_23.push(imm_23);
         self.imm_19.push(imm_19);
         self.imm_15.push(imm_15);
         self.imm_11.push(imm_11);
@@ -384,6 +322,9 @@ impl Instructions {
     pub fn assert_instruction(
         &self,
         idx: usize,
+        imm_31: u8,
+        imm_27: u8,
+        imm_23: u8,
         imm_19: u8,
         imm_15: u8,
         imm_11: u8,
@@ -398,6 +339,24 @@ impl Instructions {
     ) {
         let number_of_instructions: usize = self.imm_19.len();
         assert!(number_of_instructions > idx);
+
+        assert_eq!(
+            self.imm_31[idx], imm_31,
+            "invalid imm_31: have {:04b} want {:04b}",
+            self.imm_31[idx], imm_31
+        );
+
+        assert_eq!(
+            self.imm_27[idx], imm_27,
+            "invalid imm_27: have {:04b} want {:04b}",
+            self.imm_27[idx], imm_27
+        );
+
+        assert_eq!(
+            self.imm_23[idx], imm_23,
+            "invalid imm_19: have {:04b} want {:04b}",
+            self.imm_23[idx], imm_23
+        );
 
         assert_eq!(
             self.imm_19[idx], imm_19,
@@ -457,434 +416,287 @@ impl Instructions {
     }
 }
 
-#[inline(always)]
-fn extract(x: u32, end: usize, start: usize) -> u32 {
-    let mask: u32 = (1 << (end - start + 1)) - 1;
-    (x >> start as u32) & mask
+pub enum Instruction {
+    R(u32),
+    I(u32),
+    S(u32),
+    B(u32),
+    U(u32),
+    J(u32),
 }
 
-pub fn encode_1100011(imm_11: u8, imm_7: u8, imm_3: u8, rs2: u8, rs1: u8, id: u8) -> u32 {
-    // imm[12|10:5] | rs2[24:20] | rs1[19:15] | id | imm[4:1|11] | 11000 | 11
-    // imm = 0b101101111001 | 0
-    // 1) split [12] [11] [10:5] [4:1]: 1  110111 1001
-    // 2) Permute [12]  [10:5] [4:1] [11]: 1 110111 1001 0
-    let mut rv32: u32 = (imm_11 >> 3) as u32; // imm[12]
-    rv32 = (rv32 << 2) | (imm_11 & 0b11) as u32; // imm[10:9]
-    rv32 = (rv32 << 4) | imm_7 as u32; // imm[8:5]
-    rv32 = (rv32 << 5) | rs2 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 1) | ((imm_11 >> 2) & 1) as u32;
-    rv32 = (rv32 << 5) | 0b11000;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
+impl Instruction {
+    #[inline(always)]
+    pub fn new(instruction: u32) -> Instruction {
+        match instruction & 0x7f {
+            0b0110011 => Instruction::R(instruction),
 
-pub fn decode_1100011(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b1100011);
+            // Type I-immedate:
+            // [31-11] [10- 5] [4 - 1] [ 0]
+            // [  31 ] [30:25] [24:21] [20]
+            0b0010011 | 0b0000011 => Instruction::I(instruction),
 
-    let offset_12: u32 = extract(instruction, 31, 31);
-    let offset_11: u32 = extract(instruction, 7, 7);
-    let offset_10_5: u32 = extract(instruction, 30, 25);
-    let offset_4_1: u32 = extract(instruction, 11, 8);
+            // Type S-immediate
+            //
+            // [31-11] [10- 5] [4 - 1] [ 0]
+            // [  31 ] [30:25] [11: 8] [ 7]
+            0b0100011 => Instruction::S(instruction),
 
-    let offset: u32 = ((offset_12 as u32) << 11
-        | (offset_11 as u32) << 10
-        | (offset_10_5 as u32) << 4
-        | (offset_4_1 as u32)) as u32;
+            // Type B-immediate
+            //
+            // [31-12] [11] [10- 5] [4- 1] [0]
+            // [  31 ] [ 7] [30:25] [11:8] [-]
+            0b1100011 => Instruction::B(instruction),
 
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8 = extract(offset, 11, 8) as u8;
-    let imm_7: u8 = extract(offset, 7, 4) as u8;
-    let imm_3: u8 = extract(offset, 3, 0) as u8;
-    let rs2: u8 = extract(instruction, 24, 20) as u8;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = 0;
-    let pc_w: u8;
-    let rd_w: u8 = 0;
-    let mem_w: u8 = 0;
+            // Type U-immediate
+            //
+            // [31-12] [11-0]
+            // [31:12] [  - ]
+            0b0110111 | 0b0010111 | 0b1100111 => Instruction::U(instruction),
 
-    let hi: u32 = extract(instruction, 14, 12);
+            // Type J-immediate
+            //
+            // [31-20] [19-12] [11] [10- 5] [4 - 1] [0]
+            // [  31 ] [19:12] [20] [30:25] [24:21] [-]
+            0b1101111 => Instruction::J(instruction),
 
-    match hi {
-        0b000 => pc_w = 3, // beq  | 000 | 3 |
-        0b001 => pc_w = 4, // bne  | 001 | 4 |
-        0b100 => pc_w = 5, // blt  | 100 | 5 |
-        0b101 => pc_w = 6, // bge  | 101 | 6 |
-        0b110 => pc_w = 7, // bltu | 110 | 7 |
-        0b111 => pc_w = 8, // bgeu | 111 | 8 |
-        _ => panic!(
-            "invalid instruction {:032b} -> unrecognized [14:12]: {:05b}",
-            instruction, hi
-        ),
-    }
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_0110011(sign: u8, rs2: u8, rs1: u8, id: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = sign as u32;
-    rv32 = (rv32 << 2) | 0b00;
-    rv32 = (rv32 << 5) | rs2 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b01100;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_0110011(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0110011);
-
-    #[cfg(debug_assertions)]
-    {
-        let null: u32 = extract(instruction, 26, 25);
-        debug_assert_eq!(null, 0b00, "invalid instruction: {:032b} -> parsed as [add, sub, sll, slt, sltu, xor, slr, sra, or, and] but invalid [26:25]: {:02b}", instruction, null);
-    }
-
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8 = 0;
-    let imm_7: u8 = 0;
-    let imm_3: u8 = 0;
-    let rs2: u8 = extract(instruction, 24, 20) as u8;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 0;
-
-    let hi: u32 = extract(instruction, 14, 12);
-    let sign: u32 = extract(instruction, 31, 27);
-    match hi {
-        0b000 => {
-            match sign{
-                0b00000=> rd_w = 12, // add  | 00000 | 000 | 12 |
-                0b01000=> rd_w = 13, // sub  | 01000 | 000 | 13 |
-                _=>panic!("invalid instruction: {:032b} -> parsed as add or sub but invalid [31:27]: {:05b}", instruction, sign),
-            }
-        }
-        0b001 => rd_w = 14, // sll  | 00000 | 001 | 14 |
-        0b010 => rd_w = 15, // slt  | 00000 | 010 | 15 |
-        0b011 => rd_w = 16, // sltu | 00000 | 011 | 16 |
-        0b100 => rd_w = 17, // xor  | 00000 | 100 | 17 |
-        0b101 => {
-            match sign{
-                0b00000=> rd_w = 18, // srl  | 00000 | 101 | 18 |
-                0b01000=> rd_w = 19, // sra  | 01000 | 101 | 19 |
-                _=>panic!("invalid instruction: {:032b} -> parsed as srl or sra but invalid [31:27]: {:05b}", instruction, sign),
-            }
-        }
-        0b110 => rd_w = 20, // or   | 00000 | 110 | 20 |
-        0b111 => rd_w = 21, // and  | 00000 | 111 | 21 |
-        _ => panic!(
-            "invalid instruction: {:032b} -> unrecognized [14-12]: {:03b}",
-            instruction, hi
-        ),
-    }
-
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_0010011(imm_11: u8, imm_7: u8, imm_3: u8, rs1: u8, id: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = imm_11 as u32;
-    rv32 = (rv32 << 4) | imm_7 as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b00100;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_0010011(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0010011);
-
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8;
-    let imm_7: u8 = extract(instruction, 27, 24) as u8;
-    let imm_3: u8 = extract(instruction, 23, 20) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 0;
-
-    let hi: u32 = extract(instruction, 14, 12);
-
-    match hi {
-        0b101 => {
-            imm_11 = 0;
-            let sign: u32 = extract(instruction, 31, 27);
-
-            #[cfg(debug_assertions)]
-            {
-                let null: u32 = extract(instruction, 26, 25);
-                debug_assert_eq!(null, 0, "invalid instruction: {:032b} -> parsed as srli or srai but invalid [26:25]: {:05b} should be 00", instruction, null);
-            }
-            match sign{
-                0b00000 => rd_w = 10, // slri  | 00000| 101 | 10 |
-                0b01000 => rd_w = 11, // srai  | 01000| 101 | 11 |
-                _=>panic!("invalid instruction: {:032b} -> parsed as slri or srai but invalid [31:27]: {:05b}", instruction, sign),
-            }
-        }
-
-        _ => {
-            imm_11 = extract(instruction, 31, 28) as u8;
-            match hi {
-                0b000 => rd_w = 3, // addi  | 00000| 000 |  3 |
-                0b010 => rd_w = 4, // slti  | 00000| 010 |  4 |
-                0b011 => rd_w = 5, // sltiu | 00000| 011 |  5 |
-                0b100 => rd_w = 6, // xori  | 00000| 100 |  6 |
-                0b110 => rd_w = 7, // ori   | 00000| 110 |  7 |
-                0b111 => rd_w = 8, // andi  | 00000| 111 |  8 |
-                0b001 => rd_w = 9, // slli  | 00000| 001 |  9 |
-                _ => panic!(
-                    "invalid instruction: {:032b} -> unrecognized [14-12]: {:03b}",
-                    instruction, hi
-                ),
+            _ => {
+                panic!(
+                    "invalid instruction {:032b} -> unrecoginzed opcode: {:07b}",
+                    instruction,
+                    instruction & 0x7f
+                )
             }
         }
     }
 
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_0100011(imm_11: u8, imm_7: u8, imm_3: u8, rs2: u8, rs1: u8, id: u8) -> u32 {
-    let mut rv32: u32 = imm_11 as u32;
-    rv32 = (rv32 << 3) | (imm_7 as u32) >> 1;
-    rv32 = (rv32 << 5) | rs2 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 5) | ((imm_7 as u32) & 1) << 4 | imm_3 as u32;
-    rv32 = (rv32 << 5) | 0b01000;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_0100011(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0100011);
-
-    let offset_11_5: u32 = extract(instruction, 31, 25);
-    let offset_4_0: u32 = extract(instruction, 11, 7);
-    let offset: u32 = ((offset_11_5 as u32) << 5) | offset_4_0 as u32;
-
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8 = extract(offset, 11, 8) as u8;
-    let imm_7: u8 = extract(offset, 7, 4) as u8;
-    let imm_3: u8 = extract(offset, 3, 0) as u8;
-    let rs2: u8 = extract(instruction, 24, 20) as u8;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = 0;
-    let rd_w: u8 = 0;
-    let mem_w: u8;
-    let pc_w: u8 = 0;
-
-    let hi: u32 = extract(instruction, 14, 12);
-    match hi {
-        0b000 => mem_w = 1, // sb | 000 | 1 |
-        0b001 => mem_w = 2, // sh | 001 | 2 |
-        0b010 => mem_w = 3, // sw | 010 | 3 |
-        _ => panic!(
-            "invalid instruction {:032b} -> unrecognized [14:12]: {:05b}",
-            instruction, hi
-        ),
+    #[inline(always)]
+    pub fn decode_registers(&self) -> (u8, u8, u8) {
+        match self {
+            Instruction::R(instruction) => (
+                ((instruction >> 20) & 0x1f) as u8,
+                ((instruction >> 15) & 0x1f) as u8,
+                ((instruction >> 7) & 0x1f) as u8,
+            ),
+            Instruction::I(instruction) => (
+                0,
+                ((instruction >> 15) & 0x1f) as u8,
+                ((instruction >> 7) & 0x1f) as u8,
+            ),
+            Instruction::S(instruction) | Instruction::B(instruction) => (
+                ((instruction >> 20) & 0x1f) as u8,
+                ((instruction >> 15) & 0x1f) as u8,
+                0,
+            ),
+            Instruction::U(instruction) | Instruction::J(instruction) => {
+                (0, 0, ((instruction >> 15) & 0x1f) as u8)
+            }
+        }
     }
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
 
-pub fn encode_1101111(imm_19: u8, imm_15: u8, imm_11: u8, imm_7: u8, imm_3: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = (imm_19 >> 3) as u32; // imm[20]
-    rv32 = (rv32 << 2) | (imm_11 & 0b11) as u32; // imm[10:9]
-    rv32 = (rv32 << 4) | (imm_7 as u32); // imm[8:5]
-    rv32 = (rv32 << 4) | (imm_3 as u32); // imm[4:1]
-    rv32 = (rv32 << 1) | ((imm_11 >> 2) & 1) as u32; // imm[11]
-    rv32 = (rv32 << 3) | (imm_19 & 0b111) as u32; // imm[19:17]
-    rv32 = (rv32 << 4) | imm_15 as u32; // imm[16:13]
-    rv32 = (rv32 << 1) | (imm_11 >> 3) as u32; // imm[12:12]
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b11011;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_1101111(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b1101111);
-
-    let offset_20: u32 = extract(instruction, 31, 31);
-    let offset_19_12: u32 = extract(instruction, 19, 12);
-    let offset_11: u32 = extract(instruction, 20, 20);
-    let offset_10_1: u32 = extract(instruction, 30, 21);
-
-    let offset: u32 = ((offset_20 as u32) << 19)
-        | (offset_19_12 as u32) << 11
-        | (offset_11 as u32) << 10
-        | (offset_10_1 as u32);
-
-    let imm_19: u8 = extract(offset, 19, 16) as u8;
-    let imm_15: u8 = extract(offset, 15, 12) as u8;
-    let imm_11: u8 = extract(offset, 11, 8) as u8;
-    let imm_7: u8 = extract(offset, 7, 4) as u8;
-    let imm_3: u8 = extract(offset, 3, 0) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8 = 27;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 1;
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_1100111(imm_11: u8, imm_7: u8, imm_3: u8, rs1: u8, id: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = imm_11 as u32;
-    rv32 = (rv32 << 4) | imm_7 as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b11001;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_1100111(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b1100111);
-
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8 = extract(instruction, 31, 28) as u8;
-    let imm_7: u8 = extract(instruction, 27, 24) as u8;
-    let imm_3: u8 = extract(instruction, 23, 20) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8 = 28;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 2;
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_0010111(imm_19: u8, imm_15: u8, imm_11: u8, imm_7: u8, imm_3: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = imm_19 as u32;
-    rv32 = (rv32 << 4) | imm_15 as u32;
-    rv32 = (rv32 << 4) | imm_11 as u32;
-    rv32 = (rv32 << 4) | imm_7 as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b00101;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_0010111(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0010111);
-
-    let imm_19: u8 = extract(instruction, 31, 28) as u8;
-    let imm_15: u8 = extract(instruction, 27, 24) as u8;
-    let imm_11: u8 = extract(instruction, 23, 20) as u8;
-    let imm_7: u8 = extract(instruction, 19, 16) as u8;
-    let imm_3: u8 = extract(instruction, 15, 12) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8 = 2;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 0;
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
-
-pub fn encode_0000011(imm_11: u8, imm_7: u8, imm_3: u8, rs1: u8, id: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = imm_11 as u32;
-    rv32 = (rv32 << 4) | imm_7 as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 5) | rs1 as u32;
-    rv32 = (rv32 << 3) | id as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b00000;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
-
-pub fn decode_0000011(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0000011);
-
-    let imm_19: u8 = 0;
-    let imm_15: u8 = 0;
-    let imm_11: u8 = extract(instruction, 31, 28) as u8;
-    let imm_7: u8 = extract(instruction, 27, 24) as u8;
-    let imm_3: u8 = extract(instruction, 23, 20) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = extract(instruction, 19, 15) as u8;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 0;
-
-    let hi: u32 = extract(instruction, 14, 12);
-
-    match hi {
-        0b000 => rd_w = 22, // lb   | 000 | 22 |
-        0b001 => rd_w = 23, // lh   | 001 | 23 |
-        0b010 => rd_w = 24, // lw   | 010 | 24 |
-        0b100 => rd_w = 25, // lbu  | 100 | 25 |
-        0b101 => rd_w = 26, // lhu  | 101 | 26 |
-        _ => panic!(
-            "invalid instruction: {:032b} -> unrecognized [14-12]: {:03b}",
-            instruction, hi
-        ),
+    #[inline(always)]
+    pub fn decode_opcode(&self) -> (u8, u8, u8) {
+        match self {
+            Instruction::R(instruction) => {
+                let funct7: u32 = (instruction >> 25) & 0x7f;
+                let funct3: u32 = (instruction >> 12) & 0x7;
+                match funct7 << 7 | funct3 {
+                    0b0000000000 => OpID::ADD,
+                    0b0100000000 => OpID::SUB,
+                    0b0000000001 => OpID::SLL,
+                    0b0000000010 => OpID::SLT,
+                    0b0000000011 => OpID::SLTU,
+                    0b0000000100 => OpID::XOR,
+                    0b0000000101 => OpID::SRL,
+                    0b0100000101 => OpID::SRA,
+                    0b0000000110 => OpID::OR,
+                    0b0000000111 => OpID::AND,
+                    _ => panic!("invalid instruction R-type: {:032b}", instruction),
+                }
+            }
+            Instruction::I(instruction) => {
+                let opcode: u32 = instruction & 0x7F;
+                let funct3: u32 = (instruction >> 12) & 0x7;
+                match opcode {
+                    0b0010011 => {
+                        let funct7: u32 = (instruction >> 25) & 0x7f;
+                        match (funct7, funct3) {
+                            (_, 0b000) => OpID::ADDI,
+                            (_, 0b010) => OpID::SLTI,
+                            (_, 0b011) => OpID::SLTIU,
+                            (_, 0b100) => OpID::XORI,
+                            (_, 0b110) => OpID::ORI,
+                            (_, 0b111) => OpID::ANDI,
+                            (_, 0b001) => OpID::SLLI,
+                            (0b00000, 0b101) => OpID::SRLI,
+                            (0b01000, 0b101) => OpID::SRAI,
+                            _ => panic!(
+                                "invalid instruction, parsed as I-type: {:032b}",
+                                instruction
+                            ),
+                        }
+                    }
+                    0b0000011 => match funct3 {
+                        0b000 => OpID::LB,
+                        0b001 => OpID::LH,
+                        0b010 => OpID::LW,
+                        0b100 => OpID::LBU,
+                        0b101 => OpID::LHU,
+                        _ => panic!(
+                            "invalid instruction, parsed as I-type: {:032b}",
+                            instruction
+                        ),
+                    },
+                    _ => panic!(
+                        "invalid instruction, parsed as I-type: {:032b}",
+                        instruction
+                    ),
+                }
+            }
+            Instruction::S(instruction) => {
+                let funct3: u32 = (instruction >> 12) & 0x7;
+                match funct3 {
+                    0b000 => OpID::SB,
+                    0b001 => OpID::SH,
+                    0b010 => OpID::SW,
+                    _ => panic!(
+                        "invalid instruction, parsed as S-type: {:032b}",
+                        instruction
+                    ),
+                }
+            }
+            Instruction::B(instruction) => {
+                let funct3: u32 = (instruction >> 12) & 0x7;
+                match funct3 {
+                    0b000 => OpID::BEQ,
+                    0b001 => OpID::BNE,
+                    0b100 => OpID::BLT,
+                    0b101 => OpID::BGE,
+                    0b110 => OpID::BLTU,
+                    0b111 => OpID::BGEU,
+                    _ => panic!(
+                        "invalid instruction, parsed as B-type: {:032b}",
+                        instruction
+                    ),
+                }
+            }
+            Instruction::U(instruction) => {
+                let opid: u32 = instruction & 0x7f;
+                match opid {
+                    0b0110111 => OpID::LUI,
+                    0b1100111 => OpID::JALR,
+                    0b0010111 => OpID::AUIPC,
+                    _ => panic!(
+                        "invalid instruction, parsed as U-type: {:032b}",
+                        instruction
+                    ),
+                }
+            }
+            Instruction::J(_) => OpID::JAL,
+        }
     }
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
-}
 
-pub fn encode_0110111(imm_19: u8, imm_15: u8, imm_11: u8, imm_7: u8, imm_3: u8, rd: u8) -> u32 {
-    let mut rv32: u32 = imm_19 as u32;
-    rv32 = (rv32 << 4) | imm_15 as u32;
-    rv32 = (rv32 << 4) | imm_11 as u32;
-    rv32 = (rv32 << 4) | imm_7 as u32;
-    rv32 = (rv32 << 4) | imm_3 as u32;
-    rv32 = (rv32 << 5) | rd as u32;
-    rv32 = (rv32 << 5) | 0b01101;
-    rv32 = (rv32 << 2) | 0b11;
-    rv32
-}
+    #[inline(always)]
+    pub fn decode_immediate(&self) -> (u8, u8, u8, u8, u8, u8, u8, u8) {
+        let immediate: u32;
 
-pub fn decode_0110111(instruction: u32) -> (u8, u8, u8, u8, u8, u8, u8, u8, u8, u8, u8) {
-    debug_assert_eq!(extract(instruction, 6, 0), 0b0110111);
+        match self {
+            Instruction::R(_) => immediate = 0,
 
-    let imm_19: u8 = extract(instruction, 31, 28) as u8;
-    let imm_15: u8 = extract(instruction, 27, 24) as u8;
-    let imm_11: u8 = extract(instruction, 23, 20) as u8;
-    let imm_7: u8 = extract(instruction, 19, 16) as u8;
-    let imm_3: u8 = extract(instruction, 15, 12) as u8;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = extract(instruction, 11, 7) as u8;
-    let rd_w: u8 = 1;
-    let mem_w: u8 = 0;
-    let pc_w: u8 = 0;
-    (
-        imm_19, imm_15, imm_11, imm_7, imm_3, rs2, rs1, rd, rd_w, mem_w, pc_w,
-    )
+            // Type I-immedate:
+            // [31-11] [10- 5] [4 - 1] [ 0]
+            // [  31 ] [30:25] [24:21] [20]
+            Instruction::I(data) => immediate = (data >> 20) | ((data >> 31) & 1) * 0xFFFF_F000,
+
+            // Type S-immediate
+            //
+            // [31-11] [10- 5] [4 - 1] [ 0]
+            // [  31 ] [30:25] [11: 8] [ 7]
+            Instruction::S(data) => {
+                immediate = (data >> 20) & 0x0000_07E0
+                    | (data >> 7) & 0x0000_001F
+                    | ((data >> 31) & 1) * 0xFFFF_F000
+            }
+
+            // Type B-immediate
+            //
+            // [31-12] [11] [10- 5] [4- 1] [0]
+            // [  31 ] [ 7] [30:25] [11:8] [-]
+            Instruction::B(data) => {
+                immediate = (data << 4) & 0x0000_0800
+                    | (data >> 20) & 0x0000_07E0
+                    | (data >> 7) & 0x0000_001E
+                    | ((data >> 31) & 1) * 0xFFFF_F000
+            }
+
+            // Type U-immediate
+            //
+            // [31-12] [11-0]
+            // [31:12] [  - ]
+            Instruction::U(data) => immediate = data & 0xFFFF_F000,
+
+            // Type J-immediate
+            //
+            // [31-20] [19-12] [11] [10- 5] [4 - 1] [0]
+            // [  31 ] [19:12] [20] [30:25] [24:21] [-]
+            Instruction::J(data) => {
+                immediate = data & 0xff000
+                    | (data >> 9) & 0x0000_0800
+                    | (data >> 20) & 0x0000_07E0
+                    | (data >> 20) & 0x0000_001E
+                    | ((data >> 31) & 1) * 0xFFFF_F000
+            }
+        }
+
+        (
+            ((immediate >> 28) & 0xFF) as u8,
+            ((immediate >> 24) & 0xFF) as u8,
+            ((immediate >> 20) & 0xFF) as u8,
+            ((immediate >> 16) & 0xFF) as u8,
+            ((immediate >> 12) & 0xFF) as u8,
+            ((immediate >> 8) & 0xFF) as u8,
+            ((immediate >> 4) & 0xFF) as u8,
+            ((immediate >> 0) & 0xFF) as u8,
+        )
+    }
+
+    pub fn encode_immediate(&mut self, immediate: u32) {
+        match self {
+            Instruction::R(_) => {
+                panic!("invalid instruction: cannot encode immediate on type R")
+            }
+
+            // [31-20]
+            // [11: 0]
+            Instruction::I(data) => *data = (*data & 0x000F_FFFF) | (immediate << 20),
+
+            // [31-25] [11-7]
+            // [11: 5] [4: 0]
+            Instruction::S(data) => {
+                *data = (*data & 0x01FF_F07F)
+                    | (immediate << 20) & 0xFE00_0000
+                    | (immediate << 6) & 0x0000_0F80
+            }
+
+            // [31] [30-25] [11-8] [ 7]
+            // [12] [10: 5] [4: 1] [11]
+            Instruction::B(data) => {
+                *data = (*data & 0x01FF_F07F)
+                    | (immediate << 19) & 0x8000_0000
+                    | (immediate << 21) & 0x7E00_0000
+                    | (immediate << 6) & 0x0000_0F00
+                    | (immediate >> 5) & 0x0000_0080
+            }
+
+            Instruction::U(data) => *data = (*data & 0x0000_0FFF) | (immediate & 0xFFFF_F000),
+
+            Instruction::J(data) => {
+                *data = (*data & 0x0000_0FFF)
+                    | (immediate << 12) & 0x8000_0000
+                    | (immediate << 20) & 0x7FE0_0000
+                    | (immediate << 9) & 0x0010_0000
+                    | (immediate >> 12) & 0x000F_F000
+            }
+        }
+    }
 }
