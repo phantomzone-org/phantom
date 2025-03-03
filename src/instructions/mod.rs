@@ -111,7 +111,7 @@ pub fn reconstruct(x: &[u8; 8]) -> u32 {
     y
 }
 
-pub fn decomp(x: u32) -> [u8; 8] {
+pub fn decompose(x: u32) -> [u8; 8] {
     let mut y: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
     y[0] = ((x >> 0) & 0xF) as u8;
     y[1] = ((x >> 4) & 0xF) as u8;
@@ -122,6 +122,172 @@ pub fn decomp(x: u32) -> [u8; 8] {
     y[6] = ((x >> 24) & 0xF) as u8;
     y[7] = ((x >> 28) & 0xF) as u8;
     y
+}
+
+pub fn sext(x: u32, bits: usize) -> u32 {
+    x | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
+}
+
+#[allow(dead_code)]
+fn test_r_type(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
+    // 00000 | 00 | rs2[24:20] | rs1[19:15] | funct3 | rd[11:7] |
+    let imm: u32 = 0;
+    let rs2: u8 = 0b11011;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0b01011;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_funct3(funct3);
+    instruction.encode_funct7(funct7);
+    instruction.encode_rs2(rs2);
+    instruction.encode_rs1(rs1);
+    instruction.encode_rd(rd);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, opid.0, opid.1, opid.2);
+}
+
+#[allow(dead_code)]
+fn test_i_type(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
+    // imm[31:20] | rs1[19:15] | funct3 | rd[11:7] | op_code
+    // imm[11: 0]
+    let funct3: u8 = funct3;
+    let imm: u32 = 0xABC;
+    let rs2: u8 = 0;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0b01011;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_funct3(funct3);
+    instruction.encode_rs1(rs1);
+    instruction.encode_rd(rd);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(
+        0,
+        decompose(sext(imm, 11)),
+        rs2,
+        rs1,
+        rd,
+        opid.0,
+        opid.1,
+        opid.2,
+    );
+}
+
+#[allow(dead_code)]
+fn test_i_shamt_type(imm: u32, funct3: u8, opid: (u8, u8, u8)) {
+    // 0000000 | shamt[24:20] | rs1[19:15] | funct3 | rd[11:7] | 0010011
+    let op_code: u8 = 0b0010011;
+    let funct3: u8 = funct3;
+    let rs2: u8 = 0;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0b01011;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_funct3(funct3);
+    instruction.encode_rs1(rs1);
+    instruction.encode_rd(rd);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(
+        0,
+        decompose(imm & 0x1F),
+        rs2,
+        rs1,
+        rd,
+        opid.0,
+        opid.1,
+        opid.2,
+    );
+}
+
+#[allow(dead_code)]
+fn test_s_type(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
+    // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011
+    let imm: u32 = 0xABC;
+    let rs2: u8 = 0b11011;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_funct3(funct3);
+    instruction.encode_rs2(rs2);
+    instruction.encode_rs1(rs1);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(
+        0,
+        decompose(sext(imm, 12)),
+        rs2,
+        rs1,
+        rd,
+        op_id.0,
+        op_id.1,
+        op_id.1,
+    );
+}
+
+#[allow(dead_code)]
+fn test_b_type(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
+    let imm: u32 = 0xABC<<1;
+    let rs2: u8 = 0b11011;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_funct3(funct3);
+    instruction.encode_rs2(rs2);
+    instruction.encode_rs1(rs1);
+    let mut m: Instructions = Instructions::new();
+    println!("instruction: {:032b}", instruction.get());
+    println!("imm : {:032b}", imm);
+    println!("sext: {:032b}", sext(imm, 12));
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(
+        0,
+        decompose(sext(imm, 12)),
+        rs2,
+        rs1,
+        rd,
+        op_id.0,
+        op_id.1,
+        op_id.2,
+    );
+}
+
+#[allow(dead_code)]
+fn test_u_type(op_code: u8, op_id: (u8, u8, u8)) {
+    let imm: u32 = 0xABCD_E000;
+    let rs2: u8 = 0;
+    let rs1: u8 = 0;
+    let rd: u8 = 0b01011;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_rd(rd);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, op_id.0, op_id.1, op_id.2);
+}
+
+#[allow(dead_code)]
+fn test_j_type(op_code: u8, op_id: (u8, u8, u8)) {
+    let imm: u32 = 0xABCDE << 1;
+    let rs2: u8 = 0;
+    let rs1: u8 = 0b10011;
+    let rd: u8 = 0b01011;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.encode_immediate(imm);
+    instruction.encode_rd(rd);
+    let mut m: Instructions = Instructions::new();
+    m.add(instruction);
+    m.assert_size(1);
+    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, op_id.0, op_id.1, op_id.2);
 }
 
 pub trait Arithmetic {
@@ -295,18 +461,17 @@ impl Instructions {
     }
 
     pub fn add(&mut self, instruction: Instruction) {
-        let (imm_31, imm_27, imm_23, imm_19, imm_15, imm_11, imm_7, imm_3) =
-            instruction.decode_immediate();
+        let imm_u8: [u8; 8] = decompose(instruction.decode_immediate());
         let (rs2, rs1, rd) = instruction.decode_registers();
         let (rd_w, mem_w, pc_w) = instruction.decode_opcode();
-        self.imm_31.push(imm_31);
-        self.imm_27.push(imm_27);
-        self.imm_23.push(imm_23);
-        self.imm_19.push(imm_19);
-        self.imm_15.push(imm_15);
-        self.imm_11.push(imm_11);
-        self.imm_7.push(imm_7);
-        self.imm_3.push(imm_3);
+        self.imm_31.push(imm_u8[7]);
+        self.imm_27.push(imm_u8[6]);
+        self.imm_23.push(imm_u8[5]);
+        self.imm_19.push(imm_u8[4]);
+        self.imm_15.push(imm_u8[3]);
+        self.imm_11.push(imm_u8[2]);
+        self.imm_7.push(imm_u8[1]);
+        self.imm_3.push(imm_u8[0]);
         self.rs2.push(rs2);
         self.rs1.push(rs1);
         self.rd.push(rd);
@@ -332,14 +497,7 @@ impl Instructions {
     pub fn assert_instruction(
         &self,
         idx: usize,
-        imm_31: u8,
-        imm_27: u8,
-        imm_23: u8,
-        imm_19: u8,
-        imm_15: u8,
-        imm_11: u8,
-        imm_7: u8,
-        imm_3: u8,
+        imm: [u8; 8],
         rs2: u8,
         rs1: u8,
         rd: u8,
@@ -351,47 +509,47 @@ impl Instructions {
         assert!(number_of_instructions > idx);
 
         assert_eq!(
-            self.imm_31[idx], imm_31,
+            self.imm_31[idx], imm[7],
             "invalid imm_31: have {:04b} want {:04b}",
-            self.imm_31[idx], imm_31
+            self.imm_31[idx], imm[7]
         );
 
         assert_eq!(
-            self.imm_27[idx], imm_27,
+            self.imm_27[idx], imm[6],
             "invalid imm_27: have {:04b} want {:04b}",
-            self.imm_27[idx], imm_27
+            self.imm_27[idx], imm[6]
         );
 
         assert_eq!(
-            self.imm_23[idx], imm_23,
+            self.imm_23[idx], imm[5],
             "invalid imm_19: have {:04b} want {:04b}",
-            self.imm_23[idx], imm_23
+            self.imm_23[idx], imm[5]
         );
 
         assert_eq!(
-            self.imm_19[idx], imm_19,
+            self.imm_19[idx], imm[4],
             "invalid imm_19: have {:04b} want {:04b}",
-            self.imm_19[idx], imm_19
+            self.imm_19[idx], imm[4]
         );
         assert_eq!(
-            self.imm_15[idx], imm_15,
+            self.imm_15[idx], imm[3],
             "invalid imm_15: have {:04b} want {:04b}",
-            self.imm_15[idx], imm_15
+            self.imm_15[idx], imm[3]
         );
         assert_eq!(
-            self.imm_11[idx], imm_11,
+            self.imm_11[idx], imm[2],
             "invalid imm_11: have {:04b} want {:04b}",
-            self.imm_11[idx], imm_11
+            self.imm_11[idx], imm[2]
         );
         assert_eq!(
-            self.imm_7[idx], imm_7,
+            self.imm_7[idx], imm[1],
             "invalid imm_7: have {:04b} want {:04b}",
-            self.imm_7[idx], imm_7
+            self.imm_7[idx], imm[1]
         );
         assert_eq!(
-            self.imm_3[idx], imm_3,
+            self.imm_3[idx], imm[0],
             "invalid imm_3: have {:04b} want {:04b}",
-            self.imm_3[idx], imm_3
+            self.imm_3[idx], imm[0]
         );
         assert_eq!(
             self.rs2[idx], rs2,
@@ -477,6 +635,17 @@ impl Instruction {
                     instruction & 0x7f
                 )
             }
+        }
+    }
+
+    pub fn get(&self) -> u32 {
+        match self {
+            Instruction::R(instruction)
+            | Instruction::I(instruction)
+            | Instruction::S(instruction)
+            | Instruction::B(instruction)
+            | Instruction::U(instruction)
+            | Instruction::J(instruction) => *instruction,
         }
     }
 
@@ -572,11 +741,12 @@ impl Instruction {
             // [31] [30-25] [11-8] [ 7]
             // [12] [10: 5] [4: 1] [11]
             Instruction::B(data) => {
+                let imm_shift: u32 = immediate>>1;
                 *data = (*data & 0x01FF_F07F)
-                    | (immediate << 19) & 0x8000_0000
-                    | (immediate << 21) & 0x7E00_0000
-                    | (immediate << 6) & 0x0000_0F00
-                    | (immediate >> 5) & 0x0000_0080
+                    | (imm_shift & 0x0000_0800) << 20
+                    | (imm_shift & 0x0000_0400) >> 3
+                    | (imm_shift & 0x0000_03F0) << 21
+                    | (imm_shift & 0x0000_000F) << 8;
             }
 
             Instruction::U(data) => *data = (*data & 0x0000_0FFF) | (immediate & 0xFFFF_F000),
@@ -584,7 +754,7 @@ impl Instruction {
             Instruction::J(data) => {
                 *data = (*data & 0x0000_0FFF)
                     | (immediate << 12) & 0x8000_0000
-                    | (immediate << 20) & 0x7FE0_0000
+                    | (immediate << 20) & 0xFC00_0000
                     | (immediate << 9) & 0x0010_0000
                     | (immediate >> 12) & 0x000F_F000
             }
@@ -610,7 +780,7 @@ impl Instruction {
                 0,
             ),
             Instruction::U(instruction) | Instruction::J(instruction) => {
-                (0, 0, ((instruction >> 15) & 0x1f) as u8)
+                (0, 0, ((instruction >> 7) & 0x1f) as u8)
             }
         }
     }
@@ -718,7 +888,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn decode_immediate(&self) -> (u8, u8, u8, u8, u8, u8, u8, u8) {
+    pub fn decode_immediate(&self) -> u32 {
         let immediate: u32;
 
         match self {
@@ -744,10 +914,11 @@ impl Instruction {
             // [31-12] [11] [10- 5] [4- 1] [0]
             // [  31 ] [ 7] [30:25] [11:8] [-]
             Instruction::B(data) => {
-                immediate = (data << 4) & 0x0000_0800
-                    | (data >> 20) & 0x0000_07E0
-                    | (data >> 7) & 0x0000_001E
-                    | ((data >> 31) & 1) * 0xFFFF_F000
+                immediate = ((data>>20) & 0x0000_0800
+                | (data >> 3) & 0x0000_0400
+                | (data>>21) & 0x0000_03F0
+                | (data>>8) & 0x0000_000F
+                | ((data >> 31) & 1) * 0xFFFF_F800)<<1;
             }
 
             // Type U-immediate
@@ -769,15 +940,6 @@ impl Instruction {
             }
         }
 
-        (
-            ((immediate >> 28) & 0xFF) as u8,
-            ((immediate >> 24) & 0xFF) as u8,
-            ((immediate >> 20) & 0xFF) as u8,
-            ((immediate >> 16) & 0xFF) as u8,
-            ((immediate >> 12) & 0xFF) as u8,
-            ((immediate >> 8) & 0xFF) as u8,
-            ((immediate >> 4) & 0xFF) as u8,
-            ((immediate >> 0) & 0xFF) as u8,
-        )
+        immediate
     }
 }
