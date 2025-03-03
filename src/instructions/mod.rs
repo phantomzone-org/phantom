@@ -97,35 +97,45 @@ use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
 use crate::memory::Memory;
 use base2k::Module;
-use itertools::izip;
 
-pub fn reconstruct(x: &[u32], base: &[usize]) -> u32 {
+pub fn reconstruct(x: &[u8; 8]) -> u32 {
     let mut y: u32 = 0;
-    let mut sum_bases: u32 = 0;
-    izip!(x.iter(), base.iter()).for_each(|(a, b)| {
-        y |= a << sum_bases;
-        sum_bases += *b as u32;
-    });
+    y |= (x[7] as u32) << 28;
+    y |= (x[6] as u32) << 24;
+    y |= (x[5] as u32) << 20;
+    y |= (x[4] as u32) << 16;
+    y |= (x[3] as u32) << 12;
+    y |= (x[2] as u32) << 8;
+    y |= (x[1] as u32) << 4;
+    y |= (x[0] as u32);
     y
 }
 
-pub fn decomp(x: u32, base: &[usize]) -> Vec<u32> {
-    let mut y: Vec<u32> = Vec::new();
-    let mut remain: u32 = x;
-    base.iter().for_each(|i| {
-        let mask: u32 = (1 << i) - 1;
-        y.push(remain & mask);
-        remain >>= i
-    });
+pub fn decomp(x: u32) -> [u8; 8] {
+    let mut y: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+    y[0] = ((x >> 0) & 0xF) as u8;
+    y[1] = ((x >> 4) & 0xF) as u8;
+    y[2] = ((x >> 8) & 0xF) as u8;
+    y[3] = ((x >> 12) & 0xF) as u8;
+    y[4] = ((x >> 16) & 0xF) as u8;
+    y[5] = ((x >> 20) & 0xF) as u8;
+    y[6] = ((x >> 24) & 0xF) as u8;
+    y[7] = ((x >> 28) & 0xF) as u8;
     y
 }
 
 pub trait Arithmetic {
-    fn apply(&self, imm: &[u32], x_rs1: &[u32], x_rs2: &[u32]) -> Vec<u32>;
+    fn apply(&self, _imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
 }
 
 pub trait PcUpdates {
-    fn apply(&self, imm: &[u32], x_rs1: &[u32], x_rs2: &[u32], pc: &[u32]) -> (Vec<u32>, Vec<u32>);
+    fn apply(
+        &self,
+        imm: &[u8; 8],
+        x_rs1: &[u8; 8],
+        x_rs2: &[u8; 8],
+        pc: &[u8; 8],
+    ) -> ([u8; 8], [u8; 8]);
 }
 
 pub trait Store {
@@ -133,8 +143,8 @@ pub trait Store {
         &self,
         module_pbs: &Module,
         module_lwe: &Module,
-        imm: &[u32],
-        x_rs1: &[u32],
+        imm: &[u8; 8],
+        x_rs1: &[u8; 8],
         memory: &mut Memory,
         circuit_btp: &CircuitBootstrapper,
         address: &mut Address,
@@ -147,13 +157,13 @@ pub trait Load {
         &self,
         module_pbs: &Module,
         module_lwe: &Module,
-        imm: &[u32],
-        x_rs1: &[u32],
+        imm: &[u8; 8],
+        x_rs1: &[u8; 8],
         memory: &mut Memory,
         circuit_btp: &CircuitBootstrapper,
         address: &mut Address,
         tmp_bytes: &mut [u8],
-    ) -> Vec<u32>;
+    ) -> [u8; 8];
 }
 
 pub enum StoreOps {
@@ -284,11 +294,11 @@ impl Instructions {
         }
     }
 
-    pub fn add(&mut self, instruction: u32) {
-        let i: Instruction = Instruction::new(instruction);
-        let (imm_31, imm_27, imm_23, imm_19, imm_15, imm_11, imm_7, imm_3) = i.decode_immediate();
-        let (rs2, rs1, rd) = i.decode_registers();
-        let (rd_w, mem_w, pc_w) = i.decode_opcode();
+    pub fn add(&mut self, instruction: Instruction) {
+        let (imm_31, imm_27, imm_23, imm_19, imm_15, imm_11, imm_7, imm_3) =
+            instruction.decode_immediate();
+        let (rs2, rs1, rd) = instruction.decode_registers();
+        let (rd_w, mem_w, pc_w) = instruction.decode_opcode();
         self.imm_31.push(imm_31);
         self.imm_27.push(imm_27);
         self.imm_23.push(imm_23);
@@ -466,6 +476,117 @@ impl Instruction {
                     instruction,
                     instruction & 0x7f
                 )
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_funct3(&mut self, funct3: u8) {
+        match self {
+            Instruction::R(instruction)
+            | Instruction::I(instruction)
+            | Instruction::S(instruction)
+            | Instruction::B(instruction) => {
+                *instruction = (*instruction & 0xFFFF_8FFF) | ((funct3 & 0x7) as u32) << 12
+            }
+            _ => panic!("can only encode funct3 on R, I, S and B type instruction"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_funct7(&mut self, funct7: u8) {
+        match self {
+            Instruction::R(instruction) => {
+                *instruction = (*instruction & 0x01FF_FFFF) | ((funct7 & 0x7f) as u32) << 25
+            }
+            _ => panic!("can only encode funct3 on R type instruction"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_rs2(&mut self, rs2: u8) {
+        match self {
+            Instruction::R(instruction)
+            | Instruction::S(instruction)
+            | Instruction::B(instruction) => {
+                *instruction = (*instruction & 0xFE0F_FFFF) | ((rs2 & 0x7f) as u32) << 20
+            }
+            _ => panic!("can only encode rs2 on R, S and B type instruction"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_rs1(&mut self, rs1: u8) {
+        match self {
+            Instruction::R(instruction)
+            | Instruction::I(instruction)
+            | Instruction::S(instruction)
+            | Instruction::B(instruction) => {
+                *instruction = (*instruction & 0xFFF0_7FFF) | ((rs1 & 0x7f) as u32) << 15
+            }
+            _ => panic!("can only encode rs2 on R, I, S and B type instruction"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_rd(&mut self, rd: u8) {
+        match self {
+            Instruction::R(instruction)
+            | Instruction::I(instruction)
+            | Instruction::U(instruction)
+            | Instruction::J(instruction) => {
+                *instruction = (*instruction & 0xFFFF_F07F) | ((rd & 0x7f) as u32) << 7
+            }
+            _ => panic!("can only encode rs2 on R, I, U and J type instruction"),
+        }
+    }
+
+    pub fn encode_shamt(&mut self, shamt: u8) {
+        match self {
+            Instruction::I(instruction) => {
+                *instruction = (*instruction & 0xFE0F_FFFF) | ((shamt & 0x7f) as u32) << 20
+            }
+            _ => panic!("can only encode shamt on slli, srai, srli"),
+        }
+    }
+
+    #[inline(always)]
+    pub fn encode_immediate(&mut self, immediate: u32) {
+        match self {
+            Instruction::R(_) => {
+                panic!("cannot encode immediate on type R instruction")
+            }
+
+            // [31-20]
+            // [11: 0]
+            Instruction::I(data) => *data = (*data & 0x000F_FFFF) | (immediate << 20),
+
+            // [31-25] [11-7]
+            // [11: 5] [4: 0]
+            Instruction::S(data) => {
+                *data = (*data & 0x01FF_F07F)
+                    | (immediate << 20) & 0xFE00_0000
+                    | (immediate << 6) & 0x0000_0F80
+            }
+
+            // [31] [30-25] [11-8] [ 7]
+            // [12] [10: 5] [4: 1] [11]
+            Instruction::B(data) => {
+                *data = (*data & 0x01FF_F07F)
+                    | (immediate << 19) & 0x8000_0000
+                    | (immediate << 21) & 0x7E00_0000
+                    | (immediate << 6) & 0x0000_0F00
+                    | (immediate >> 5) & 0x0000_0080
+            }
+
+            Instruction::U(data) => *data = (*data & 0x0000_0FFF) | (immediate & 0xFFFF_F000),
+
+            Instruction::J(data) => {
+                *data = (*data & 0x0000_0FFF)
+                    | (immediate << 12) & 0x8000_0000
+                    | (immediate << 20) & 0x7FE0_0000
+                    | (immediate << 9) & 0x0010_0000
+                    | (immediate >> 12) & 0x000F_F000
             }
         }
     }
@@ -658,45 +779,5 @@ impl Instruction {
             ((immediate >> 4) & 0xFF) as u8,
             ((immediate >> 0) & 0xFF) as u8,
         )
-    }
-
-    pub fn encode_immediate(&mut self, immediate: u32) {
-        match self {
-            Instruction::R(_) => {
-                panic!("invalid instruction: cannot encode immediate on type R")
-            }
-
-            // [31-20]
-            // [11: 0]
-            Instruction::I(data) => *data = (*data & 0x000F_FFFF) | (immediate << 20),
-
-            // [31-25] [11-7]
-            // [11: 5] [4: 0]
-            Instruction::S(data) => {
-                *data = (*data & 0x01FF_F07F)
-                    | (immediate << 20) & 0xFE00_0000
-                    | (immediate << 6) & 0x0000_0F80
-            }
-
-            // [31] [30-25] [11-8] [ 7]
-            // [12] [10: 5] [4: 1] [11]
-            Instruction::B(data) => {
-                *data = (*data & 0x01FF_F07F)
-                    | (immediate << 19) & 0x8000_0000
-                    | (immediate << 21) & 0x7E00_0000
-                    | (immediate << 6) & 0x0000_0F00
-                    | (immediate >> 5) & 0x0000_0080
-            }
-
-            Instruction::U(data) => *data = (*data & 0x0000_0FFF) | (immediate & 0xFFFF_F000),
-
-            Instruction::J(data) => {
-                *data = (*data & 0x0000_0FFF)
-                    | (immediate << 12) & 0x8000_0000
-                    | (immediate << 20) & 0x7FE0_0000
-                    | (immediate << 9) & 0x0010_0000
-                    | (immediate >> 12) & 0x000F_F000
-            }
-        }
     }
 }
