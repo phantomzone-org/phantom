@@ -55,43 +55,12 @@
 //!  7 |bltu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] <u  x[rs2]), pc += sext(imm[19:0])
 //!  8 |bgeu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] >=u x[rs2]), pc += sext(imm[19:0])
 
-pub mod add;
-pub mod addi;
-pub mod and;
-pub mod andi;
-pub mod auipc;
-pub mod beq;
-pub mod bge;
-pub mod bgeu;
-pub mod blt;
-pub mod bltu;
-pub mod bne;
-pub mod jal;
-pub mod jalr;
-pub mod lb;
-pub mod lbu;
-pub mod lh;
-pub mod lhu;
-pub mod lui;
-pub mod lw;
-pub mod or;
-pub mod ori;
-pub mod sb;
-pub mod sh;
-pub mod sll;
-pub mod slli;
-pub mod slt;
-pub mod slti;
-pub mod sltiu;
-pub mod sltu;
-pub mod sra;
-pub mod srai;
-pub mod srl;
-pub mod srli;
-pub mod sub;
-pub mod sw;
-pub mod xor;
-pub mod xori;
+pub mod b_type;
+pub mod i_type;
+pub mod j_type;
+pub mod r_type;
+pub mod s_type;
+pub mod u_type;
 
 use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
@@ -107,7 +76,7 @@ pub fn reconstruct(x: &[u8; 8]) -> u32 {
     y |= (x[3] as u32) << 12;
     y |= (x[2] as u32) << 8;
     y |= (x[1] as u32) << 4;
-    y |= (x[0] as u32);
+    y |= x[0] as u32;
     y
 }
 
@@ -126,168 +95,6 @@ pub fn decompose(x: u32) -> [u8; 8] {
 
 pub fn sext(x: u32, bits: usize) -> u32 {
     x | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
-}
-
-#[allow(dead_code)]
-fn test_r_type(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
-    // 00000 | 00 | rs2[24:20] | rs1[19:15] | funct3 | rd[11:7] |
-    let imm: u32 = 0;
-    let rs2: u8 = 0b11011;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_funct3(funct3);
-    instruction.encode_funct7(funct7);
-    instruction.encode_rs2(rs2);
-    instruction.encode_rs1(rs1);
-    instruction.encode_rd(rd);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, opid.0, opid.1, opid.2);
-}
-
-#[allow(dead_code)]
-fn test_i_type(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
-    // imm[31:20] | rs1[19:15] | funct3 | rd[11:7] | op_code
-    // imm[11: 0]
-    let funct3: u8 = funct3;
-    let imm: u32 = 0xABC;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_funct3(funct3);
-    instruction.encode_rs1(rs1);
-    instruction.encode_rd(rd);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(
-        0,
-        decompose(sext(imm, 11)),
-        rs2,
-        rs1,
-        rd,
-        opid.0,
-        opid.1,
-        opid.2,
-    );
-}
-
-#[allow(dead_code)]
-fn test_i_shamt_type(imm: u32, funct3: u8, opid: (u8, u8, u8)) {
-    // 0000000 | shamt[24:20] | rs1[19:15] | funct3 | rd[11:7] | 0010011
-    let op_code: u8 = 0b0010011;
-    let funct3: u8 = funct3;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_funct3(funct3);
-    instruction.encode_rs1(rs1);
-    instruction.encode_rd(rd);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(
-        0,
-        decompose(imm & 0x1F),
-        rs2,
-        rs1,
-        rd,
-        opid.0,
-        opid.1,
-        opid.2,
-    );
-}
-
-#[allow(dead_code)]
-fn test_s_type(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
-    // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011
-    let imm: u32 = 0xABC;
-    let rs2: u8 = 0b11011;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_funct3(funct3);
-    instruction.encode_rs2(rs2);
-    instruction.encode_rs1(rs1);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(
-        0,
-        decompose(sext(imm, 12)),
-        rs2,
-        rs1,
-        rd,
-        op_id.0,
-        op_id.1,
-        op_id.1,
-    );
-}
-
-#[allow(dead_code)]
-fn test_b_type(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
-    let imm: u32 = 0xABC<<1;
-    let rs2: u8 = 0b11011;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_funct3(funct3);
-    instruction.encode_rs2(rs2);
-    instruction.encode_rs1(rs1);
-    let mut m: Instructions = Instructions::new();
-    println!("instruction: {:032b}", instruction.get());
-    println!("imm : {:032b}", imm);
-    println!("sext: {:032b}", sext(imm, 12));
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(
-        0,
-        decompose(sext(imm, 12)),
-        rs2,
-        rs1,
-        rd,
-        op_id.0,
-        op_id.1,
-        op_id.2,
-    );
-}
-
-#[allow(dead_code)]
-fn test_u_type(op_code: u8, op_id: (u8, u8, u8)) {
-    let imm: u32 = 0xABCD_E000;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = 0b01011;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_rd(rd);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, op_id.0, op_id.1, op_id.2);
-}
-
-#[allow(dead_code)]
-fn test_j_type(op_code: u8, op_id: (u8, u8, u8)) {
-    let imm: u32 = 0xABCDE << 1;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
-    let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.encode_immediate(imm);
-    instruction.encode_rd(rd);
-    let mut m: Instructions = Instructions::new();
-    m.add(instruction);
-    m.assert_size(1);
-    m.assert_instruction(0, decompose(imm), rs2, rs1, rd, op_id.0, op_id.1, op_id.2);
 }
 
 pub trait Arithmetic {
@@ -333,39 +140,39 @@ pub trait Load {
 }
 
 pub enum StoreOps {
-    Sb(sb::Sb),
+    Sb(s_type::sb::Sb),
     //Sh(sh::Sh),
     //Sw(sw::Sw),
 }
 
 pub enum LoadOps {
-    Lb(lb::Lb),
-    Lbu(lbu::Lbu),
-    Lh(lh::Lh),
-    Lhu(lhu::Lhu),
-    Lw(lw::Lw),
+    Lb(i_type::lb::Lb),
+    Lbu(i_type::lbu::Lbu),
+    Lh(i_type::lh::Lh),
+    Lhu(i_type::lhu::Lhu),
+    Lw(i_type::lw::Lw),
 }
 
 pub enum PcUpdatesOps {
-    Auipc(auipc::Auipc),
-    Beq(beq::Beq),
-    Bge(bge::Bge),
-    Bgeu(bgeu::Bgeu),
-    Blt(blt::Blt),
-    Bltu(bltu::Bltu),
-    Bne(bne::Bne),
-    Jal(jal::Jal),
-    Jalr(jalr::Jalr),
+    Auipc(u_type::auipc::Auipc),
+    Beq(b_type::beq::Beq),
+    Bge(b_type::bge::Bge),
+    Bgeu(b_type::bgeu::Bgeu),
+    Blt(b_type::blt::Blt),
+    Bltu(b_type::bltu::Bltu),
+    Bne(b_type::bne::Bne),
+    Jal(j_type::jal::Jal),
+    Jalr(i_type::jalr::Jalr),
 }
 
 pub enum ArithmeticOps {
-    Add(add::Add),
-    Addi(addi::Addi),
-    And(and::And),
-    Andi(andi::Andi),
-    Lui(lui::Lui),
-    Or(or::Or),
-    Ori(ori::Ori),
+    Add(r_type::add::Add),
+    Addi(i_type::addi::Addi),
+    And(r_type::and::And),
+    Andi(i_type::andi::Andi),
+    Lui(u_type::lui::Lui),
+    Or(r_type::or::Or),
+    Ori(i_type::ori::Ori),
     //Sll(sll::Sll),
     //Slli(slli::Slli),
     //Slt(slt::Slt),
@@ -461,9 +268,9 @@ impl Instructions {
     }
 
     pub fn add(&mut self, instruction: Instruction) {
-        let imm_u8: [u8; 8] = decompose(instruction.decode_immediate());
-        let (rs2, rs1, rd) = instruction.decode_registers();
-        let (rd_w, mem_w, pc_w) = instruction.decode_opcode();
+        let imm_u8: [u8; 8] = decompose(instruction.get_immediate());
+        let (rs2, rs1, rd) = instruction.get_registers();
+        let (rd_w, mem_w, pc_w) = instruction.get_opid();
         self.imm_31.push(imm_u8[7]);
         self.imm_27.push(imm_u8[6]);
         self.imm_23.push(imm_u8[5]);
@@ -584,362 +391,363 @@ impl Instructions {
     }
 }
 
-pub enum Instruction {
-    R(u32),
-    I(u32),
-    S(u32),
-    B(u32),
-    U(u32),
-    J(u32),
+pub struct Instruction(u32);
+
+pub const RS1MASK: u32 = 0x000F_8000;
+pub const RS2MASK: u32 = 0x01F0_0000;
+pub const FUNCT3MASK: u32 = 0x0000_7000;
+pub const FUNCT7MASK: u32 = 0xFE00_0000;
+pub const SHAMTMASK: u32 = 0x01F0_0000;
+pub const RDMASK: u32 = 0x0000_0F80;
+pub const OPCODEMASK: u32 = 0x0000_007F;
+
+pub const RS1SHIFT: u32 = 15;
+pub const RS2SHIFT: u32 = 20;
+pub const FUNCT3SHIFT: u32 = 12;
+pub const FUNCT7SHIFT: u32 = 25;
+pub const SHAMTSHIFT: u32 = 20;
+pub const RDSHIFT: u32 = 7;
+pub const OPCODESHIFT: u32 = 0;
+
+pub enum Type {
+    R,
+    I,
+    S,
+    B,
+    U,
+    J,
 }
 
 impl Instruction {
     #[inline(always)]
-    pub fn new(instruction: u32) -> Instruction {
-        match instruction & 0x7f {
-            0b0110011 => Instruction::R(instruction),
-
-            // Type I-immedate:
-            // [31-11] [10- 5] [4 - 1] [ 0]
-            // [  31 ] [30:25] [24:21] [20]
-            0b0010011 | 0b0000011 => Instruction::I(instruction),
-
-            // Type S-immediate
-            //
-            // [31-11] [10- 5] [4 - 1] [ 0]
-            // [  31 ] [30:25] [11: 8] [ 7]
-            0b0100011 => Instruction::S(instruction),
-
-            // Type B-immediate
-            //
-            // [31-12] [11] [10- 5] [4- 1] [0]
-            // [  31 ] [ 7] [30:25] [11:8] [-]
-            0b1100011 => Instruction::B(instruction),
-
-            // Type U-immediate
-            //
-            // [31-12] [11-0]
-            // [31:12] [  - ]
-            0b0110111 | 0b0010111 | 0b1100111 => Instruction::U(instruction),
-
-            // Type J-immediate
-            //
-            // [31-20] [19-12] [11] [10- 5] [4 - 1] [0]
-            // [  31 ] [19:12] [20] [30:25] [24:21] [-]
-            0b1101111 => Instruction::J(instruction),
-
-            _ => {
-                panic!(
-                    "invalid instruction {:032b} -> unrecoginzed opcode: {:07b}",
-                    instruction,
-                    instruction & 0x7f
-                )
-            }
-        }
+    pub fn new(instruction: u32) -> Self {
+        Self(instruction)
     }
 
-    pub fn get(&self) -> u32 {
-        match self {
-            Instruction::R(instruction)
-            | Instruction::I(instruction)
-            | Instruction::S(instruction)
-            | Instruction::B(instruction)
-            | Instruction::U(instruction)
-            | Instruction::J(instruction) => *instruction,
+    pub fn print(&self) {
+        println!("{:032b}", self.0);
+    }
+
+    #[inline(always)]
+    pub fn get_type(&self) -> Type {
+        let opcode: u8 = self.get_opcode();
+        match opcode {
+            0b0110111 | 0b0010111 => Type::U,
+            0b0010011 | 0b0000011 | 0b1100111 => Type::I,
+            0b0110011 => Type::R,
+            0b0100011 => Type::S,
+            0b1101111 => Type::J,
+            0b1100011 => Type::B,
+            _ => panic!("unrecognized opcode: {:07b}", opcode),
         }
     }
 
     #[inline(always)]
-    pub fn encode_funct3(&mut self, funct3: u8) {
-        match self {
-            Instruction::R(instruction)
-            | Instruction::I(instruction)
-            | Instruction::S(instruction)
-            | Instruction::B(instruction) => {
-                *instruction = (*instruction & 0xFFFF_8FFF) | ((funct3 & 0x7) as u32) << 12
+    pub fn get_funct3(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::U | Type::J => panic!(
+                    "cannot get funct3 on Type::(U, J) instructions: {:032b}",
+                    self.0
+                ),
+                _ => {}
             }
-            _ => panic!("can only encode funct3 on R, I, S and B type instruction"),
+        }
+        ((self.0 & FUNCT3MASK) >> FUNCT3SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_funct3(&mut self, funct3: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::U | Type::J => panic!(
+                    "cannot set funct3 on Type::(U, J) instructions: {:032b}",
+                    self.0
+                ),
+                _ => {}
+            }
+        }
+        self.0 =
+            (self.0 & (0xFFFF_FFFF ^ FUNCT3MASK)) | ((funct3 as u32) << FUNCT3SHIFT) & FUNCT3MASK
+    }
+
+    #[inline(always)]
+    pub fn get_funct7(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I => {}
+                _ => panic!(
+                    "cannot get funct7 on Type::(S, B, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        ((self.0 & FUNCT7MASK) >> FUNCT7SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_funct7(&mut self, funct7: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R => {}
+                _ => panic!(
+                    "cannot set funct7 on Type::(I, S, B, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        self.0 =
+            (self.0 & (0xFFFF_FFFF ^ FUNCT7MASK)) | ((funct7 as u32) << FUNCT7SHIFT) & FUNCT7MASK
+    }
+
+    #[inline(always)]
+    pub fn get_rs1(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::S | Type::B => {}
+                _ => panic!(
+                    "cannot get rs1 on Type::(U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        ((self.0 & RS1MASK) >> RS1SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_rs1(&mut self, rs1: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::S | Type::B => {}
+                _ => panic!(
+                    "cannot set rs1 on Type::(U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RS1MASK)) | ((rs1 as u32) << RS1SHIFT) & RS1MASK
+    }
+
+    #[inline(always)]
+    pub fn get_rs2(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::S | Type::B => {}
+                _ => panic!(
+                    "cannot get rs2 on Type::(I, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        ((self.0 & RS2MASK) >> RS2SHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_rs2(&mut self, rs2: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::S | Type::B => {}
+                _ => panic!(
+                    "cannot set rs2 on Type::(I, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RS2MASK)) | ((rs2 as u32) << RS2SHIFT) & RS2MASK
+    }
+
+    #[inline(always)]
+    pub fn get_rd(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::U | Type::J => {}
+                _ => panic!(
+                    "cannot get rd on Type::(S, B) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        ((self.0 & RDMASK) >> RDSHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_rd(&mut self, rd: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::U | Type::J => {}
+                _ => panic!(
+                    "cannot set rd on Type::(S, B) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RDMASK)) | ((rd as u32) << RDSHIFT) & RDMASK
+    }
+
+    #[inline(always)]
+    pub fn get_shamt(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::I => {}
+                _ => panic!(
+                    "cannot get shamt on Type::(R, S, B, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        ((self.0 & SHAMTMASK) >> SHAMTSHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_shamt(&mut self, shamt: u8) {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::I => {}
+                _ => panic!(
+                    "cannot set shamt on Type::(R, S, B, U, J) instructions: {:032b}",
+                    self.0
+                ),
+            }
+        }
+        self.0 = (self.0 & (0xFFFF_FFFF ^ SHAMTMASK)) | ((shamt as u32) << SHAMTSHIFT) & SHAMTMASK
+    }
+
+    #[inline(always)]
+    pub fn get_opcode(&self) -> u8 {
+        ((self.0 & OPCODEMASK) >> OPCODESHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn set_opcode(&mut self, opcode: u8) {
+        self.0 =
+            (self.0 & (0xFFFF_FFFF ^ OPCODEMASK)) | ((opcode as u32) << OPCODESHIFT) & OPCODEMASK
+    }
+
+    #[inline(always)]
+    pub fn set_immediate(&mut self, immediate: u32) {
+        match self.get_type() {
+            Type::R => panic!("cannot encode immediate on type R instruction"),
+            Type::I => match (self.get_funct3(), self.get_opcode()) {
+                (0b001, 0b0010011) | (0b101, 0b0010011) => self.set_shamt(immediate as u8),
+                _ => i_type::set_immediate(&mut self.0, immediate),
+            },
+            Type::S => s_type::set_immediate(&mut self.0, immediate),
+            Type::B => b_type::set_immediate(&mut self.0, immediate),
+            Type::U => u_type::set_immediate(&mut self.0, immediate),
+            Type::J => j_type::set_immediate(&mut self.0, immediate),
         }
     }
 
     #[inline(always)]
-    pub fn encode_funct7(&mut self, funct7: u8) {
-        match self {
-            Instruction::R(instruction) => {
-                *instruction = (*instruction & 0x01FF_FFFF) | ((funct7 & 0x7f) as u32) << 25
-            }
-            _ => panic!("can only encode funct3 on R type instruction"),
+    pub fn get_immediate(&self) -> u32 {
+        match self.get_type() {
+            Type::R => 0,
+            Type::I => match (self.get_funct3(), self.get_opcode()) {
+                (0b001, 0b0010011) | (0b101, 0b0010011) => self.get_shamt() as u32,
+                _ => i_type::get_immediate(&self.0),
+            },
+            Type::S => s_type::get_immediate(&self.0),
+            Type::B => b_type::get_immediate(&self.0),
+            Type::U => u_type::get_immediate(&self.0),
+            Type::J => j_type::get_immediate(&self.0),
         }
     }
 
     #[inline(always)]
-    pub fn encode_rs2(&mut self, rs2: u8) {
-        match self {
-            Instruction::R(instruction)
-            | Instruction::S(instruction)
-            | Instruction::B(instruction) => {
-                *instruction = (*instruction & 0xFE0F_FFFF) | ((rs2 & 0x7f) as u32) << 20
-            }
-            _ => panic!("can only encode rs2 on R, S and B type instruction"),
+    pub fn get_registers(&self) -> (u8, u8, u8) {
+        match self.get_type() {
+            Type::R => (self.get_rs2(), self.get_rs1(), self.get_rd()),
+            Type::I => (0, self.get_rs1(), self.get_rd()),
+            Type::S | Type::B => (self.get_rs2(), self.get_rs1(), 0),
+            Type::U | Type::J => (0, 0, self.get_rd()),
         }
     }
 
     #[inline(always)]
-    pub fn encode_rs1(&mut self, rs1: u8) {
-        match self {
-            Instruction::R(instruction)
-            | Instruction::I(instruction)
-            | Instruction::S(instruction)
-            | Instruction::B(instruction) => {
-                *instruction = (*instruction & 0xFFF0_7FFF) | ((rs1 & 0x7f) as u32) << 15
-            }
-            _ => panic!("can only encode rs2 on R, I, S and B type instruction"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn encode_rd(&mut self, rd: u8) {
-        match self {
-            Instruction::R(instruction)
-            | Instruction::I(instruction)
-            | Instruction::U(instruction)
-            | Instruction::J(instruction) => {
-                *instruction = (*instruction & 0xFFFF_F07F) | ((rd & 0x7f) as u32) << 7
-            }
-            _ => panic!("can only encode rs2 on R, I, U and J type instruction"),
-        }
-    }
-
-    pub fn encode_shamt(&mut self, shamt: u8) {
-        match self {
-            Instruction::I(instruction) => {
-                *instruction = (*instruction & 0xFE0F_FFFF) | ((shamt & 0x7f) as u32) << 20
-            }
-            _ => panic!("can only encode shamt on slli, srai, srli"),
-        }
-    }
-
-    #[inline(always)]
-    pub fn encode_immediate(&mut self, immediate: u32) {
-        match self {
-            Instruction::R(_) => {
-                panic!("cannot encode immediate on type R instruction")
-            }
-
-            // [31-20]
-            // [11: 0]
-            Instruction::I(data) => *data = (*data & 0x000F_FFFF) | (immediate << 20),
-
-            // [31-25] [11-7]
-            // [11: 5] [4: 0]
-            Instruction::S(data) => {
-                *data = (*data & 0x01FF_F07F)
-                    | (immediate << 20) & 0xFE00_0000
-                    | (immediate << 6) & 0x0000_0F80
-            }
-
-            // [31] [30-25] [11-8] [ 7]
-            // [12] [10: 5] [4: 1] [11]
-            Instruction::B(data) => {
-                let imm_shift: u32 = immediate>>1;
-                *data = (*data & 0x01FF_F07F)
-                    | (imm_shift & 0x0000_0800) << 20
-                    | (imm_shift & 0x0000_0400) >> 3
-                    | (imm_shift & 0x0000_03F0) << 21
-                    | (imm_shift & 0x0000_000F) << 8;
-            }
-
-            Instruction::U(data) => *data = (*data & 0x0000_0FFF) | (immediate & 0xFFFF_F000),
-
-            Instruction::J(data) => {
-                *data = (*data & 0x0000_0FFF)
-                    | (immediate << 12) & 0x8000_0000
-                    | (immediate << 20) & 0xFC00_0000
-                    | (immediate << 9) & 0x0010_0000
-                    | (immediate >> 12) & 0x000F_F000
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub fn decode_registers(&self) -> (u8, u8, u8) {
-        match self {
-            Instruction::R(instruction) => (
-                ((instruction >> 20) & 0x1f) as u8,
-                ((instruction >> 15) & 0x1f) as u8,
-                ((instruction >> 7) & 0x1f) as u8,
-            ),
-            Instruction::I(instruction) => (
-                0,
-                ((instruction >> 15) & 0x1f) as u8,
-                ((instruction >> 7) & 0x1f) as u8,
-            ),
-            Instruction::S(instruction) | Instruction::B(instruction) => (
-                ((instruction >> 20) & 0x1f) as u8,
-                ((instruction >> 15) & 0x1f) as u8,
-                0,
-            ),
-            Instruction::U(instruction) | Instruction::J(instruction) => {
-                (0, 0, ((instruction >> 7) & 0x1f) as u8)
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub fn decode_opcode(&self) -> (u8, u8, u8) {
-        match self {
-            Instruction::R(instruction) => {
-                let funct7: u32 = (instruction >> 25) & 0x7f;
-                let funct3: u32 = (instruction >> 12) & 0x7;
-                match funct7 << 7 | funct3 {
-                    0b0000000000 => OpID::ADD,
-                    0b0100000000 => OpID::SUB,
-                    0b0000000001 => OpID::SLL,
-                    0b0000000010 => OpID::SLT,
-                    0b0000000011 => OpID::SLTU,
-                    0b0000000100 => OpID::XOR,
-                    0b0000000101 => OpID::SRL,
-                    0b0100000101 => OpID::SRA,
-                    0b0000000110 => OpID::OR,
-                    0b0000000111 => OpID::AND,
-                    _ => panic!("invalid instruction R-type: {:032b}", instruction),
-                }
-            }
-            Instruction::I(instruction) => {
-                let opcode: u32 = instruction & 0x7F;
-                let funct3: u32 = (instruction >> 12) & 0x7;
+    pub fn get_opid(&self) -> (u8, u8, u8) {
+        let opcode: u8 = self.get_opcode();
+        match self.get_type() {
+            Type::R => match (self.get_funct7(), self.get_funct3()) {
+                (0b0000000, 0b000) => OpID::ADD,
+                (0b0100000, 0b000) => OpID::SUB,
+                (0b0000000, 0b001) => OpID::SLL,
+                (0b0000000, 0b010) => OpID::SLT,
+                (0b0000000, 0b011) => OpID::SLTU,
+                (0b0000000, 0b100) => OpID::XOR,
+                (0b0000000, 0b101) => OpID::SRL,
+                (0b0100000, 0b101) => OpID::SRA,
+                (0b0000000, 0b110) => OpID::OR,
+                (0b0000000, 0b111) => OpID::AND,
+                _ => panic!(
+                    "invalid funct3 {:03b} or funct7 {:07b}: {:032b}",
+                    self.get_funct3(),
+                    self.get_funct7(),
+                    self.0
+                ),
+            },
+            Type::I => {
+                let funct3: u8 = self.get_funct3();
                 match opcode {
-                    0b0010011 => {
-                        let funct7: u32 = (instruction >> 25) & 0x7f;
-                        match (funct7, funct3) {
-                            (_, 0b000) => OpID::ADDI,
-                            (_, 0b010) => OpID::SLTI,
-                            (_, 0b011) => OpID::SLTIU,
-                            (_, 0b100) => OpID::XORI,
-                            (_, 0b110) => OpID::ORI,
-                            (_, 0b111) => OpID::ANDI,
-                            (_, 0b001) => OpID::SLLI,
-                            (0b00000, 0b101) => OpID::SRLI,
-                            (0b01000, 0b101) => OpID::SRAI,
-                            _ => panic!(
-                                "invalid instruction, parsed as I-type: {:032b}",
-                                instruction
-                            ),
-                        }
-                    }
+                    0b0010011 => match funct3 {
+                        0b000 => OpID::ADDI,
+                        0b010 => OpID::SLTI,
+                        0b011 => OpID::SLTIU,
+                        0b100 => OpID::XORI,
+                        0b110 => OpID::ORI,
+                        0b111 => OpID::ANDI,
+                        0b001 => OpID::SLLI,
+                        0b101 => match self.get_funct7() {
+                            0b0000000 => OpID::SRLI,
+                            0b0100000 => OpID::SRAI,
+                            _ => panic!("invalid funct7: {:032b}", self.0),
+                        },
+                        _ => panic!("invalid funct3: {:032b}", self.0),
+                    },
                     0b0000011 => match funct3 {
                         0b000 => OpID::LB,
                         0b001 => OpID::LH,
                         0b010 => OpID::LW,
                         0b100 => OpID::LBU,
                         0b101 => OpID::LHU,
-                        _ => panic!(
-                            "invalid instruction, parsed as I-type: {:032b}",
-                            instruction
-                        ),
+                        _ => panic!("invalid funct3: {:032b}", self.0),
                     },
-                    _ => panic!(
-                        "invalid instruction, parsed as I-type: {:032b}",
-                        instruction
-                    ),
-                }
-            }
-            Instruction::S(instruction) => {
-                let funct3: u32 = (instruction >> 12) & 0x7;
-                match funct3 {
-                    0b000 => OpID::SB,
-                    0b001 => OpID::SH,
-                    0b010 => OpID::SW,
-                    _ => panic!(
-                        "invalid instruction, parsed as S-type: {:032b}",
-                        instruction
-                    ),
-                }
-            }
-            Instruction::B(instruction) => {
-                let funct3: u32 = (instruction >> 12) & 0x7;
-                match funct3 {
-                    0b000 => OpID::BEQ,
-                    0b001 => OpID::BNE,
-                    0b100 => OpID::BLT,
-                    0b101 => OpID::BGE,
-                    0b110 => OpID::BLTU,
-                    0b111 => OpID::BGEU,
-                    _ => panic!(
-                        "invalid instruction, parsed as B-type: {:032b}",
-                        instruction
-                    ),
-                }
-            }
-            Instruction::U(instruction) => {
-                let opid: u32 = instruction & 0x7f;
-                match opid {
-                    0b0110111 => OpID::LUI,
                     0b1100111 => OpID::JALR,
-                    0b0010111 => OpID::AUIPC,
-                    _ => panic!(
-                        "invalid instruction, parsed as U-type: {:032b}",
-                        instruction
-                    ),
+                    _ => panic!("invalid instruction: {:032b}", self.0),
                 }
             }
-            Instruction::J(_) => OpID::JAL,
+            Type::S => match self.get_funct3() {
+                0b000 => OpID::SB,
+                0b001 => OpID::SH,
+                0b010 => OpID::SW,
+                _ => panic!("invalid funct3: {:032b}", self.0),
+            },
+            Type::B => match self.get_funct3() {
+                0b000 => OpID::BEQ,
+                0b001 => OpID::BNE,
+                0b100 => OpID::BLT,
+                0b101 => OpID::BGE,
+                0b110 => OpID::BLTU,
+                0b111 => OpID::BGEU,
+                _ => panic!("invalid funct3: {:032b}", self.0),
+            },
+            Type::U => match opcode {
+                0b0110111 => OpID::LUI,
+                0b0010111 => OpID::AUIPC,
+                _ => panic!("invalid instruction: {:032b}", self.0),
+            },
+            Type::J => OpID::JAL,
         }
-    }
-
-    #[inline(always)]
-    pub fn decode_immediate(&self) -> u32 {
-        let immediate: u32;
-
-        match self {
-            Instruction::R(_) => immediate = 0,
-
-            // Type I-immedate:
-            // [31-11] [10- 5] [4 - 1] [ 0]
-            // [  31 ] [30:25] [24:21] [20]
-            Instruction::I(data) => immediate = (data >> 20) | ((data >> 31) & 1) * 0xFFFF_F000,
-
-            // Type S-immediate
-            //
-            // [31-11] [10- 5] [4 - 1] [ 0]
-            // [  31 ] [30:25] [11: 8] [ 7]
-            Instruction::S(data) => {
-                immediate = (data >> 20) & 0x0000_07E0
-                    | (data >> 7) & 0x0000_001F
-                    | ((data >> 31) & 1) * 0xFFFF_F000
-            }
-
-            // Type B-immediate
-            //
-            // [31-12] [11] [10- 5] [4- 1] [0]
-            // [  31 ] [ 7] [30:25] [11:8] [-]
-            Instruction::B(data) => {
-                immediate = ((data>>20) & 0x0000_0800
-                | (data >> 3) & 0x0000_0400
-                | (data>>21) & 0x0000_03F0
-                | (data>>8) & 0x0000_000F
-                | ((data >> 31) & 1) * 0xFFFF_F800)<<1;
-            }
-
-            // Type U-immediate
-            //
-            // [31-12] [11-0]
-            // [31:12] [  - ]
-            Instruction::U(data) => immediate = data & 0xFFFF_F000,
-
-            // Type J-immediate
-            //
-            // [31-20] [19-12] [11] [10- 5] [4 - 1] [0]
-            // [  31 ] [19:12] [20] [30:25] [24:21] [-]
-            Instruction::J(data) => {
-                immediate = data & 0xff000
-                    | (data >> 9) & 0x0000_0800
-                    | (data >> 20) & 0x0000_07E0
-                    | (data >> 20) & 0x0000_001E
-                    | ((data >> 31) & 1) * 0xFFFF_F000
-            }
-        }
-
-        immediate
     }
 }
