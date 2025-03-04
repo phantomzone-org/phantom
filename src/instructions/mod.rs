@@ -118,6 +118,7 @@ pub trait Store {
         module_lwe: &Module,
         imm: &[u8; 8],
         x_rs1: &[u8; 8],
+        x_rs2: &[u8; 8],
         memory: &mut Memory,
         circuit_btp: &CircuitBootstrapper,
         address: &mut Address,

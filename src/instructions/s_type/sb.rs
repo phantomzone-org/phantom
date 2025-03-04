@@ -15,7 +15,8 @@ impl Store for Sb {
         module_lwe: &Module,
         imm: &[u8; 8],
         x_rs1: &[u8; 8],
-        _memory: &mut Memory,
+        x_rs2: &[u8; 8],
+        memory: &mut Memory,
         circuit_btp: &CircuitBootstrapper,
         address: &mut Address,
         tmp_bytes: &mut [u8],
@@ -24,6 +25,11 @@ impl Store for Sb {
         let imm_u32: u32 = reconstruct(imm);
         let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
         circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
-        //memory.write
+        memory.write(
+            module_lwe,
+            &address,
+            (reconstruct(x_rs2) & 0xFF) as u32,
+            tmp_bytes,
+        )
     }
 }

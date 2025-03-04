@@ -2,7 +2,7 @@
 
 use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
-use crate::instructions::{decompose, reconstruct, Load};
+use crate::instructions::{decompose, reconstruct, sext, Load};
 use crate::memory::Memory;
 use base2k::Module;
 
@@ -25,6 +25,6 @@ impl Load for Lw {
         let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
         circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
         let read: u32 = memory.read(module_lwe, address, tmp_bytes) as u32;
-        decompose(read)
+        decompose(sext(read & 0xFFFF_FFFF, 31))
     }
 }

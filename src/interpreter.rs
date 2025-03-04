@@ -63,22 +63,22 @@ impl Interpreter {
         let mut tmp_bytes_bootstrap_address: Vec<u8> =
             vec![u8::default(); bootstrap_address_tmp_bytes(module_pbs, module_lwe, LIMBS)];
 
-        let rs1_idx_lwe: i64 =
+        let rs1_idx_lwe: u32 =
             self.rs1_addresses
                 .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-        let rs2_idx_lwe: i64 =
+        let rs2_idx_lwe: u32 =
             self.rs2_addresses
                 .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-        let imm_lwe: i64 = self
+        let imm_lwe: u32 = self
             .imm
             .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-        let op_id_register_lwe: i64 =
+        let op_id_register_lwe: u32 =
             self.op_id_register
                 .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-        let op_it_memory_lwe: i64 =
+        let op_it_memory_lwe: u32 =
             self.op_it_memory
                 .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-        let op_id_counter_lwe: i64 =
+        let op_id_counter_lwe: u32 =
             self.op_id_counter
                 .read(module_lwe, &self.counter, &mut tmp_bytes_read);
 
@@ -148,15 +148,15 @@ impl Interpreter {
         );
 
         // Retrieves rs1 and rs2
-        let rs1_lwe: i64 = self
+        let _rs1_lwe: u32 = self
             .register
             .read(module_lwe, &rs1_address, &mut tmp_bytes_read);
 
-        let rs2_lwe: i64 = self
+        let _rs2_lwe: u32 = self
             .register
             .read(module_lwe, &rs2_address, &mut tmp_bytes_read);
 
-        let imm_lwe: i64 = self
+        let _imm_lwe: u32 = self
             .register
             .read(module_lwe, &imm_address, &mut tmp_bytes_read);
 

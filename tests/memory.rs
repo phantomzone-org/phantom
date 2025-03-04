@@ -23,7 +23,7 @@ fn memory() {
     memory.set(&data, log_q);
     let mut address: Address = Address::new(&module, log_base_n, size, rows, cols);
 
-    let write_value: i64 = 255;
+    let write_value: u32 = 255;
 
     let mut tmp_bytes = alloc_aligned_u8(
         read_tmp_bytes(&module, cols, rows, cols)
@@ -38,18 +38,18 @@ fn memory() {
         address.set(&module, i);
 
         // Read only idx[i] and check it is equal to i
-        let value: i64 = memory.read(&module, &address, &mut tmp_bytes);
-        assert_eq!(i as i64, value);
+        let value: u32 = memory.read(&module, &address, &mut tmp_bytes);
+        assert_eq!(i as u32, value);
 
         // Reads idx[i] with prepare for write  check it is equal to i
-        let value: i64 = memory.read_prepare_write(&module, &address, &mut tmp_bytes);
-        assert_eq!(i as i64, value);
+        let value: u32 = memory.read_prepare_write(&module, &address, &mut tmp_bytes);
+        assert_eq!(i as u32, value);
 
         // Writes write_value on idx[i]
         memory.write(&module, &address, write_value, &mut tmp_bytes);
 
         // Read only idx[i], checks it is equal to write_value.
-        let value: i64 = memory.read(&module, &address, &mut tmp_bytes);
+        let value: u32 = memory.read(&module, &address, &mut tmp_bytes);
         assert_eq!(write_value, value);
     });
 }

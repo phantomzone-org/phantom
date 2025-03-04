@@ -109,7 +109,7 @@ impl Memory {
         (self.log_k + self.log_base2k - 1) / self.log_base2k
     }
 
-    pub fn read(&self, module: &Module, address: &Address, tmp_bytes: &mut [u8]) -> i64 {
+    pub fn read(&self, module: &Module, address: &Address, tmp_bytes: &mut [u8]) -> u32 {
         assert_eq!(
             self.state, false,
             "invalid call to Memory.read: internal state is true -> requires calling Memory.write"
@@ -199,7 +199,7 @@ impl Memory {
                 }
             }
         }
-        tmp_vec_znx.decode_coeff_i64(self.log_base2k, self.log_k, 0)
+        tmp_vec_znx.decode_coeff_i64(self.log_base2k, self.log_k, 0) as u32
     }
 
     pub fn read_prepare_write(
@@ -207,7 +207,7 @@ impl Memory {
         module: &Module,
         address: &Address,
         tmp_bytes: &mut [u8],
-    ) -> i64 {
+    ) -> u32 {
         assert_eq!(self.state, false, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
         assert!(tmp_bytes.len() >= read_prepare_write_tmp_bytes(module, self.cols, address.rows(), address.cols()), "invalid tmp_bytes: must be of size greater or equal to self.read_prepare_write_tmp_bytes");
 
@@ -275,21 +275,18 @@ impl Memory {
         self.state = true;
 
         if address.dims_n() != 1 {
-            return self.tree.last_mut().unwrap()[0].decode_coeff_i64(
-                self.log_base2k,
-                self.log_k,
-                0,
-            );
+            return self.tree.last_mut().unwrap()[0].decode_coeff_i64(self.log_base2k, self.log_k, 0)
+                as u32;
         }
 
-        self.data[0].decode_coeff_i64(self.log_base2k, self.log_k, 0)
+        self.data[0].decode_coeff_i64(self.log_base2k, self.log_k, 0) as u32
     }
 
     pub fn write(
         &mut self,
         module: &Module,
         address: &Address,
-        write_value: i64,
+        write_value: u32,
         tmp_bytes: &mut [u8],
     ) {
         assert_eq!(self.state, true, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
@@ -313,9 +310,9 @@ impl Memory {
 
         if address.dims_n() != 1 {
             let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
-            result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32);
+            result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
         } else {
-            self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value, 32)
+            self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32)
         }
 
         // Walk back the tree in reverse order, repacking the coefficients

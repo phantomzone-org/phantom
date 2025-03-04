@@ -25,6 +25,6 @@ impl Load for Lhu {
         let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
         circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
         let read: u32 = memory.read(module_lwe, address, tmp_bytes) as u32;
-        decompose(read)
+        decompose(read & 0xFFFF)
     }
 }

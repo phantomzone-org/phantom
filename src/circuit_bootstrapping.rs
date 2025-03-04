@@ -109,7 +109,7 @@ impl CircuitBootstrapper {
     /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, limbs, data.len());
     /// memory.set(&data, log_k);
     ///
-    /// let out: i64 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+    /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
     ///
     /// assert_eq!(out as u32, value);
     ///
@@ -267,7 +267,7 @@ impl CircuitBootstrapper {
     /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, limbs, data.len());
     /// memory.set(&data, log_k);
     ///
-    /// let out: i64 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+    /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
     ///
     /// assert_eq!(out as usize, idx + offset as usize);
     ///
@@ -290,9 +290,9 @@ impl CircuitBootstrapper {
         mem.set(&data, log_k);
 
         // 2) LWE + offset
-        let mut adr: i64 = mem.read(module_lwe, address, tmp_bytes);
+        let mut adr: u32 = mem.read(module_lwe, address, tmp_bytes);
 
-        adr += offset as i64;
+        adr = adr.wrapping_add(offset);
 
         // 3) LWE -> RGSW
         self.bootstrap_to_address(module_pbs, module_lwe, adr as u32, address, tmp_bytes);
