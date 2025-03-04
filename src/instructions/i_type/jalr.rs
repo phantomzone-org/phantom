@@ -17,13 +17,7 @@ use crate::instructions::{decompose, reconstruct, PcUpdates};
 pub struct Jalr();
 
 impl PcUpdates for Jalr {
-    fn apply(
-        &self,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        _x_rs2: &[u8; 8],
-        pc: &[u8; 8],
-    ) -> ([u8; 8], [u8; 8]) {
+    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> ([u8; 8], [u8; 8]) {
         (
             decompose(reconstruct(pc) + 4),
             decompose(reconstruct(x_rs1).wrapping_add(reconstruct(imm)) & !1),

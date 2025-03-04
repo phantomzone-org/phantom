@@ -20,7 +20,6 @@ pub struct Auipc();
 
 impl PcUpdates for Auipc {
     fn apply(
-        &self,
         imm: &[u8; 8],
         _x_rs1: &[u8; 8],
         _x_rs2: &[u8; 8],

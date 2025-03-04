@@ -19,7 +19,7 @@ use crate::instructions::{decompose, reconstruct, Arithmetic};
 pub struct Srai();
 
 impl Arithmetic for Srai {
-    fn apply(&self, imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let x_rs1_u32: u32 = reconstruct(x_rs1);
         decompose(((x_rs1_u32 as i32) >> (imm_u32 as i32)) as u32)

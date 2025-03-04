@@ -7,6 +7,7 @@ edition = "2021"
 itertools = "0.14.0"
 base2k = { path = "../fhe/base2k"}
 sampling = { path = "../fhe/sampling"}
+rand_core = "0.6.4"
 
 [profile.release]
 debug = true

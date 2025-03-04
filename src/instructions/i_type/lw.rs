@@ -10,7 +10,6 @@ pub struct Lw();
 
 impl Load for Lw {
     fn apply(
-        &self,
         module_pbs: &Module,
         module_lwe: &Module,
         imm: &[u8; 8],

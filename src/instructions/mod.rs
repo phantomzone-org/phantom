@@ -98,22 +98,15 @@ pub fn sext(x: u32, bits: usize) -> u32 {
 }
 
 pub trait Arithmetic {
-    fn apply(&self, _imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
+    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
 }
 
 pub trait PcUpdates {
-    fn apply(
-        &self,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        x_rs2: &[u8; 8],
-        pc: &[u8; 8],
-    ) -> ([u8; 8], [u8; 8]);
+    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8], pc: &[u8; 8]) -> ([u8; 8], [u8; 8]);
 }
 
 pub trait Store {
     fn apply(
-        &self,
         module_pbs: &Module,
         module_lwe: &Module,
         imm: &[u8; 8],
@@ -128,7 +121,6 @@ pub trait Store {
 
 pub trait Load {
     fn apply(
-        &self,
         module_pbs: &Module,
         module_lwe: &Module,
         imm: &[u8; 8],

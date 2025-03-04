@@ -21,7 +21,7 @@ use crate::instructions::{decompose, reconstruct, Arithmetic};
 pub struct Lui();
 
 impl Arithmetic for Lui {
-    fn apply(&self, imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+    fn apply(imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         decompose(reconstruct(imm))
     }
 }

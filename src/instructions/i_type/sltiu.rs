@@ -19,7 +19,7 @@ use crate::instructions::{decompose, reconstruct, Arithmetic};
 pub struct Sltiu();
 
 impl Arithmetic for Sltiu {
-    fn apply(&self, imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         if reconstruct(x_rs1) < reconstruct(imm) {
             return decompose(1);
         }
