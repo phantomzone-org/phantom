@@ -22,3 +22,16 @@ impl Arithmetic for Addi {
         decompose(x_rs1_u32.wrapping_add(imm_u32))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instructions::{decompose, reconstruct, sext};
+    #[test]
+    pub fn apply() {
+        let imm: u32 = sext(0xFFF, 11);
+        let x_rs1: u32 = 0x0FFF_FFFF;
+        let rd_w_decomp: [u8; 8] = Addi::apply(&decompose(imm), &decompose(x_rs1), &[0u8; 8]);
+        assert_eq!(reconstruct(&rd_w_decomp), x_rs1.wrapping_add(imm))
+    }
+}

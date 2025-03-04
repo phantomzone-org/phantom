@@ -19,8 +19,31 @@ pub struct Jalr();
 impl PcUpdates for Jalr {
     fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> ([u8; 8], [u8; 8]) {
         (
-            decompose(reconstruct(pc) + 4),
-            decompose(reconstruct(x_rs1).wrapping_add(reconstruct(imm)) & !1),
+            decompose(reconstruct(pc).wrapping_add(4)),
+            decompose(reconstruct(x_rs1).wrapping_add(reconstruct(imm)) & 0xFFFF_FFFE),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::instructions::{decompose, reconstruct, sext};
+    #[test]
+    pub fn apply() {
+        let imm: u32 = sext(0xFFF, 11);
+        let x_rs1: u32 = 0x0FFF_FFFF;
+        let pc: u32 = 4;
+        let (rd_w_decomp, pc_w_decomp) = Jalr::apply(
+            &decompose(imm),
+            &decompose(x_rs1),
+            &[0u8; 8],
+            &decompose(pc),
+        );
+        assert_eq!(reconstruct(&rd_w_decomp), pc.wrapping_add(4));
+        assert_eq!(
+            reconstruct(&pc_w_decomp),
+            x_rs1.wrapping_add(imm) & 0xFFFF_FFFE
+        );
     }
 }

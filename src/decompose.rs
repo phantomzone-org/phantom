@@ -53,6 +53,8 @@ impl Decomposer {
     }
 
     pub fn decompose(&mut self, module: &Module, value: u32) -> Vec<i64> {
+        //println!("value: {:032b}", value);
+
         let n: usize = module.n();
 
         assert!(
@@ -76,12 +78,12 @@ impl Decomposer {
         //println!("log_2n: {}", log_2n);
 
         self.log_bases.iter().enumerate().for_each(|(i, base)| {
-            assert!(
-                log_2n - 2 > *base,
-                "invalid module: log_2n={} < base+2={}",
-                log_2n,
-                base + 2
-            );
+            //assert!(
+            //    log_2n - 2 > *base,
+            //    "invalid module: log_2n={} < base+2={}",
+            //    log_2n,
+            //    base + 2
+            //);
 
             let last: bool = i == self.log_bases.len() - 1;
 
@@ -169,7 +171,12 @@ impl Decomposer {
             //         =
             // x mod Q : [11110000111100001111000011] [1] [00000] [0...0] [e..e]
 
-            digits = digits << (32 - log_2n + sum_bases + 1);
+            if last {
+                digits = digits << (32 - log_2n + sum_bases);
+            } else {
+                digits = digits << (32 - log_2n + sum_bases + 1);
+            }
+
             //println!("digit final    : {:032b} {:032b}", digits>>32, digits&0xffffffff);
 
             value_u64 -= digits;

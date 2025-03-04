@@ -7,7 +7,7 @@ use base2k::{
     VecZnxVec, VmpPMatOps,
 };
 use itertools::izip;
-use std::cmp::max;
+use std::cmp::min;
 
 pub struct CircuitBootstrapper {
     pub test_vectors: Vec<VecZnx>,
@@ -131,8 +131,6 @@ impl CircuitBootstrapper {
         );
 
         let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, value);
-
-        //println!("addr_decomp: {:?}", addr_decomp);
 
         //println!("cols: {}", address.cols);
 
@@ -373,18 +371,18 @@ impl CircuitBootstrapper {
         );
 
         let n: usize = module.n();
-        let limbs: usize = a.cols();
+        let cols: usize = a.cols();
 
         let step_start: usize = module.log_n() - log_gap_in;
         let step_end = module.log_n();
 
-        let bytes_of_vec_znx = module.bytes_of_vec_znx(limbs);
+        let bytes_of_vec_znx = module.bytes_of_vec_znx(cols);
 
         let (tmp_bytes_buf2, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
         let (tmp_bytes_buf3, trace_tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
 
-        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf2);
-        let mut buf1: VecZnxBorrow = VecZnxBorrow::from_bytes(n, limbs, tmp_bytes_buf3);
+        let mut buf0: VecZnxBorrow = VecZnxBorrow::from_bytes(n, cols, tmp_bytes_buf2);
+        let mut buf1: VecZnxBorrow = VecZnxBorrow::from_bytes(n, cols, tmp_bytes_buf3);
 
         // First partial trace, vanishes all coefficients which are not multiples of gap_in
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
@@ -402,10 +400,17 @@ impl CircuitBootstrapper {
         if log_gap_in != log_gap_out {
             let step_end: usize = step_start;
             let step_start: usize = 0;
-            let steps: usize = max(max_value, 1 << (module.log_n() - log_gap_in));
+            let steps: usize = min(max_value, 1 << (module.log_n() - log_gap_in));
 
             // For each coefficients that can be packed, i.e. n / gap_in
             (0..steps).for_each(|i: usize| {
+                //println!("{}", i);
+                //println!("a");
+                //a.print(a.cols(), a.n());
+
+                //println!("buf0");
+                //buf0.print(buf0.cols(), buf0.n());
+
                 // Cyclic shift the input and output by their respective X^{-gap_in} and X^{-gap_out}
                 if i != 0 {
                     module.vec_znx_rotate_inplace(-(1 << log_gap_in), a);

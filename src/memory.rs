@@ -3,7 +3,7 @@ use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
 use base2k::{
-    Encoding, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps, VecZnxOps,
+    Encoding, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps, VecZnxOps,
     VmpPMatOps,
 };
 use itertools::izip;
@@ -105,10 +105,6 @@ impl Memory {
         self.log_k = log_k;
     }
 
-    pub fn cols(&self) -> usize {
-        (self.log_k + self.log_base2k - 1) / self.log_base2k
-    }
-
     pub fn read(&self, module: &Module, address: &Address, tmp_bytes: &mut [u8]) -> u32 {
         assert_eq!(
             self.state, false,
@@ -121,10 +117,10 @@ impl Memory {
 
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols());
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols);
         let mut results: Vec<VecZnx> = Vec::new();
 
-        let cols: usize = self.cols();
+        let cols: usize = self.cols;
 
         let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
@@ -213,9 +209,9 @@ impl Memory {
 
         let log_n: usize = module.log_n();
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols());
+        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols);
 
-        let cols: usize = self.cols();
+        let cols: usize = self.cols;
 
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
         let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
@@ -297,7 +293,7 @@ impl Memory {
 
         let log_n: usize = module.log_n();
 
-        let cols: usize = self.cols();
+        let cols: usize = self.cols;
 
         let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
