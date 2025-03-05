@@ -1,0 +1,12 @@
+[package]
+name = "compiler-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+compiler = {path = "./../compiler"}
+
+[workspace]
+members = [ 
+    "src/guest"
+]

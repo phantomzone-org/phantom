@@ -1,0 +1,11 @@
+[package]
+name = "guest"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+runtime = { path = "../../../runtime" }
+macros = { path = "../../../macros" }
+sha3 = { version = "0.10.8", default-features = false }
+serde = { version = "1.0", default-features = false }
+postcard = { version = "1.0.10", default-features = false, features = ["alloc"]}

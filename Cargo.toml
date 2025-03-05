@@ -1,13 +1,14 @@
-[package]
-name = "fhevm"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = [
+    "fhevm",
+    "compiler",
+    "runtime",
+    "macros"
+]
 
-[dependencies]
-itertools = "0.14.0"
-base2k = { path = "../fhe/base2k"}
-sampling = { path = "../fhe/sampling"}
-rand_core = "0.6.4"
+# Workspace-wide dependencies and settings can go here
+[workspace.package]
 
-[profile.release]
-debug = true
+[workspace.dependencies]
+# Add any shared dependencies here that multiple crates might use
