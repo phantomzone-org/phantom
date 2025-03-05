@@ -35,7 +35,7 @@ fn memory() {
         //println!("{:?}", i);
 
         // Sets the address to i
-        address.set(&module, i);
+        address.set(&module, i as u32);
 
         // Read only idx[i] and check it is equal to i
         let value: u32 = memory.read(&module, &address, &mut tmp_bytes);

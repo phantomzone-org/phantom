@@ -82,7 +82,7 @@ impl Address {
         self.coordinates_rsh[0].0.len()
     }
 
-    pub fn set(&mut self, module: &Module, idx: usize) {
+    pub fn set(&mut self, module: &Module, idx: u32) {
         let log_n: usize = module.log_n();
         let mask_log_n: usize = (1 << log_n) - 1;
         let mut remain: usize = idx as _;

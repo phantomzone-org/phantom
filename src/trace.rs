@@ -89,7 +89,6 @@ pub fn trace_inplace_core<A: VecZnxCommon>(
 
     (step_start..step_end).for_each(|i| {
         a.rsh(log_base2k, 1, tmp_bytes_carry);
-
         if i == 0 {
             module.vec_znx_automorphism(-1, &mut tmp_a, a, a_cols);
         } else {

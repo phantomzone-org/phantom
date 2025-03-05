@@ -1,7 +1,3 @@
-pub mod sb;
-pub mod sh;
-pub mod sw;
-
 pub const IMMMASK11: u32 = 0x0000_0FE0;
 pub const IMMMASK4: u32 = 0x0000_001F;
 pub const OPMASK: u32 = 0x01FF_F07F;

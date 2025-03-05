@@ -242,7 +242,7 @@ impl CircuitBootstrapper {
     ///
     /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, rows, cols);
     ///
-    /// let idx: usize = 73;
+    /// let idx: u32 = 73;
     ///
     /// address.set(&module_lwe, idx);
     ///
@@ -267,7 +267,7 @@ impl CircuitBootstrapper {
     ///
     /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
     ///
-    /// assert_eq!(out as usize, idx + offset as usize);
+    /// assert_eq!(out, idx + offset);
     ///
     /// ```
     pub fn bootstrap_address(

@@ -1,31 +1,41 @@
-//! | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][7:0])
-
 use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
-use crate::instructions::{decompose, reconstruct, sext, Load};
+use crate::instructions::{decompose, reconstruct};
 use crate::memory::Memory;
 use base2k::Module;
 
-pub struct Lb();
+pub fn prepare_address(
+    module_pbs: &Module,
+    module_lwe: &Module,
+    imm: &[u8; 8],
+    x_rs1: &[u8; 8],
+    circuit_btp: &CircuitBootstrapper,
+    address: &mut Address,
+    tmp_bytes: &mut [u8],
+) {
+    let imm_u32: u32 = reconstruct(imm);
+    let x_rs1_u32: u32 = reconstruct(x_rs1);
+    let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
+    circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
+}
 
-impl Load for Lb {
-    fn apply(
-        module_pbs: &Module,
-        module_lwe: &Module,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        memory: &mut Memory,
-        circuit_btp: &CircuitBootstrapper,
-        address: &mut Address,
-        tmp_bytes: &mut [u8],
-    ) -> [u8; 8] {
-        let imm_u32: u32 = reconstruct(imm);
-        let x_rs1_u32: u32 = reconstruct(x_rs1);
-        let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
-        circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
-        let read: u32 = memory.read_prepare_write(module_lwe, address, tmp_bytes) as u32;
-        decompose(sext(read & 0xFF, 7))
-    }
+pub fn load(
+    module_lwe: &Module,
+    memory: &mut Memory,
+    address: &mut Address,
+    tmp_bytes: &mut [u8],
+) -> [u8; 8] {
+    decompose(memory.read_prepare_write(module_lwe, address, tmp_bytes))
+}
+
+pub fn store(
+    module_lwe: &Module,
+    value: &[u8; 8],
+    memory: &mut Memory,
+    address: &mut Address,
+    tmp_bytes: &mut [u8],
+) {
+    memory.write(module_lwe, &address, reconstruct(value), tmp_bytes)
 }
 
 #[cfg(test)]
@@ -35,7 +45,7 @@ mod tests {
     use crate::circuit_bootstrapping::circuit_bootstrap_tmp_bytes;
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
-    use base2k::{alloc_aligned_u8, Module, VecZnxApi, FFT64};
+    use base2k::{alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxApi, FFT64};
 
     #[test]
     pub fn apply() {
@@ -43,7 +53,7 @@ mod tests {
         let n: usize = 1 << log_n;
         let n_acc = n << 2;
         let log_q: usize = 54;
-        let log_base2k: usize = 15;
+        let log_base2k: usize = 17;
         let log_base_n: usize = 6;
 
         let cols: usize = (log_q + log_base2k - 1) / log_base2k;
@@ -55,10 +65,12 @@ mod tests {
 
         let size: usize = 2 * n + 1;
         let mut data: Vec<i64> = vec![i64::default(); size];
-        data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+        data.iter_mut()
+            .enumerate()
+            .for_each(|(i, x)| *x = 0xFFFF_FFFF - i as i64);
 
         let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, size);
-        memory.set(&data, log_base2k);
+        memory.set(&data, 2 * log_base2k);
 
         let mut address: Address = Address::new(&module_lwe, log_base_n, size, rows, cols);
 
@@ -75,17 +87,35 @@ mod tests {
         let imm: u32 = sext(0xF, 11);
         let x_rs1: u32 = n as u32;
 
-        let loaded: [u8; 8] = Lb::apply(
+        prepare_address(
             &module_pbs,
             &module_lwe,
             &decompose(imm),
             &decompose(x_rs1),
-            &mut memory,
             &circuit_btp,
             &mut address,
             &mut tmp_bytes,
         );
 
-        assert_eq!(x_rs1.wrapping_add(imm) & 0xFF, reconstruct(&loaded));
+        let loaded: [u8; 8] = load(&module_lwe, &mut memory, &mut address, &mut tmp_bytes);
+
+        assert_eq!(
+            data[x_rs1.wrapping_add(imm) as usize] as u32,
+            reconstruct(&loaded)
+        );
+
+        let value: u32 = 0xAABB_CCDD;
+
+        store(
+            &module_lwe,
+            &decompose(value),
+            &mut memory,
+            &mut address,
+            &mut tmp_bytes,
+        );
+
+        let have: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+
+        assert_eq!(value, have);
     }
 }

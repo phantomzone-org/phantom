@@ -1,11 +1,6 @@
 pub mod addi;
 pub mod andi;
 pub mod jalr;
-pub mod lb;
-pub mod lbu;
-pub mod lh;
-pub mod lhu;
-pub mod lw;
 pub mod ori;
 pub mod slli;
 pub mod slti;

@@ -3,8 +3,8 @@ use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
 use base2k::{
-    Encoding, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps, VecZnxOps,
-    VmpPMatOps,
+    Encoding, Module, VecZnx, VecZnxApi, VecZnxBigOps, VecZnxBorrow, VecZnxDft, VecZnxDftOps,
+    VecZnxOps, VmpPMatOps,
 };
 use itertools::izip;
 
@@ -307,8 +307,10 @@ impl Memory {
         if address.dims_n() != 1 {
             let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
             result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
+            result.normalize(self.log_base2k, tmp_bytes);
         } else {
-            self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32)
+            self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
+            self.data[0].normalize(self.log_base2k, tmp_bytes);
         }
 
         // Walk back the tree in reverse order, repacking the coefficients
@@ -362,6 +364,7 @@ impl Memory {
                             poly_lo,
                             tmp_bytes,
                         );
+                        tmp_a.normalize(self.log_base2k, tmp_bytes);
 
                         // Zeroes the first coefficient of poly_j
                         // [a, b, c, d] -> [0, b, c, d]

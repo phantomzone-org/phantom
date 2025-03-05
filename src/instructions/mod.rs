@@ -25,9 +25,9 @@
 //! 20 |or    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] | x[rs2]  
 //! 21 |and   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] & x[rs2]
 //!
-//! 22 |lb    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][7:0])
-//! 23 |lh    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][15:0])
-//! 24 |lw    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][31:0])
+//! 22 |lb    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(lbu)
+//! 23 |lh    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(lhu)
+//! 24 |lw    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][31:0]
 //! 25 |lbu   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][7:0]
 //! 26 |lhu   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][15:0]
 //!
@@ -58,14 +58,10 @@
 pub mod b_type;
 pub mod i_type;
 pub mod j_type;
+pub mod memory;
 pub mod r_type;
 pub mod s_type;
 pub mod u_type;
-
-use crate::address::Address;
-use crate::circuit_bootstrapping::CircuitBootstrapper;
-use crate::memory::Memory;
-use base2k::Module;
 
 pub fn reconstruct(x: &[u8; 8]) -> u32 {
     let mut y: u32 = 0;
@@ -105,45 +101,18 @@ pub trait PcUpdates {
     fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8], pc: &[u8; 8]) -> ([u8; 8], [u8; 8]);
 }
 
-pub trait Store {
-    fn apply(
-        module_pbs: &Module,
-        module_lwe: &Module,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        x_rs2: &[u8; 8],
-        memory: &mut Memory,
-        circuit_btp: &CircuitBootstrapper,
-        address: &mut Address,
-        tmp_bytes: &mut [u8],
-    );
-}
-
-pub trait Load {
-    fn apply(
-        module_pbs: &Module,
-        module_lwe: &Module,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        memory: &mut Memory,
-        circuit_btp: &CircuitBootstrapper,
-        address: &mut Address,
-        tmp_bytes: &mut [u8],
-    ) -> [u8; 8];
-}
-
 pub enum StoreOps {
-    Sb(s_type::sb::Sb),
-    //Sh(sh::Sh),
-    //Sw(sw::Sw),
+    Sb,
+    Sh,
+    Sw,
 }
 
 pub enum LoadOps {
-    Lb(i_type::lb::Lb),
-    Lbu(i_type::lbu::Lbu),
-    Lh(i_type::lh::Lh),
-    Lhu(i_type::lhu::Lhu),
-    Lw(i_type::lw::Lw),
+    Lb,
+    Lbu,
+    Lh,
+    Lhu,
+    Lw,
 }
 
 pub enum PcUpdatesOps {
