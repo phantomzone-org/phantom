@@ -120,21 +120,26 @@ enum Inst {
     SW(u32, u32, u32),
 
     // ECALL
-    ECALL,
+    // ECALL,
 
     // UNIMP
     UNIMP,
-}
-
-struct VMOutputInfo {
-    addr: u32,
-    len: u32,
 }
 
 #[derive(PartialEq, Debug)]
 enum VMState {
     EXEC,
     HALT,
+}
+
+struct InputInfo {
+    start_addr: usize,
+    size: usize,
+}
+
+struct OutputInfo {
+    start_addr: usize,
+    size: usize,
 }
 
 pub struct TestVM {
@@ -146,12 +151,14 @@ pub struct TestVM {
     ram: Memory,
     /// program counter
     pc: u32,
-    /// Output information
-    output_info: Option<VMOutputInfo>,
     /// state
     state: VMState,
     /// ELF
-    elf_bytes: Vec<u8>,
+    _elf_bytes: Vec<u8>,
+    /// Input info
+    input_info: InputInfo,
+    /// Output info
+    output_info: OutputInfo,
 }
 
 impl TestVM {
@@ -206,14 +213,53 @@ impl TestVM {
             });
         }
 
+        // gather input information
+        let inpdata_sec = elf
+            .section_header_by_name(".inpdata")
+            .expect(".inpdata section does not exist")
+            .expect(".inpdata section does not exist");
+        let input_info = InputInfo {
+            start_addr: inpdata_sec.sh_addr as usize,
+            size: inpdata_sec.sh_size as usize,
+        };
+
+        // gather output information
+        let outdata_sec = elf
+            .section_header_by_name(".outdata")
+            .expect(".outdata section does not exist")
+            .expect(".outdata section does not exist");
+        let output_info = OutputInfo {
+            start_addr: outdata_sec.sh_addr as usize,
+            size: outdata_sec.sh_size as usize,
+        };
+
+        // println!(
+        //     ".inpdata section: size={}, flag={}, v_addr={}, values={:?}",
+        //     inpdata_sec.sh_size,
+        //     inpdata_sec.sh_flags,
+        //     inpdata_sec.sh_addr,
+        //     &elf_bytes[inpdata_sec.sh_offset as usize
+        //         ..(inpdata_sec.sh_offset + inpdata_sec.sh_size) as usize]
+        // );
+
+        // println!(
+        //     ".outdata section: size={}, flag={}, v_addr={}, values={:?}",
+        //     outdata_sec.sh_size,
+        //     outdata_sec.sh_flags,
+        //     outdata_sec.sh_addr,
+        //     &elf_bytes[outdata_sec.sh_offset as usize
+        //         ..(outdata_sec.sh_offset + outdata_sec.sh_size) as usize]
+        // );
+
         TestVM {
             registers: [0u32; 32],
             rom,
             ram,
             pc: 0,
-            output_info: None,
             state: VMState::EXEC,
-            elf_bytes,
+            _elf_bytes: elf_bytes,
+            input_info,
+            output_info,
         }
     }
 
@@ -392,11 +438,13 @@ impl TestVM {
             } else if func3 == 0b010 {
                 return Inst::SW(rs1, rs2, imm);
             }
-        } else if opcode == 0b1110011 && ((inst >> 7) == 0) {
-            return Inst::ECALL;
         } else if inst == 3221229683 {
             return Inst::UNIMP;
         }
+
+        // else if opcode == 0b1110011 && ((inst >> 7) == 0) {
+        //     return Inst::ECALL;
+        // }
 
         panic!("Instruction={} cannot be decoded", inst);
     }
@@ -709,15 +757,15 @@ impl TestVM {
 
                 self.pc += 4;
             }
-            Inst::ECALL => {
-                // a0 stores v_addrs, a1 stores v_len
-                self.output_info = Some(VMOutputInfo {
-                    addr: self.register(10),
-                    len: self.register(11),
-                });
+            // Inst::ECALL => {
+            //     // a0 stores v_addrs, a1 stores v_len
+            //     self.output_info = Some(VMOutputInfo {
+            //         addr: self.register(10),
+            //         len: self.register(11),
+            //     });
 
-                self.pc += 4;
-            }
+            //     self.pc += 4;
+            // }
             Inst::UNIMP => {
                 // halt vm
                 self.state = VMState::HALT
@@ -728,37 +776,22 @@ impl TestVM {
     }
 
     pub fn read_input_tape(&mut self, tape: &[u8]) {
-        let elf =
-            elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&self.elf_bytes).unwrap();
-        let inpdata_sec = elf
-            .section_header_by_name(".inpdata")
-            .expect(".inpdata section does not exist")
-            .expect(".inpdata section does not exist");
-
         assert!(
-            tape.len() == inpdata_sec.sh_size as usize,
+            tape.len() == self.input_info.size as usize,
             "Input tape exceeds .inpdata size"
         );
 
-        self.ram.load_memory(inpdata_sec.sh_addr as usize, tape);
-
-        // println!(
-        //     ".inpdata section: size={}, flag={}, v_addr={}, values={:?}",
-        //     inpdata_sec.sh_size,
-        //     inpdata_sec.sh_flags,
-        //     inpdata_sec.sh_addr,
-        //     &self.elf_bytes[inpdata_sec.sh_offset as usize
-        //         ..(inpdata_sec.sh_offset + inpdata_sec.sh_size) as usize]
-        // );
+        self.ram.load_memory(self.input_info.start_addr, tape);
     }
 
-    pub fn output_tape(&self) -> Option<Vec<u8>> {
-        self.output_info.as_ref().map(|info| {
-            let mut output = Vec::with_capacity(info.len as usize);
-            for i in 0..info.len {
-                output.push(self.ram.read_byte((info.addr + i) as usize));
-            }
-            output
-        })
+    pub fn output_tape(&self) -> Vec<u8> {
+        let mut output = Vec::with_capacity((self.output_info.size) as usize);
+        for i in 0..self.output_info.size {
+            output.push(
+                self.ram
+                    .read_byte((self.output_info.start_addr + i) as usize),
+            );
+        }
+        output
     }
 }

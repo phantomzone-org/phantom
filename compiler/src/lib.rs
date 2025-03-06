@@ -100,7 +100,7 @@ mod tests {
             vm.run();
         }
 
-        let output = vm.output_tape().unwrap();
+        let output = vm.output_tape();
         println!("Output={:?}", output);
     }
 }

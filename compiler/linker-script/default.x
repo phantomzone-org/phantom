@@ -27,6 +27,11 @@ SECTIONS
     KEEP(*(.inpdata))
   } > RAM AT> RAM
 
+  .outdata : ALIGN(4)
+  {
+    KEEP(*(.inpdata))
+  } > RAM AT> RAM
+
   .rodata : ALIGN(4)
   {
      . = ALIGN(4);
