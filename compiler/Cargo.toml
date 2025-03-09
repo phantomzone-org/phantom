@@ -5,3 +5,5 @@ edition = "2021"
 
 [dependencies]
 elf = "0.7.4"
+fhevm = {path = "../fhevm"}
+itertools = "0.14.0"

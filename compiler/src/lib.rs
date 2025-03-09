@@ -7,6 +7,8 @@ use std::{
 
 pub mod interpreter;
 
+pub use interpreter::Eisc;
+
 pub struct CompileOpts {
     program: String,
 }
@@ -82,7 +84,7 @@ impl CompileOpts {
 
 #[cfg(test)]
 mod tests {
-    use interpreter::TestVM;
+    use interpreter::Eisc;
 
     use super::*;
 
@@ -92,7 +94,7 @@ mod tests {
         let elf_data = compiler.build();
 
         // VM
-        let mut vm = TestVM::init(elf_data);
+        let mut vm = Eisc::init(elf_data).test_vm();
 
         // vm.read_input_tape(&[123, 0, 0, 0, 89, 1, 0, 0]);
 

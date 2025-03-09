@@ -22,6 +22,7 @@ pub struct Interpreter {
     pub register: Memory,
     pub memory: Memory,
     pub ret: bool,
+    pub ram_offset: u32,
 }
 
 impl Interpreter {
@@ -45,6 +46,7 @@ impl Interpreter {
             register: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, 32),
             memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
             ret: false,
+            ram_offset: 0,
         }
     }
 
