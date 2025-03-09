@@ -50,7 +50,7 @@ mod tests {
     }
 }
 
-use crate::instructions::{decompose, sext, Instruction, Instructions};
+use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
 fn test_instruction(op_code: u8, op_id: (u8, u8, u8)) {
     let imm: u32 = 0xABCDE << 1;
@@ -61,17 +61,17 @@ fn test_instruction(op_code: u8, op_id: (u8, u8, u8)) {
     instruction.set_immediate(imm);
     instruction.set_rd(rd);
     instruction.print();
-    let mut m: Instructions = Instructions::new();
+    let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
     m.assert_instruction(
         0,
-        decompose(sext(imm, 20)),
-        rs2,
-        rs1,
-        rd,
-        op_id.0,
-        op_id.1,
-        op_id.2,
+        sext(imm, 20) as i64,
+        rs2 as i64,
+        rs1 as i64,
+        rd as i64,
+        op_id.0 as i64,
+        op_id.1 as i64,
+        op_id.2 as i64,
     );
 }

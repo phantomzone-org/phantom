@@ -115,7 +115,7 @@ mod tests {
     }
 }
 
-use crate::instructions::{decompose, sext, Instruction, Instructions};
+use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
 fn test_instruction(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
     // imm[31:20] | rs1[19:15] | funct3 | rd[11:7] | op_code
@@ -130,18 +130,18 @@ fn test_instruction(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
     instruction.set_funct3(funct3);
     instruction.set_rs1(rs1);
     instruction.set_rd(rd);
-    let mut m: Instructions = Instructions::new();
+    let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
     m.assert_instruction(
         0,
-        decompose(sext(imm, 11)),
-        rs2,
-        rs1,
-        rd,
-        opid.0,
-        opid.1,
-        opid.2,
+        sext(imm, 11) as i64,
+        rs2 as i64,
+        rs1 as i64,
+        rd as i64,
+        opid.0 as i64,
+        opid.1 as i64,
+        opid.2 as i64,
     );
 }
 
@@ -158,17 +158,17 @@ fn test_instruction_shamt(imm: u32, funct3: u8, opid: (u8, u8, u8)) {
     instruction.set_funct3(funct3);
     instruction.set_rs1(rs1);
     instruction.set_rd(rd);
-    let mut m: Instructions = Instructions::new();
+    let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
     m.assert_instruction(
         0,
-        decompose(imm & 0x1F),
-        rs2,
-        rs1,
-        rd,
-        opid.0,
-        opid.1,
-        opid.2,
+        (imm & 0x1F)  as i64,
+        rs2 as i64,
+        rs1 as i64,
+        rd as i64,
+        opid.0 as i64,
+        opid.1 as i64,
+        opid.2 as i64,
     );
 }

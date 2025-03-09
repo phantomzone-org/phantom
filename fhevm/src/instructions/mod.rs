@@ -61,6 +61,7 @@ pub mod j_type;
 pub mod r_type;
 pub mod s_type;
 pub mod u_type;
+pub mod memory;
 
 pub fn reconstruct(x: &[u8; 8]) -> u32 {
     let mut y: u32 = 0;
@@ -191,34 +192,20 @@ impl OpID {
     pub const BGEU: (u8, u8, u8) = (0, 0, 8);
 }
 
-pub struct Instructions {
-    imm_31: Vec<u8>,
-    imm_27: Vec<u8>,
-    imm_23: Vec<u8>,
-    imm_19: Vec<u8>,
-    imm_15: Vec<u8>,
-    imm_11: Vec<u8>,
-    imm_7: Vec<u8>,
-    imm_3: Vec<u8>,
-    rs2: Vec<u8>,
-    rs1: Vec<u8>,
-    rd: Vec<u8>,
-    rd_w: Vec<u8>,
-    mem_w: Vec<u8>,
-    pc_w: Vec<u8>,
+pub struct InstructionsParser {
+    pub imm: Vec<i64>,
+    pub rs2: Vec<i64>,
+    pub rs1: Vec<i64>,
+    pub rd: Vec<i64>,
+    pub rd_w: Vec<i64>,
+    pub mem_w: Vec<i64>,
+    pub pc_w: Vec<i64>,
 }
 
-impl Instructions {
+impl InstructionsParser {
     pub fn new() -> Self {
-        Instructions {
-            imm_31: Vec::new(),
-            imm_27: Vec::new(),
-            imm_23: Vec::new(),
-            imm_19: Vec::new(),
-            imm_15: Vec::new(),
-            imm_11: Vec::new(),
-            imm_7: Vec::new(),
-            imm_3: Vec::new(),
+        InstructionsParser {
+            imm: Vec::new(),
             rs2: Vec::new(),
             rs1: Vec::new(),
             rd: Vec::new(),
@@ -229,31 +216,19 @@ impl Instructions {
     }
 
     pub fn add(&mut self, instruction: Instruction) {
-        let imm_u8: [u8; 8] = decompose(instruction.get_immediate());
         let (rs2, rs1, rd) = instruction.get_registers();
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
-        self.imm_31.push(imm_u8[7]);
-        self.imm_27.push(imm_u8[6]);
-        self.imm_23.push(imm_u8[5]);
-        self.imm_19.push(imm_u8[4]);
-        self.imm_15.push(imm_u8[3]);
-        self.imm_11.push(imm_u8[2]);
-        self.imm_7.push(imm_u8[1]);
-        self.imm_3.push(imm_u8[0]);
-        self.rs2.push(rs2);
-        self.rs1.push(rs1);
-        self.rd.push(rd);
-        self.rd_w.push(rd_w);
-        self.mem_w.push(mem_w);
-        self.pc_w.push(pc_w);
+        self.imm.push(instruction.get_immediate() as i64);
+        self.rs2.push(rs2 as i64);
+        self.rs1.push(rs1 as i64);
+        self.rd.push(rd as i64);
+        self.rd_w.push(rd_w as i64);
+        self.mem_w.push(mem_w as i64);
+        self.pc_w.push(pc_w as i64);
     }
 
     pub fn assert_size(&self, size: usize) {
-        assert_eq!(self.imm_19.len(), size);
-        assert_eq!(self.imm_15.len(), size);
-        assert_eq!(self.imm_11.len(), size);
-        assert_eq!(self.imm_7.len(), size);
-        assert_eq!(self.imm_3.len(), size);
+        assert_eq!(self.imm.len(), size);
         assert_eq!(self.rs2.len(), size);
         assert_eq!(self.rs1.len(), size);
         assert_eq!(self.rd.len(), size);
@@ -265,59 +240,20 @@ impl Instructions {
     pub fn assert_instruction(
         &self,
         idx: usize,
-        imm: [u8; 8],
-        rs2: u8,
-        rs1: u8,
-        rd: u8,
-        rd_w: u8,
-        mem_w: u8,
-        pc_w: u8,
+        imm: i64,
+        rs2: i64,
+        rs1: i64,
+        rd: i64,
+        rd_w: i64,
+        mem_w: i64,
+        pc_w: i64,
     ) {
-        let number_of_instructions: usize = self.imm_19.len();
+        let number_of_instructions: usize = self.imm.len();
         assert!(number_of_instructions > idx);
-
         assert_eq!(
-            self.imm_31[idx], imm[7],
-            "invalid imm_31: have {:04b} want {:04b}",
-            self.imm_31[idx], imm[7]
-        );
-
-        assert_eq!(
-            self.imm_27[idx], imm[6],
-            "invalid imm_27: have {:04b} want {:04b}",
-            self.imm_27[idx], imm[6]
-        );
-
-        assert_eq!(
-            self.imm_23[idx], imm[5],
-            "invalid imm_19: have {:04b} want {:04b}",
-            self.imm_23[idx], imm[5]
-        );
-
-        assert_eq!(
-            self.imm_19[idx], imm[4],
-            "invalid imm_19: have {:04b} want {:04b}",
-            self.imm_19[idx], imm[4]
-        );
-        assert_eq!(
-            self.imm_15[idx], imm[3],
-            "invalid imm_15: have {:04b} want {:04b}",
-            self.imm_15[idx], imm[3]
-        );
-        assert_eq!(
-            self.imm_11[idx], imm[2],
-            "invalid imm_11: have {:04b} want {:04b}",
-            self.imm_11[idx], imm[2]
-        );
-        assert_eq!(
-            self.imm_7[idx], imm[1],
-            "invalid imm_7: have {:04b} want {:04b}",
-            self.imm_7[idx], imm[1]
-        );
-        assert_eq!(
-            self.imm_3[idx], imm[0],
-            "invalid imm_3: have {:04b} want {:04b}",
-            self.imm_3[idx], imm[0]
+            self.imm[idx], imm,
+            "invalid imm_31: have {:032b} want {:032b}",
+            self.imm[idx], imm
         );
         assert_eq!(
             self.rs2[idx], rs2,

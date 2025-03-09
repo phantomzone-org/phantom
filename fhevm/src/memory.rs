@@ -3,7 +3,7 @@ use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
 use base2k::{
-    Encoding, Module, VecZnx, VecZnxApi, VecZnxBigOps, VecZnxBorrow, VecZnxDft, VecZnxDftOps,
+    Encoding, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps,
     VecZnxOps, VmpPMatOps,
 };
 use itertools::izip;
