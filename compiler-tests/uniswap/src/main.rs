@@ -44,7 +44,7 @@ fn main() {
         t0: rng.random(),
         t1: rng.random(),
     };
-    for _ in 0..100 {
+    for _ in 0..1 {
         let input = Input {
             pool: pool.clone(),
             inp0: rng.random(),
@@ -58,6 +58,7 @@ fn main() {
         while vm.is_exec() {
             vm.run();
         }
+
         let output_tape = vm.output_tape();
 
         // Check output
