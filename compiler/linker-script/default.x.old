@@ -1,0 +1,99 @@
+ENTRY(_start)
+
+MEMORY
+{
+  RAM : ORIGIN = 0x80000000, LENGTH = 16K
+  FLASH : ORIGIN = 0x20000000, LENGTH = 16M
+}
+
+REGION_ALIAS("REGION_TEXT", FLASH);
+REGION_ALIAS("REGION_RODATA", FLASH);
+REGION_ALIAS("REGION_DATA", RAM);
+REGION_ALIAS("REGION_BSS", RAM);
+
+
+SECTIONS
+{
+  . = 0;
+
+  .text : ALIGN(4)
+  {
+    KEEP(*(.init));
+    . = ALIGN(4);
+    KEEP(*(.init.rust));
+    *(.text .text.*);
+
+    . = ALIGN(4);
+  } > REGION_TEXT
+
+  .rodata : ALIGN(4)
+  {
+     . = ALIGN(4);
+
+    *(.srodata .srodata.*);
+    *(.rodata .rodata.*);
+
+    /* ${ARCH_WIDTH}-byte align the end (VMA) of this section.
+       This is required by LLD to ensure the LMA of the following .data
+       section will have the correct alignment. */
+    . = ALIGN(4);
+  } > REGION_RODATA
+
+  .data : ALIGN(4)
+  {
+    . = ALIGN(4);
+
+    /* Must be called __global_pointer$ for linker relaxations to work.
+       
+       Must point to address where .sdata starts offset by 2048 bytes 
+       for best optimisation
+
+       ref: https://gnu-mcu-eclipse.github.io/arch/riscv/programmer/#the-gp-global-pointer-register
+       ref: https://groups.google.com/a/groups.riscv.org/g/sw-dev/c/60IdaZj27dY
+     */
+    PROVIDE(__global_pointer$ = . + 0x800);
+    *(.sdata .sdata.* .sdata2 .sdata2.*);
+    *(.data .data.*);
+
+  } > REGION_DATA
+
+
+  .bss (NOLOAD) : ALIGN(4)
+  {
+    . = ALIGN(4);
+    *(.sbss .sbss.* .bss .bss.*);
+  } > REGION_BSS
+
+  . = ALIGN(4);
+  PROVIDE(_stack_start = .);
+
+  /* fake output .got section */
+  /* Dynamic relocations are unsupported. This section is only used to detect
+     relocatable code in the input files and raise an error if relocatable code
+     is found */
+  .got (INFO) :
+  {
+    KEEP(*(.got .got.*));
+  }
+}
+
+
+
+/* Do not exceed this mark in the error messages above                                    | */
+ASSERT(ORIGIN(REGION_TEXT) % 4 == 0, "
+ERROR(riscv-rt): the start of the REGION_TEXT must be 4-byte aligned");
+
+ASSERT(ORIGIN(REGION_RODATA) % 4 == 0, "
+ERROR(riscv-rt): the start of the REGION_RODATA must be 4-byte aligned");
+
+ASSERT(ORIGIN(REGION_DATA) % 4 == 0, "
+ERROR(riscv-rt): the start of the REGION_DATA must be 4-byte aligned");
+
+/* # Other checks */
+ASSERT(SIZEOF(.got) == 0, "
+ERROR(riscv-rt): .got section detected in the input files. Dynamic relocations are not
+supported. If you are linking to C code compiled using the `cc` crate then modify your
+build script to compile the C code _without_ the -fPIC flag. See the documentation of
+the `cc::Build.pic` method for details.");
+
+/* Do not exceed this mark in the error messages above                                    | */
