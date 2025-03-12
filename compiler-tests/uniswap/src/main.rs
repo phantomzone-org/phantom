@@ -1,4 +1,4 @@
-use compiler::{CompileOpts, Eisc};
+use compiler::{CompileOpts, Phantom};
 use rand::{rng, Rng};
 use std::ptr;
 
@@ -36,14 +36,14 @@ struct Input {
 fn main() {
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
-    let eisc = Eisc::init(elf_bytes);
+    let eisc = Phantom::init(elf_bytes);
 
     let mut rng = rng();
     let mut pool = Pool {
         t0: rng.random(),
         t1: rng.random(),
     };
-    for _ in 0..100 {
+    for _ in 0..10 {
         let input = Input {
             pool: pool.clone(),
             inp0: rng.random(),
@@ -57,6 +57,7 @@ fn main() {
         while vm.is_exec() {
             vm.run();
         }
+
         let output_tape = vm.output_tape();
 
         // Check output

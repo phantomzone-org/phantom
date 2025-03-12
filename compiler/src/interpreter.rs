@@ -32,8 +32,8 @@ struct OutputInfo {
     size: usize,
 }
 
-/// Encrypted Risc-v
-pub struct Eisc {
+/// Phantom VM: Encrypted Risc-v
+pub struct Phantom {
     boot_rom: BootMemory,
     boot_ram: BootMemory,
     output_info: OutputInfo,
@@ -41,7 +41,7 @@ pub struct Eisc {
     _elf_bytes: Vec<u8>,
 }
 
-impl Eisc {
+impl Phantom {
     pub fn init(elf_bytes: Vec<u8>) -> Self {
         let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&elf_bytes).unwrap();
 
@@ -137,7 +137,7 @@ impl Eisc {
         //         ..(outdata_sec.sh_offset + outdata_sec.sh_size) as usize]
         // );
 
-        Eisc {
+        Phantom {
             boot_rom,
             boot_ram,
             output_info,

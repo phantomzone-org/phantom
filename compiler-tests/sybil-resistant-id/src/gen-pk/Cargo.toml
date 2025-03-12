@@ -1,0 +1,9 @@
+[package]
+name = "gen-pk"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+runtime = { path = "../../../../runtime" }
+macros = { path = "../../../../macros" }
+k256 = {version = "0.13.4", default-features = false, features = ["ecdsa", "alloc"]}

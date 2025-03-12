@@ -1,0 +1,15 @@
+[package]
+name = "sybil-resistant-id"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+compiler = {path = "./../../compiler"}
+rand = "0.9.0"
+k256 = {version = "0.13.4", default-features = false,features = ["ecdsa", "alloc"]}
+
+[workspace]
+members = [ 
+    "src/gen-pk", 
+    "src/guest"
+]
