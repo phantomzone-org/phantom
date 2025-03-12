@@ -52,7 +52,7 @@ pub fn read_input() -> [u8; 4] {
 
 #[cfg(target_arch = "riscv32")]
 
-pub fn produce_output(v: &[u8]) {
+pub fn println(v: &str) {
     let v_addr = v.as_ptr().addr();
     let v_len = v.len();
     unsafe {

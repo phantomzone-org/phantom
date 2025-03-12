@@ -1,8 +1,8 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 use core::panic::PanicInfo;
-use k256::ecdsa::{
-    signature::{Signer, Verifier},
-    Signature, SigningKey, VerifyingKey,
+use k256::{
+    ecdsa::{signature::Verifier, Signature, VerifyingKey},
+    sha2::{Digest, Sha256},
 };
 use macros::entry;
 
@@ -14,9 +14,11 @@ fn panic(_info: &PanicInfo) -> ! {
 extern crate alloc;
 extern crate runtime;
 
+#[derive(Default)]
 #[repr(C)]
 struct Output {
-    b: bool,
+    sig_valid: bool,
+    output_hash: [u8; 32],
 }
 
 #[repr(C)]
@@ -25,6 +27,13 @@ struct Input {
     message: [u8; 64],
 }
 
+#[no_mangle]
+static SALT: [u8; 32] = [
+    175, 142, 86, 41, 61, 122, 186, 56, 50, 101, 187, 215, 124, 127, 14, 221, 109, 201, 110, 189,
+    174, 1, 87, 170, 113, 193, 170, 115, 85, 51, 79, 172,
+];
+
+#[no_mangle]
 static PUBLIC_KEY: [u8; 33] = [
     2, 84, 34, 56, 151, 6, 19, 16, 128, 51, 127, 122, 130, 105, 166, 135, 58, 206, 146, 227, 10,
     105, 123, 3, 17, 226, 60, 250, 40, 21, 229, 13, 102,
@@ -47,11 +56,21 @@ fn main() {
 
     let signature = Signature::from_slice(&input.signature).unwrap();
     let message = &input.message;
-    let public_key = VerifyingKey::from_sec1_bytes(&PUBLIC_KEY).unwrap();
+    let pk = VerifyingKey::from_sec1_bytes(&PUBLIC_KEY).unwrap();
+    let mut out = Output::default();
+    match pk.verify(message.as_slice(), &signature) {
+        Ok(_) => {
+            out.sig_valid = true;
 
-    let mut out = Output { b: false };
-    if public_key.verify(message, &signature).is_ok() {
-        out.b = true;
+            // sha256(message || SALT)
+            let mut hasher = Sha256::new();
+            hasher.update(message.as_slice());
+            hasher.update(SALT.as_slice());
+            out.output_hash = hasher.finalize().into();
+        }
+        Err(_) => {
+            out.sig_valid = false;
+        }
     }
 
     // WRITE OUTPUT
