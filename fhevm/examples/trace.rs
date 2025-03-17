@@ -1,6 +1,6 @@
 use base2k::{
-    alloc_aligned_u8, Encoding, Infos, Module, Sampling, VecZnx, VecZnxApi, VecZnxBigOps,
-    VecZnxOps, FFT64,
+    alloc_aligned_u8, Encoding, Infos, Module, Sampling, VecZnx, VecZnxBigOps, VecZnxOps,
+    MODULETYPE,
 };
 use fhevm::trace::{trace_inplace, trace_tmp_bytes};
 use sampling::source::Source;
@@ -12,7 +12,7 @@ fn main() {
     let log_base2k: usize = 16;
     let log_k: usize = cols * log_base2k - 5;
 
-    let module: Module = Module::new::<FFT64>(n);
+    let module: Module = Module::new(n, MODULETYPE::FFT64);
 
     let mut source = Source::new([0; 32]);
 

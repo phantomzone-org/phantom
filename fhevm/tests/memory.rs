@@ -1,4 +1,4 @@
-use base2k::{alloc_aligned_u8, Module, FFT64};
+use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 use fhevm::address::Address;
 use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 
@@ -13,7 +13,7 @@ fn memory() {
     let rows: usize = (log_q + log_base2k - 1) / log_base2k;
     let cols: usize = rows;
 
-    let module = Module::new::<FFT64>(n);
+    let module = Module::new(n, MODULETYPE::FFT64);
 
     let size: usize = 2 * n + 1;
     let mut data: Vec<i64> = vec![i64::default(); size];

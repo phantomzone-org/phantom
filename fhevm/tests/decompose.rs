@@ -1,4 +1,4 @@
-use base2k::{Module, FFT64};
+use base2k::{Module, MODULETYPE};
 use fhevm::decompose::Decomposer;
 
 #[test]
@@ -6,7 +6,7 @@ fn decompose_u32() {
     let n: usize = 1 << 12;
     let log_base2k: usize = 15;
     let limbs: usize = 4;
-    let module = Module::new::<FFT64>(n);
+    let module = Module::new(n, MODULETYPE::FFT64);
 
     let log_base: Vec<usize> = [6, 6, 6, 6, 6, 2].to_vec();
 

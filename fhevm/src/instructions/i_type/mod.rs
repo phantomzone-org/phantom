@@ -163,7 +163,7 @@ fn test_instruction_shamt(imm: u32, funct3: u8, opid: (u8, u8, u8)) {
     m.assert_size(1);
     m.assert_instruction(
         0,
-        (imm & 0x1F)  as i64,
+        (imm & 0x1F) as i64,
         rs2 as i64,
         rs1 as i64,
         rd as i64,

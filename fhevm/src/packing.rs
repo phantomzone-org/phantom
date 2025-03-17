@@ -1,6 +1,4 @@
-use base2k::{
-    alloc_aligned, Infos, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxCommon, VecZnxOps,
-};
+use base2k::{alloc_aligned, Infos, Module, VecZnx, VecZnxOps};
 
 pub struct StreamRepacker {
     log_base2k: usize,
@@ -16,9 +14,9 @@ pub struct Accumulator {
 }
 
 impl Accumulator {
-    pub fn new(module: &Module, limbs: usize) -> Self {
+    pub fn new(module: &Module, cols: usize) -> Self {
         Self {
-            buf: module.new_vec_znx(limbs),
+            buf: module.new_vec_znx(cols),
             value: false,
             control: false,
         }
@@ -46,12 +44,7 @@ impl StreamRepacker {
         self.counter = 0;
     }
 
-    pub fn add<T: VecZnxCommon>(
-        &mut self,
-        module: &Module,
-        a: Option<&T>,
-        result: &mut Vec<VecZnx>,
-    ) {
+    pub fn add(&mut self, module: &Module, a: Option<&VecZnx>, result: &mut Vec<VecZnx>) {
         pack_core(
             module,
             self.log_base2k,
@@ -77,13 +70,13 @@ impl StreamRepacker {
 }
 
 pub fn pack_core_tmp_bytes(module: &Module, cols: usize) -> usize {
-    2 * VecZnxBorrow::bytes_of(module.n(), cols) + module.vec_znx_normalize_tmp_bytes()
+    2 * VecZnx::bytes_of(module.n(), cols) + module.vec_znx_normalize_tmp_bytes()
 }
 
-fn pack_core<A: VecZnxCommon>(
+fn pack_core(
     module: &Module,
     log_base2k: usize,
-    a: Option<&A>,
+    a: Option<&VecZnx>,
     accumulators: &mut [Accumulator],
     i: usize,
     tmp_bytes: &mut [u8],
@@ -133,11 +126,11 @@ fn pack_core<A: VecZnxCommon>(
     }
 }
 
-fn combine<A: VecZnxCommon>(
+fn combine(
     module: &Module,
     log_base2k: usize,
     acc: &mut Accumulator,
-    b: Option<&A>,
+    b: Option<&VecZnx>,
     i: usize,
     tmp_bytes: &mut [u8],
 ) {
@@ -159,8 +152,8 @@ fn combine<A: VecZnxCommon>(
     let (tmp_bytes_a, tmp_bytes) = tmp_bytes.split_at_mut(vec_znx_tmp_bytes);
     let (tmp_bytes_b, tmp_bytes_carry) = tmp_bytes.split_at_mut(vec_znx_tmp_bytes);
 
-    let mut tmp_a: VecZnxBorrow = VecZnxBorrow::from_bytes(module.n(), cols, tmp_bytes_a);
-    let mut tmp_b: VecZnxBorrow = VecZnxBorrow::from_bytes(module.n(), cols, tmp_bytes_b);
+    let mut tmp_a: VecZnx = VecZnx::from_bytes_borrow(module.n(), cols, tmp_bytes_a);
+    let mut tmp_b: VecZnx = VecZnx::from_bytes_borrow(module.n(), cols, tmp_bytes_b);
 
     if acc.value {
         a.rsh(log_base2k, 1, tmp_bytes_carry);

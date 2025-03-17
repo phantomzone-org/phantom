@@ -1,4 +1,4 @@
-use base2k::{alloc_aligned, Infos, Module, VecZnx, VecZnxApi, VecZnxOps};
+use base2k::{alloc_aligned, Infos, Module, VecZnx, VecZnxOps};
 
 pub struct TestVector(pub VecZnx);
 

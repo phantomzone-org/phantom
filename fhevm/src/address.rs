@@ -1,6 +1,6 @@
 use base2k::{
-    alloc_aligned, alloc_aligned_u8, Infos, Module, VecZnxBig, VecZnxBigOps, VecZnxCommon,
-    VecZnxDft, VecZnxDftOps, VmpPMat, VmpPMatOps,
+    alloc_aligned, alloc_aligned_u8, Infos, Module, VecZnx, VecZnxBig, VecZnxBigOps, VecZnxDft,
+    VecZnxDftOps, VmpPMat, VmpPMatOps,
 };
 use itertools::izip;
 
@@ -169,12 +169,12 @@ impl Coordinate {
         });
     }
 
-    pub fn product<A: VecZnxCommon, B: VecZnxCommon>(
+    pub fn product(
         &self,
         module: &Module,
         log_base2k: usize,
-        b: &mut B,
-        a: &A,
+        b: &mut VecZnx,
+        a: &VecZnx,
         tmp_b_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {
@@ -191,11 +191,11 @@ impl Coordinate {
         module.vec_znx_big_normalize(log_base2k, b, &tmp_b_big, buf);
     }
 
-    pub fn product_inplace<A: VecZnxCommon>(
+    pub fn product_inplace(
         &self,
         module: &Module,
         log_base2k: usize,
-        a: &mut A,
+        a: &mut VecZnx,
         tmp_a_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {

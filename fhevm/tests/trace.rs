@@ -1,4 +1,4 @@
-use base2k::{alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxOps, FFT64};
+use base2k::{alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxOps, MODULETYPE};
 use fhevm::trace::{trace_inplace, trace_inplace_inv, trace_inv_tmp_bytes, trace_tmp_bytes};
 
 #[test]
@@ -6,7 +6,7 @@ fn trace_u64() {
     let n: usize = 1 << 5;
     let log_base2k: usize = 15;
     let cols: usize = 3;
-    let module: Module = Module::new::<FFT64>(n);
+    let module: Module = Module::new(n, MODULETYPE::FFT64);
 
     sub_test("test_trace::<INV:false, NTT:false>", || {
         test_trace::<false>(&module, log_base2k, cols)

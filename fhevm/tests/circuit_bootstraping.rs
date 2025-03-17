@@ -1,6 +1,6 @@
 use base2k::{
-    alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxApi, VecZnxBig, VecZnxBigOps, VecZnxDft,
-    VecZnxDftOps, VecZnxOps, VmpPMat, VmpPMatOps, FFT64,
+    alloc_aligned_u8, Encoding, Module, VecZnx, VecZnxBig, VecZnxBigOps, VecZnxDft, VecZnxDftOps,
+    VecZnxOps, VmpPMat, VmpPMatOps, MODULETYPE,
 };
 use fhevm::circuit_bootstrapping::{circuit_bootstrap_tmp_bytes, CircuitBootstrapper};
 use itertools::izip;
@@ -10,32 +10,32 @@ fn circuit_bootstrapping() {
     let n: usize = 1 << 5;
     let n_acc = n << 2;
     let log_base2k: usize = 17;
-    let limbs: usize = 4;
-    let log_k: usize = limbs * log_base2k - 5;
-    let module_lwe: Module = Module::new::<FFT64>(n);
+    let cols: usize = 4;
+    let log_k: usize = cols * log_base2k - 5;
+    let module_lwe: Module = Module::new(n, MODULETYPE::FFT64);
 
-    let module_pbs: Module = Module::new::<FFT64>(n_acc);
+    let module_pbs: Module = Module::new(n_acc, MODULETYPE::FFT64);
     let log_gap: usize = 3;
 
-    let rows: usize = limbs;
-    let cols: usize = limbs + 1;
+    let gct_rows: usize = cols;
+    let gct_cols: usize = cols + 1;
 
     let acc: CircuitBootstrapper =
-        CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, cols);
+        CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, gct_cols);
 
     let mut vec_gadget: Vec<VecZnx> = Vec::new();
-    (0..cols).for_each(|_| {
-        vec_gadget.push(module_lwe.new_vec_znx(cols));
+    (0..gct_cols).for_each(|_| {
+        vec_gadget.push(module_lwe.new_vec_znx(gct_cols));
     });
 
-    let mut vmp_pmat: VmpPMat = module_lwe.new_vmp_pmat(rows, cols);
+    let mut vmp_pmat: VmpPMat = module_lwe.new_vmp_pmat(gct_rows, gct_cols);
 
     let max_value: usize = n;
 
     let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(
-        circuit_bootstrap_tmp_bytes(&module_pbs, limbs)
-            | module_lwe.vmp_apply_dft_tmp_bytes(limbs, limbs, rows, cols)
-            | module_lwe.vmp_prepare_tmp_bytes(rows, cols),
+        circuit_bootstrap_tmp_bytes(&module_pbs, cols)
+            | module_lwe.vmp_apply_dft_tmp_bytes(cols, cols, gct_rows, gct_cols)
+            | module_lwe.vmp_prepare_tmp_bytes(gct_rows, gct_cols),
     );
 
     // value in [0, n_acc/2^{log_gap} - 1]
@@ -62,7 +62,7 @@ fn circuit_bootstrapping() {
             &mut tmp_bytes,
         );
 
-        (0..rows).for_each(|row_i| {
+        (0..gct_rows).for_each(|row_i| {
             module_lwe.vmp_prepare_row(
                 &mut vmp_pmat,
                 &vec_gadget[row_i].raw(),
@@ -71,32 +71,32 @@ fn circuit_bootstrapping() {
             );
         });
 
-        let mut vec_have: VecZnx = module_lwe.new_vec_znx(limbs);
+        let mut vec_have: VecZnx = module_lwe.new_vec_znx(cols);
         vec_have.encode_coeff_i64(log_base2k, log_k, 0, 1, 32);
         vec_have.normalize(log_base2k, &mut tmp_bytes);
 
         //println!("INPUT");
-        //(0..vec_have.limbs()).for_each(|i|{
+        //(0..vec_have.cols()).for_each(|i|{
         //    println!("{}: {:?}", i, vec_have.at(i))
         //});
         //println!();
 
-        let mut c_dft: VecZnxDft = module_lwe.new_vec_znx_dft(cols);
+        let mut c_dft: VecZnxDft = module_lwe.new_vec_znx_dft(gct_cols);
         module_lwe.vmp_apply_dft(&mut c_dft, &vec_have, &vmp_pmat, &mut tmp_bytes);
 
         let mut c_big: VecZnxBig = c_dft.as_vec_znx_big();
-        module_lwe.vec_znx_idft_tmp_a(&mut c_big, &mut c_dft, cols);
+        module_lwe.vec_znx_idft_tmp_a(&mut c_big, &mut c_dft, gct_cols);
 
-        let mut res: VecZnx = module_lwe.new_vec_znx(cols);
+        let mut res: VecZnx = module_lwe.new_vec_znx(gct_cols);
         module_lwe.vec_znx_big_normalize(log_base2k, &mut res, &c_big, &mut tmp_bytes);
 
         //println!("OUTPUT");
-        //(0..res.limbs()).for_each(|i|{
+        //(0..res.cols()).for_each(|i|{
         //    println!("{}: {:?}", i, res.at(i))
         //});
         //println!();
 
-        let mut vec_want: VecZnx = module_lwe.new_vec_znx(limbs);
+        let mut vec_want: VecZnx = module_lwe.new_vec_znx(cols);
         vec_want.encode_coeff_i64(log_base2k, log_k, value << log_gap_out, 1, 2);
 
         let mut have: Vec<i64> = vec![i64::default(); module_lwe.n()];

@@ -45,7 +45,7 @@ mod tests {
     use crate::circuit_bootstrapping::circuit_bootstrap_tmp_bytes;
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
-    use base2k::{alloc_aligned_u8, Module, FFT64};
+    use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 
     #[test]
     pub fn apply() {
@@ -60,8 +60,8 @@ mod tests {
         let rows: usize = cols;
         let cols_gct = cols + 1;
 
-        let module_lwe: Module = Module::new::<FFT64>(n);
-        let module_pbs: Module = Module::new::<FFT64>(n_acc);
+        let module_lwe: Module = Module::new(n, MODULETYPE::FFT64);
+        let module_pbs: Module = Module::new(n_acc, MODULETYPE::FFT64);
 
         let size: usize = 2 * n + 1;
         let mut data: Vec<i64> = vec![i64::default(); size];

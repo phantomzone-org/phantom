@@ -82,5 +82,14 @@ fn test_instruction(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
-    m.assert_instruction(0, imm as i64, rs2 as i64, rs1 as i64, rd as i64, opid.0 as i64, opid.1 as i64, opid.2 as i64);
+    m.assert_instruction(
+        0,
+        imm as i64,
+        rs2 as i64,
+        rs1 as i64,
+        rd as i64,
+        opid.0 as i64,
+        opid.1 as i64,
+        opid.2 as i64,
+    );
 }

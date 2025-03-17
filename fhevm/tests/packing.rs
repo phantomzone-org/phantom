@@ -1,11 +1,11 @@
-use base2k::{Encoding, Module, VecZnx, VecZnxOps, FFT64};
+use base2k::{Encoding, Module, VecZnx, VecZnxOps, MODULETYPE};
 use fhevm::packing::StreamRepacker;
 use fhevm::reverse_bits_msb;
 
 #[test]
 fn packing_streaming_u64() {
     let n: usize = 1 << 4;
-    let module: Module = Module::new::<FFT64>(n);
+    let module: Module = Module::new(n, MODULETYPE::FFT64);
     let log_base2k: usize = 16;
     let log_q: usize = 54;
 

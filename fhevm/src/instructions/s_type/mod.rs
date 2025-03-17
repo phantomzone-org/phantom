@@ -70,7 +70,7 @@ fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
     m.assert_size(1);
     m.assert_instruction(
         0,
-        sext(imm, 11)  as i64,
+        sext(imm, 11) as i64,
         rs2 as i64,
         rs1 as i64,
         rd as i64,

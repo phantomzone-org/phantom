@@ -2,10 +2,7 @@ use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
-use base2k::{
-    Encoding, Module, VecZnx, VecZnxApi, VecZnxBorrow, VecZnxDft, VecZnxDftOps,
-    VecZnxOps, VmpPMatOps,
-};
+use base2k::{Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps, VmpPMatOps};
 use itertools::izip;
 
 pub struct Memory {
@@ -128,9 +125,10 @@ impl Memory {
         let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
             tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
 
-        let mut tmp_vec_znx: VecZnxBorrow =
-            VecZnxBorrow::from_bytes(1 << log_n, cols, tmp_bytes_vec_znx);
-        let mut tmp_b_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
+        let mut tmp_vec_znx: VecZnx =
+            VecZnx::from_bytes_borrow(1 << log_n, cols, tmp_bytes_vec_znx);
+        let mut tmp_b_dft: base2k::VecZnxDft =
+            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
 
         for i in 0..address.dims_n() {
             let coordinate: &Coordinate = address.at_lsh(i);
@@ -163,7 +161,7 @@ impl Memory {
 
                             packer.add(module, Some(&tmp_vec_znx), &mut result_next);
                         } else {
-                            packer.add(module, None::<&VecZnxBorrow>, &mut result_next);
+                            packer.add(module, None, &mut result_next);
                         }
                     }
                 }
@@ -216,7 +214,8 @@ impl Memory {
         let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
         let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
             tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
+        let mut tmp_a_dft: base2k::VecZnxDft =
+            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
 
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
@@ -301,8 +300,9 @@ impl Memory {
         let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
         let (tmp_bytes_vec_znx_dft, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
 
-        let mut tmp_a: VecZnxBorrow = VecZnxBorrow::from_bytes(1 << log_n, cols, tmp_bytes_vec_znx);
-        let mut tmp_a_dft: base2k::VecZnxDft = VecZnxDft::from_bytes(cols, tmp_bytes_vec_znx_dft);
+        let mut tmp_a: VecZnx = VecZnx::from_bytes_borrow(1 << log_n, cols, tmp_bytes_vec_znx);
+        let mut tmp_a_dft: base2k::VecZnxDft =
+            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
 
         if address.dims_n() != 1 {
             let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
