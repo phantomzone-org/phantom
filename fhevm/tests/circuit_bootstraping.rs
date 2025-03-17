@@ -55,8 +55,8 @@ fn circuit_bootstrapping() {
         // Maps X^(i * 2^{log_gap_in}) to X^(i * 2^{log_gal_out})
         acc.post_process(
             &module_lwe,
-            log_gap_in,
-            log_gap_out,
+            log_gap_in as u8,
+            log_gap_out as u8,
             max_value,
             &mut vec_gadget,
             &mut tmp_bytes,

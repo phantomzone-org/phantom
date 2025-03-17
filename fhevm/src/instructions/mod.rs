@@ -194,24 +194,14 @@ impl OpID {
 
 pub struct InstructionsParser {
     pub imm: Vec<i64>,
-    pub rs2: Vec<i64>,
-    pub rs1: Vec<i64>,
-    pub rd: Vec<i64>,
-    pub rd_w: Vec<i64>,
-    pub mem_w: Vec<i64>,
-    pub pc_w: Vec<i64>,
+    pub instructions: Vec<i64>,
 }
 
 impl InstructionsParser {
     pub fn new() -> Self {
         InstructionsParser {
             imm: Vec::new(),
-            rs2: Vec::new(),
-            rs1: Vec::new(),
-            rd: Vec::new(),
-            rd_w: Vec::new(),
-            mem_w: Vec::new(),
-            pc_w: Vec::new(),
+            instructions: Vec::new(),
         }
     }
 
@@ -219,22 +209,33 @@ impl InstructionsParser {
         let (rs2, rs1, rd) = instruction.get_registers();
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
         self.imm.push(instruction.get_immediate() as i64);
-        self.rs2.push(rs2 as i64);
-        self.rs1.push(rs1 as i64);
-        self.rd.push(rd as i64);
-        self.rd_w.push(rd_w as i64);
-        self.mem_w.push(mem_w as i64);
-        self.pc_w.push(pc_w as i64);
+        self.instructions.push(
+            (rs2 as i64) << 25
+                | (rs1 as i64) << 20
+                | (rd as i64) << 15
+                | (rd_w as i64) << 10
+                | (mem_w as i64) << 5
+                | (pc_w as i64),
+        );
     }
 
     pub fn assert_size(&self, size: usize) {
         assert_eq!(self.imm.len(), size);
-        assert_eq!(self.rs2.len(), size);
-        assert_eq!(self.rs1.len(), size);
-        assert_eq!(self.rd.len(), size);
-        assert_eq!(self.rd_w.len(), size);
-        assert_eq!(self.mem_w.len(), size);
-        assert_eq!(self.pc_w.len(), size);
+        assert_eq!(self.instructions.len(), size);
+    }
+
+    pub fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
+        assert!(self.imm.len() > idx);
+        let data = self.instructions[idx];
+        (
+            self.imm[idx] as i64,
+            ((data >> 25) & 0x1F) as i64,
+            ((data >> 20) & 0x1F) as i64,
+            ((data >> 15) & 0x1F) as i64,
+            ((data >> 10) & 0x1F) as i64,
+            ((data >> 5) & 0x1F) as i64,
+            (data & 0x1F) as i64,
+        )
     }
 
     pub fn assert_instruction(
@@ -248,42 +249,45 @@ impl InstructionsParser {
         mem_w: i64,
         pc_w: i64,
     ) {
+        let (imm_have, rs2_have, rs1_have, rd_have, rd_w_have, mem_w_have, pc_w_have) =
+            self.get(idx);
+
         let number_of_instructions: usize = self.imm.len();
         assert!(number_of_instructions > idx);
         assert_eq!(
-            self.imm[idx], imm,
-            "invalid imm_31: have {:032b} want {:032b}",
-            self.imm[idx], imm
+            imm_have, imm,
+            "invalid imm: have {:032b} want {:032b}",
+            imm_have, imm
         );
         assert_eq!(
-            self.rs2[idx], rs2,
+            rs2_have, rs2,
             "invalid rs2: have {:05b} want {:05b}",
-            self.rs2[idx], rs2
+            rs2_have, rs2
         );
         assert_eq!(
-            self.rs1[idx], rs1,
+            rs1_have, rs1,
             "invalid rs1: have {:05b} want {:05b}",
-            self.rs1[idx], rs1
+            rs1_have, rs1
         );
         assert_eq!(
-            self.rd[idx], rd,
+            rd_have, rd,
             "invalid rd: have {:05b} want {:05b}",
-            self.rd[idx], rd
+            rd_have, rd
         );
         assert_eq!(
-            self.rd_w[idx], rd_w,
+            rd_w_have, rd_w,
             "invalid rd_w: have {} want {}",
-            self.rd_w[idx], rd_w
+            rd_w_have, rd_w
         );
         assert_eq!(
-            self.mem_w[idx], mem_w,
+            mem_w_have, mem_w,
             "invalid mem_w: have {} want {}",
-            self.mem_w[idx], mem_w
+            mem_w_have, mem_w
         );
         assert_eq!(
-            self.pc_w[idx], pc_w,
+            pc_w_have, pc_w,
             "invalid pc_w: have {} want {}",
-            self.pc_w[idx], pc_w
+            pc_w_have, pc_w
         );
     }
 }

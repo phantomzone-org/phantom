@@ -10,7 +10,7 @@ pub struct Address {
     pub cols: usize,
     pub coordinates_lsh: Vec<Coordinate>,
     pub coordinates_rsh: Vec<Coordinate>,
-    pub decomp_size: Vec<Vec<usize>>,
+    pub decomp_size: Vec<Vec<u8>>,
 }
 
 impl Address {
@@ -27,18 +27,18 @@ impl Address {
         let dims_n: usize =
             ((usize::BITS - (max_address - 1).leading_zeros()) as usize + log_n - 1) / log_n;
         let dims_n_decomp: usize = (log_n + log_n_decomp - 1) / log_n_decomp;
-        let mut decomp_size: Vec<Vec<usize>> = Vec::new();
+        let mut decomp_size: Vec<Vec<u8>> = Vec::new();
         (0..dims_n).for_each(|_| {
             coordinates_lsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
             coordinates_rsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
 
-            let mut sub_decomp: Vec<usize> = Vec::new();
-            let mut k = log_n;
+            let mut sub_decomp: Vec<u8> = Vec::new();
+            let mut k: usize = log_n;
             (0..dims_n_decomp).for_each(|_| {
                 if k < log_n_decomp {
-                    sub_decomp.push(k)
+                    sub_decomp.push(k as u8)
                 } else {
-                    sub_decomp.push(log_n_decomp);
+                    sub_decomp.push(log_n_decomp as u8);
                     k -= log_n_decomp
                 }
             });
@@ -56,8 +56,8 @@ impl Address {
         }
     }
 
-    pub fn decomp(&self) -> Vec<usize> {
-        let mut decomp: Vec<usize> = Vec::new();
+    pub fn decomp(&self) -> Vec<u8> {
+        let mut decomp: Vec<u8> = Vec::new();
         for i in 0..self.decomp_size.len() {
             for j in 0..self.decomp_size[i].len() {
                 decomp.push(self.decomp_size[i][j])
@@ -122,7 +122,7 @@ impl Coordinate {
         self.0.len()
     }
 
-    pub fn encode(&mut self, module: &Module, value: i64, decomp: &Vec<usize>) {
+    pub fn encode(&mut self, module: &Module, value: i64, decomp: &Vec<u8>) {
         assert!(
             decomp.len() == self.0.len(),
             "invalid decomp: decomp.len()={} != self.0.len()={}",
@@ -140,7 +140,7 @@ impl Coordinate {
         let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(module.vmp_prepare_tmp_bytes(rows, cols));
         let mut buf_i64: Vec<i64> = alloc_aligned::<i64>(n * cols);
 
-        let mut tot_base: usize = 0;
+        let mut tot_base: u8 = 0;
         izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)| {
             let mask: usize = (1 << base) - 1;
 

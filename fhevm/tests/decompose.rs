@@ -8,7 +8,7 @@ fn decompose_u32() {
     let limbs: usize = 4;
     let module = Module::new(n, MODULETYPE::FFT64);
 
-    let log_base: Vec<usize> = [6, 6, 6, 6, 6, 2].to_vec();
+    let log_base: Vec<u8> = [6, 6, 6, 6, 6, 2].to_vec();
 
     let mut decomposer: Decomposer = Decomposer::new(&module, &log_base, log_base2k, limbs);
 
@@ -18,7 +18,7 @@ fn decompose_u32() {
 
     let mut have: u32 = 0;
 
-    let mut sum_bases: usize = 0;
+    let mut sum_bases: u8 = 0;
     log_base.iter().enumerate().for_each(|(i, base)| {
         have |= (result[i] << sum_bases) as u32;
         sum_bases += base;

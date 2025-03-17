@@ -8,3 +8,5 @@ pub const VMPPMAT_COLS: usize = 5;
 pub const MAXOPSADDRESS: usize = 65536;
 pub const MAXMEMORYADDRESS: usize = 65536;
 pub const LOGK: usize = LOGBASE2K * 2;
+pub const DECOMPOSE_INSTRUCTIONS: [u8; 5] = [5, 5, 5, 5, 5];
+pub const DECOMPOSE_ARITHMETIC: [u8; 8] = [4, 4, 4, 4, 4, 4, 4, 4];

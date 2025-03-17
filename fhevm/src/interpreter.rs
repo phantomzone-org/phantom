@@ -1,24 +1,19 @@
 //use crate::gadget::Gadget;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
+use crate::decompose::Decomposer;
 use crate::instructions::decompose;
-use crate::instructions::r_type::add::Add;
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
-    LOGBASE2K, LOGN_DECOMP, LOGN_LWE, MAXMEMORYADDRESS, MAXOPSADDRESS, RLWE_COLS, VMPPMAT_COLS,
-    VMPPMAT_ROWS,
+    DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGN_DECOMP, LOGN_LWE,
+    MAXMEMORYADDRESS, MAXOPSADDRESS, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::Module;
 
 pub struct Interpreter {
     pub pc: Address,
     pub imm: Memory,
-    pub rs1: Memory,
-    pub rs2: Memory,
-    pub rd: Memory,
-    pub rd_w: Memory,
-    pub mem_w: Memory,
-    pub pc_w: Memory,
+    pub instructions: Memory,
     pub register: Memory,
     pub memory: Memory,
     pub ret: bool,
@@ -41,12 +36,7 @@ impl Interpreter {
                 VMPPMAT_COLS,
             ),
             imm: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            rs1: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            rs2: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            rd: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            rd_w: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            mem_w: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            pc_w: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
+            instructions: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
             register: Memory::new(module, LOGBASE2K, RLWE_COLS, 32),
             memory: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
             ret: false,
@@ -59,7 +49,29 @@ impl Interpreter {
         let circuit_bootstrapper: CircuitBootstrapper =
             CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), LOGBASE2K, VMPPMAT_COLS);
 
-        // 1) Retrieve inputs
+        let mut decomposer_instructions: Decomposer = Decomposer::new(
+            module_pbs,
+            &DECOMPOSE_INSTRUCTIONS.to_vec(),
+            LOGBASE2K,
+            RLWE_COLS,
+        );
+        let mut decomposer_arithmetic: Decomposer = Decomposer::new(
+            module_pbs,
+            &DECOMPOSE_ARITHMETIC.to_vec(),
+            LOGBASE2K,
+            RLWE_COLS,
+        );
+
+        let (rs2_u5, rs1_u5, rd_u5, rd_w_u5, mem_w_u5, pc_w_u5) = get_instructions(
+            module_pbs,
+            module_lwe,
+            &mut decomposer_instructions,
+            &self.instructions,
+            &self.pc,
+            tmp_bytes,
+        );
+
+        // 1) Retrieve inputs (imm, rs2, rs1, pc)
         let mut tmp_address_input: Address = Address::new(
             module_lwe,
             LOGN_DECOMP,
@@ -67,36 +79,44 @@ impl Interpreter {
             VMPPMAT_ROWS,
             VMPPMAT_COLS,
         );
-        let imm_lwe: [u8; 8] = decompose(get_inputs(
+
+        let imm_lwe: [u8; 8] = get_imm_lwe(
             module_pbs,
             module_lwe,
+            &mut decomposer_arithmetic,
             &self.imm,
-            &self.register,
             &self.pc,
-            &circuit_bootstrapper,
-            &mut tmp_address_input,
             tmp_bytes,
-        ));
-        let rs1_lwe: [u8; 8] = decompose(get_inputs(
+        );
+
+        let rs2_lwe: [u8; 8] = get_input_from_register_lwe(
             module_pbs,
             module_lwe,
-            &self.rs2,
-            &self.register,
-            &self.pc,
             &circuit_bootstrapper,
+            &mut decomposer_arithmetic,
+            &self.register,
+            rs2_u5,
             &mut tmp_address_input,
             tmp_bytes,
-        ));
-        let rs2_lwe: [u8; 8] = decompose(get_inputs(
+        );
+        let rs1_lwe: [u8; 8] = get_input_from_register_lwe(
             module_pbs,
             module_lwe,
-            &self.rs1,
-            &self.register,
-            &self.pc,
             &circuit_bootstrapper,
+            &mut decomposer_arithmetic,
+            &self.register,
+            rs1_u5,
             &mut tmp_address_input,
             tmp_bytes,
-        ));
+        );
+
+        let pc_lwe: [u8; 8] = get_pc_lwe(
+            module_pbs,
+            module_lwe,
+            &mut decomposer_arithmetic,
+            &self.pc,
+            tmp_bytes,
+        );
 
         // 2) Evaluates all Arithmetic: apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
         //let ari: Vec<_> = Vec::new();
@@ -129,6 +149,119 @@ impl Interpreter {
 pub fn next_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
     read_tmp_bytes(module_lwe, RLWE_COLS, VMPPMAT_ROWS, VMPPMAT_COLS)
         + bootstrap_address_tmp_bytes(module_pbs, module_lwe, RLWE_COLS)
+}
+
+pub fn get_pc_lwe(
+    module_pbs: &Module,
+    module_lwe: &Module,
+    decomposer_arithmetic: &mut Decomposer,
+    pc: &Address,
+    tmp_bytes: &mut [u8],
+) -> [u8; 8] {
+    let log_k: usize = LOGBASE2K * (VMPPMAT_COLS - 1) - 5;
+    let cols: usize = (log_k + LOGBASE2K - 1) / LOGBASE2K;
+    let mut mem: Memory = Memory::new(module_lwe, LOGBASE2K, cols, MAXOPSADDRESS);
+    let mut data: Vec<i64> = vec![i64::default(); MAXOPSADDRESS];
+    data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+    mem.set(&data, log_k);
+
+    let pc_u32: u32 = mem.read(module_lwe, pc, tmp_bytes);
+    let pc_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, pc_u32);
+    [
+        pc_u8[0] as u8,
+        pc_u8[1] as u8,
+        pc_u8[2] as u8,
+        pc_u8[3] as u8,
+        pc_u8[4] as u8,
+        pc_u8[5] as u8,
+        pc_u8[6] as u8,
+        pc_u8[7] as u8,
+    ]
+}
+
+pub fn get_imm_lwe(
+    module_pbs: &Module,
+    module_lwe: &Module,
+    decomposer_arithmetic: &mut Decomposer,
+    location: &Memory,
+    pc: &Address,
+    tmp_bytes: &mut [u8],
+) -> [u8; 8] {
+    let imm_u32: u32 = location.read(module_lwe, pc, tmp_bytes);
+    let imm_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, imm_u32);
+    [
+        imm_u8[0] as u8,
+        imm_u8[1] as u8,
+        imm_u8[2] as u8,
+        imm_u8[3] as u8,
+        imm_u8[4] as u8,
+        imm_u8[5] as u8,
+        imm_u8[6] as u8,
+        imm_u8[7] as u8,
+    ]
+}
+
+pub fn get_instructions(
+    module_pbs: &Module,
+    module_lwe: &Module,
+    instructions_decomposer: &mut Decomposer,
+    location: &Memory,
+    pc: &Address,
+    tmp_bytes: &mut [u8],
+) -> (u8, u8, u8, u8, u8, u8) {
+    let (tmp_bytes_read, tmp_bytes_bootstrap_address) = tmp_bytes.split_at_mut(read_tmp_bytes(
+        module_lwe,
+        RLWE_COLS,
+        VMPPMAT_ROWS,
+        VMPPMAT_COLS,
+    ));
+    let instructions: u32 = location.read(module_lwe, pc, tmp_bytes_read);
+    let ii: Vec<i64> = instructions_decomposer.decompose(module_pbs, instructions);
+    (
+        ii[0] as u8,
+        ii[1] as u8,
+        ii[2] as u8,
+        ii[3] as u8,
+        ii[4] as u8,
+        ii[5] as u8,
+    )
+}
+
+pub fn get_input_from_register_lwe(
+    module_pbs: &Module,
+    module_lwe: &Module,
+    circuit_bootstrapper: &CircuitBootstrapper,
+    decomposer_arithmetic: &mut Decomposer,
+    registers: &Memory,
+    address: u8,
+    tmp_address: &mut Address,
+    tmp_bytes: &mut [u8],
+) -> [u8; 8] {
+    let (tmp_bytes_read, tmp_bytes_bootstrap_address) = tmp_bytes.split_at_mut(read_tmp_bytes(
+        module_lwe,
+        RLWE_COLS,
+        VMPPMAT_ROWS,
+        VMPPMAT_COLS,
+    ));
+    circuit_bootstrapper.bootstrap_to_address(
+        module_pbs,
+        module_lwe,
+        address as u32,
+        tmp_address,
+        tmp_bytes_bootstrap_address,
+    );
+    let value: u32 = registers.read(module_lwe, tmp_address, tmp_bytes_read);
+    let value_u8 = decomposer_arithmetic.decompose(module_pbs, value);
+    [
+        value_u8[0] as u8,
+        value_u8[1] as u8,
+        value_u8[2] as u8,
+        value_u8[3] as u8,
+        value_u8[4] as u8,
+        value_u8[5] as u8,
+        value_u8[6] as u8,
+        value_u8[7] as u8,
+    ]
 }
 
 pub fn get_inputs(

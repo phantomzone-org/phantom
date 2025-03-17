@@ -149,10 +149,10 @@ impl CircuitBootstrapper {
 
         let mut i: usize = 0;
         (0..address.dims_n()).for_each(|hi| {
-            let mut sum_base: usize = 0;
+            let mut sum_base: u8 = 0;
 
             (0..dims_n_decomp).for_each(|lo: usize| {
-                let base: usize = address.decomp_size[hi][lo];
+                let base: u8 = address.decomp_size[hi][lo];
 
                 //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
 
@@ -166,7 +166,7 @@ impl CircuitBootstrapper {
 
                 self.post_process(
                     module_lwe,
-                    log_gap_in,
+                    log_gap_in as u8,
                     sum_base,
                     (1 << base) - 1,
                     &mut buf_addr,
@@ -344,8 +344,8 @@ impl CircuitBootstrapper {
     pub fn post_process(
         &self,
         module: &Module,
-        log_gap_in: usize,
-        log_gap_out: usize,
+        log_gap_in: u8,
+        log_gap_out: u8,
         max_value: usize,
         a: &mut Vec<VecZnx>,
         tmp_byte: &mut [u8],
@@ -358,8 +358,8 @@ impl CircuitBootstrapper {
     fn post_process_core(
         &self,
         module: &Module,
-        log_gap_in: usize,
-        log_gap_out: usize,
+        log_gap_in: u8,
+        log_gap_out: u8,
         max_value: usize,
         a: &mut VecZnx,
         tmp_bytes: &mut [u8],
@@ -372,7 +372,7 @@ impl CircuitBootstrapper {
         let n: usize = module.n();
         let cols: usize = a.cols();
 
-        let step_start: usize = module.log_n() - log_gap_in;
+        let step_start: usize = module.log_n() - log_gap_in as usize;
         let step_end = module.log_n();
 
         let bytes_of_vec_znx = module.bytes_of_vec_znx(cols);
@@ -399,7 +399,7 @@ impl CircuitBootstrapper {
         if log_gap_in != log_gap_out {
             let step_end: usize = step_start;
             let step_start: usize = 0;
-            let steps: usize = min(max_value, 1 << (module.log_n() - log_gap_in));
+            let steps: usize = min(max_value, 1 << (module.log_n() - log_gap_in as usize));
 
             // For each coefficients that can be packed, i.e. n / gap_in
             (0..steps).for_each(|i: usize| {
