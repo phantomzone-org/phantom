@@ -2,7 +2,10 @@
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::Decomposer;
-use crate::instructions::decompose;
+use crate::instructions::memory::{load, prepare_address, store};
+use crate::instructions::{
+    decompose, reconstruct, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
+};
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGN_DECOMP, LOGN_LWE,
@@ -46,7 +49,7 @@ impl Interpreter {
     pub fn next(&mut self, module_pbs: &Module, module_lwe: &Module, tmp_bytes: &mut [u8]) {
         assert!(tmp_bytes.len() >= next_tmp_bytes(module_pbs, module_lwe));
 
-        let circuit_bootstrapper: CircuitBootstrapper =
+        let circuit_btp: CircuitBootstrapper =
             CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), LOGBASE2K, VMPPMAT_COLS);
 
         let mut decomposer_instructions: Decomposer = Decomposer::new(
@@ -71,7 +74,8 @@ impl Interpreter {
             tmp_bytes,
         );
 
-        // 1) Retrieve inputs (imm, rs2, rs1, pc)
+        // 1) Retrieve LWE 8xu4 inputs (imm, rs2, rs1, pc)
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         let mut tmp_address_input: Address = Address::new(
             module_lwe,
             LOGN_DECOMP,
@@ -92,7 +96,7 @@ impl Interpreter {
         let rs2_lwe: [u8; 8] = get_input_from_register_lwe(
             module_pbs,
             module_lwe,
-            &circuit_bootstrapper,
+            &circuit_btp,
             &mut decomposer_arithmetic,
             &self.register,
             rs2_u5,
@@ -102,7 +106,7 @@ impl Interpreter {
         let rs1_lwe: [u8; 8] = get_input_from_register_lwe(
             module_pbs,
             module_lwe,
-            &circuit_bootstrapper,
+            &circuit_btp,
             &mut decomposer_arithmetic,
             &self.register,
             rs1_u5,
@@ -118,30 +122,91 @@ impl Interpreter {
             tmp_bytes,
         );
 
-        // 2) Evaluates all Arithmetic: apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
-        //let ari: Vec<_> = Vec::new();
+        // 2) RD UPDATE OPS
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        let mut rd_out: Vec<[u8; 8]> = vec![[0; 8]; RD_OPS_LIST.len() + LOAD_OPS_LIST.len()];
 
-        // 4) Evaluate all Types-B OPS f[i](rs1_lwe, rs2_lwe, imm_lwe, pc);
+        RD_OPS_LIST.iter().for_each(|op| {
+            let (idx, out) = op.apply(&imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe);
+            rd_out[idx] = out
+        });
 
-        // Packs all OPS, rs1, rs2, read register, read memory
-
-        // Select from pack_ops
-
-        // Updates program-counter
-        let (tmp_bytes_read, tmp_bytes_bootstrap_address) = tmp_bytes.split_at_mut(read_tmp_bytes(
-            module_lwe,
-            RLWE_COLS,
-            VMPPMAT_ROWS,
-            VMPPMAT_COLS,
-        ));
-        let pc_offset: u32 = 0;
-        circuit_bootstrapper.bootstrap_address(
+        // address read/write = x_rs1 + sext(imm)
+        prepare_address(
             module_pbs,
             module_lwe,
-            pc_offset,
-            MAXOPSADDRESS,
+            &imm_lwe,
+            &rs1_lwe,
+            &circuit_btp,
+            &mut tmp_address_input,
+            tmp_bytes,
+        );
+
+        let loaded: [u8; 8] = load(
+            module_lwe,
+            &mut self.memory,
+            &mut tmp_address_input,
+            tmp_bytes,
+        );
+
+        LOAD_OPS_LIST.iter().for_each(|op| {
+            let (idx, out) = op.apply(&loaded);
+            rd_out[idx] = out
+        });
+
+        let rd_lwe: [u8; 8] = rd_out[rd_u5 as usize]; // Select new RD
+
+        // 3) UPDATE MEMORY
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        let mut mem_out: Vec<[u8; 8]> = vec![[0; 8]; STORE_OPS_LIST.len()];
+
+        // Selects how to store the value
+        STORE_OPS_LIST.iter().for_each(|op| {
+            let (idx, out) = op.apply(&rd_lwe);
+            mem_out[idx] = out
+        });
+
+        mem_out[0] = loaded; // if store op is identity
+
+        let mem_lwe: [u8; 8] = mem_out[mem_w_u5 as usize];
+
+        store(
+            module_lwe,
+            &mem_lwe,
+            &mut self.memory,
+            &mut tmp_address_input,
+            tmp_bytes,
+        );
+
+        // 4) UPDATE REGISTERS
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        tmp_address_input.set(module_lwe, rd_w_u5 as u32); // TODO: bootstrap address
+
+        store(
+            module_lwe,
+            &rd_lwe,
+            &mut self.register,
+            &mut tmp_address_input,
+            tmp_bytes,
+        );
+
+        // 5) UPDATE PC
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+        let mut pc_out: Vec<[u8; 8]> = vec![[0; 8]; PC_OPS_LIST.len()];
+
+        PC_OPS_LIST.iter().for_each(|op| {
+            let (idx, out) = op.apply(&imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe);
+            pc_out[idx] = out
+        });
+
+        let pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
+
+        circuit_btp.bootstrap_to_address(
+            module_pbs,
+            module_lwe,
+            reconstruct(&pc_lwe),
             &mut self.pc,
-            tmp_bytes_bootstrap_address,
+            tmp_bytes,
         );
     }
 }
@@ -230,7 +295,7 @@ pub fn get_instructions(
 pub fn get_input_from_register_lwe(
     module_pbs: &Module,
     module_lwe: &Module,
-    circuit_bootstrapper: &CircuitBootstrapper,
+    circuit_btp: &CircuitBootstrapper,
     decomposer_arithmetic: &mut Decomposer,
     registers: &Memory,
     address: u8,
@@ -243,7 +308,7 @@ pub fn get_input_from_register_lwe(
         VMPPMAT_ROWS,
         VMPPMAT_COLS,
     ));
-    circuit_bootstrapper.bootstrap_to_address(
+    circuit_btp.bootstrap_to_address(
         module_pbs,
         module_lwe,
         address as u32,
@@ -270,7 +335,7 @@ pub fn get_inputs(
     location: &Memory,
     registers: &Memory,
     pc: &Address,
-    circuit_bootstrapper: &CircuitBootstrapper,
+    circuit_btp: &CircuitBootstrapper,
     tmp_address: &mut Address,
     tmp_bytes: &mut [u8],
 ) -> u32 {
@@ -281,7 +346,7 @@ pub fn get_inputs(
         VMPPMAT_COLS,
     ));
     let idx_lwe: u32 = location.read(module_lwe, pc, tmp_bytes_read);
-    circuit_bootstrapper.bootstrap_to_address(
+    circuit_btp.bootstrap_to_address(
         module_pbs,
         module_lwe,
         idx_lwe,
@@ -290,24 +355,6 @@ pub fn get_inputs(
     );
     registers.read(module_lwe, tmp_address, tmp_bytes_read)
 }
-
-/*
-pub fn get_opid(module_pbs: &Module, module_lwe: &Module, value: u32, address: &mut Address, circuit_bootstrapper: &CircuitBootstrapper, tmp_bytes: &mut [u8]){
-    let (tmp_bytes_read, tmp_bytes_bootstrap_address) = tmp_bytes.split_at_mut(read_tmp_bytes(module_lwe, RLWE_COLS, VMPPMAT_ROWS, VMPPMAT_COLS));
-    let op_id_register_lwe: u32 =
-            self.op_id_register
-                .read(module_lwe, &self.counter, &mut tmp_bytes_read);
-
-
-    circuit_bootstrapper.bootstrap_to_address(
-        module_pbs,
-        module_lwe,
-        op_id_register_lwe as u32,
-        &mut op_id_register_address,
-        &mut tmp_bytes_bootstrap_address,
-    );
-}
- */
 
 pub fn get_lwe_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
     next_tmp_bytes(module_pbs, module_lwe)

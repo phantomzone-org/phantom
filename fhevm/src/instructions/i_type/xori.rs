@@ -15,12 +15,12 @@
 //!
 //! x[rd] = x[rs1] ^ sext(immediate)
 
-use crate::instructions::{decompose, reconstruct, Arithmetic};
+use crate::instructions::{decompose, reconstruct};
 
 pub struct Xori();
 
-impl Arithmetic for Xori {
-    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+impl Xori {
+    pub fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let x_rs1_u32: u32 = reconstruct(x_rs1);
         decompose(x_rs1_u32 ^ imm_u32)

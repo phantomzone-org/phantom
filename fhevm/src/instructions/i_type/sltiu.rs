@@ -14,12 +14,12 @@
 //!
 //! x[rd] = x[rs1] <u sext(immediate)
 
-use crate::instructions::{decompose, reconstruct, Arithmetic};
+use crate::instructions::{decompose, reconstruct};
 
 pub struct Sltiu();
 
-impl Arithmetic for Sltiu {
-    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+impl Sltiu {
+    pub fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         if reconstruct(x_rs1) < reconstruct(imm) {
             return decompose(1);
         }

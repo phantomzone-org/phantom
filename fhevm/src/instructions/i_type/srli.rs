@@ -14,12 +14,12 @@
 //!
 //! x[rd] = x[rs1] >>u shamt
 
-use crate::instructions::{decompose, reconstruct, Arithmetic};
+use crate::instructions::{decompose, reconstruct};
 
 pub struct Srli();
 
-impl Arithmetic for Srli {
-    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+impl Srli {
+    pub fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let x_rs1_u32: u32 = reconstruct(x_rs1);
         decompose(x_rs1_u32 >> imm_u32)

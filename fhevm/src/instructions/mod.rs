@@ -93,19 +93,260 @@ pub fn sext(x: u32, bits: usize) -> u32 {
     x | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
 }
 
-pub trait Arithmetic {
-    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8]) -> [u8; 8];
-}
-
-pub trait PcUpdates {
-    fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], x_rs2: &[u8; 8], pc: &[u8; 8]) -> ([u8; 8], [u8; 8]);
-}
-
 pub enum StoreOps {
+    None,
     Sb,
     Sh,
     Sw,
 }
+
+impl StoreOps {
+    pub fn apply(&self, value: &[u8; 8]) -> (usize, [u8; 8]) {
+        match self {
+            StoreOps::None => (0, *value),
+            StoreOps::Sb => (OpID::SB.1 as usize, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
+            StoreOps::Sh => (
+                OpID::SH.1 as usize,
+                [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
+            ),
+            StoreOps::Sw => (OpID::SW.1 as usize, *value),
+            _ => panic!("invalid store op"),
+        }
+    }
+}
+
+pub static STORE_OPS_LIST: &[StoreOps] =
+    &[StoreOps::None, StoreOps::Sb, StoreOps::Sh, StoreOps::Sw];
+
+pub enum PcOps {
+    One,
+    Jal,
+    Jalr,
+    Beq,
+    Bne,
+    Blt,
+    Bge,
+    Bltu,
+    Bgeu,
+}
+
+impl PcOps {
+    pub fn apply(
+        &self,
+        imm: &[u8; 8],
+        x_rs1: &[u8; 8],
+        x_rs2: &[u8; 8],
+        pc: &[u8; 8],
+    ) -> (usize, [u8; 8]) {
+        match self {
+            PcOps::One => (0, decompose(reconstruct(pc).wrapping_add(4))),
+            PcOps::Beq => (
+                OpID::BEQ.2 as usize,
+                b_type::beq::Beq::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Bge => (
+                OpID::BGE.2 as usize,
+                b_type::bge::Bge::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Bgeu => (
+                OpID::BGEU.2 as usize,
+                b_type::bgeu::Bgeu::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Blt => (
+                OpID::BLT.2 as usize,
+                b_type::blt::Blt::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Bltu => (
+                OpID::BLTU.2 as usize,
+                b_type::bltu::Bltu::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Bne => (
+                OpID::BNE.2 as usize,
+                b_type::bne::Bne::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Jal => (
+                OpID::JAL.2 as usize,
+                j_type::jal::Jal::apply_pc(imm, x_rs1, x_rs2, pc),
+            ),
+            PcOps::Jalr => (
+                OpID::JALR.2 as usize,
+                i_type::jalr::Jalr::apply_pc(imm, x_rs1, x_rs2, pc),
+            ),
+        }
+    }
+}
+
+pub static PC_OPS_LIST: &[PcOps] = &[
+    PcOps::One,
+    PcOps::Beq,
+    PcOps::Bge,
+    PcOps::Bgeu,
+    PcOps::Blt,
+    PcOps::Bltu,
+    PcOps::Bne,
+    PcOps::Jal,
+    PcOps::Jalr,
+];
+
+pub enum RdOps {
+    None,
+    Lui,
+    Auipc,
+    Addi,
+    Slti,
+    Sltiu,
+    Xori,
+    Ori,
+    Andi,
+    Slli,
+    Srli,
+    Srai,
+    Add,
+    Sub,
+    Sll,
+    Slt,
+    Sltu,
+    Xor,
+    Srl,
+    Sra,
+    Or,
+    And,
+    Jal,
+    Jalr,
+}
+
+impl RdOps {
+    pub fn apply(
+        &self,
+        imm: &[u8; 8],
+        x_rs1: &[u8; 8],
+        x_rs2: &[u8; 8],
+        pc: &[u8; 8],
+    ) -> (usize, [u8; 8]) {
+        match self {
+            RdOps::None => (0, [0u8; 8]),
+            RdOps::Lui => (
+                OpID::LUI.0 as usize,
+                u_type::lui::Lui::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Auipc => (
+                OpID::AUIPC.0 as usize,
+                u_type::auipc::Auipc::apply(imm, x_rs1, x_rs2, pc),
+            ),
+            RdOps::Addi => (
+                OpID::ADDI.0 as usize,
+                i_type::addi::Addi::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Slti => (
+                OpID::SLTI.0 as usize,
+                i_type::slti::Slti::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Sltiu => (
+                OpID::SLTIU.0 as usize,
+                i_type::sltiu::Sltiu::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Xori => (
+                OpID::XORI.0 as usize,
+                i_type::xori::Xori::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Ori => (
+                OpID::ORI.0 as usize,
+                i_type::ori::Ori::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Andi => (
+                OpID::ANDI.0 as usize,
+                i_type::andi::Andi::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Slli => (
+                OpID::SLLI.0 as usize,
+                i_type::slli::Slli::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Srli => (
+                OpID::SRLI.0 as usize,
+                i_type::srli::Srli::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Srai => (
+                OpID::SRAI.0 as usize,
+                i_type::srai::Srai::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Add => (
+                OpID::ADD.0 as usize,
+                r_type::add::Add::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Sub => (
+                OpID::SUB.0 as usize,
+                r_type::sub::Sub::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Sll => (
+                OpID::SLL.0 as usize,
+                r_type::sll::Sll::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Slt => (
+                OpID::SLT.0 as usize,
+                r_type::slt::Slt::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Sltu => (
+                OpID::SLTU.0 as usize,
+                r_type::sltu::Sltu::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Xor => (
+                OpID::XOR.0 as usize,
+                r_type::xor::Xor::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Srl => (
+                OpID::SRL.0 as usize,
+                r_type::srl::Srl::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Sra => (
+                OpID::SRA.0 as usize,
+                r_type::sra::Sra::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Or => (
+                OpID::OR.0 as usize,
+                r_type::or::Or::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::And => (
+                OpID::AND.0 as usize,
+                r_type::and::And::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Jal => (
+                OpID::JAL.0 as usize,
+                j_type::jal::Jal::apply_rd(imm, x_rs1, x_rs2, pc),
+            ),
+            RdOps::Jalr => (
+                OpID::JALR.0 as usize,
+                i_type::jalr::Jalr::apply_rd(imm, x_rs1, x_rs2, pc),
+            ),
+        }
+    }
+}
+
+pub static RD_OPS_LIST: &[RdOps] = &[
+    RdOps::None,
+    RdOps::Lui,
+    RdOps::Auipc,
+    RdOps::Addi,
+    RdOps::Slti,
+    RdOps::Sltiu,
+    RdOps::Xori,
+    RdOps::Ori,
+    RdOps::Andi,
+    RdOps::Slli,
+    RdOps::Srli,
+    RdOps::Srai,
+    RdOps::Add,
+    RdOps::Sub,
+    RdOps::Sll,
+    RdOps::Slt,
+    RdOps::Sltu,
+    RdOps::Xor,
+    RdOps::Srl,
+    RdOps::Sra,
+    RdOps::Or,
+    RdOps::And,
+    RdOps::Jal,
+    RdOps::Jalr,
+];
 
 pub enum LoadOps {
     Lb,
@@ -115,38 +356,39 @@ pub enum LoadOps {
     Lw,
 }
 
-pub enum PcUpdatesOps {
-    Auipc(u_type::auipc::Auipc),
-    Beq(b_type::beq::Beq),
-    Bge(b_type::bge::Bge),
-    Bgeu(b_type::bgeu::Bgeu),
-    Blt(b_type::blt::Blt),
-    Bltu(b_type::bltu::Bltu),
-    Bne(b_type::bne::Bne),
-    Jal(j_type::jal::Jal),
-    Jalr(i_type::jalr::Jalr),
-}
+pub static LOAD_OPS_LIST: &[LoadOps] = &[
+    LoadOps::Lb,
+    LoadOps::Lbu,
+    LoadOps::Lh,
+    LoadOps::Lhu,
+    LoadOps::Lw,
+];
 
-pub enum ArithmeticOps {
-    Add(r_type::add::Add),
-    Addi(i_type::addi::Addi),
-    And(r_type::and::And),
-    Andi(i_type::andi::Andi),
-    Lui(u_type::lui::Lui),
-    Or(r_type::or::Or),
-    Ori(i_type::ori::Ori),
-    //Sll(sll::Sll),
-    //Slli(slli::Slli),
-    //Slt(slt::Slt),
-    //Slti(slti::Slti),
-    //Sltiu(sltiu::Sltiu),
-    //Sltu(sltu::Sltu),
-    //Sra(sra::Sra),
-    //Srai(srai::Srai),
-    //Srl(slr::Srl),
-    //Sub(sub::Sub),
-    //Xor(xor::Xor),
-    //Xori(xori::Xori),
+impl LoadOps {
+    pub fn apply(&self, value: &[u8; 8]) -> (usize, [u8; 8]) {
+        match self {
+            LoadOps::Lb => (
+                OpID::LB.0 as usize,
+                decompose(sext(
+                    reconstruct(&[value[0], value[1], 0, 0, 0, 0, 0, 0]),
+                    32,
+                )),
+            ),
+            LoadOps::Lh => (
+                OpID::LH.0 as usize,
+                decompose(sext(
+                    reconstruct(&[value[0], value[1], value[2], value[3], 0, 0, 0, 0]),
+                    32,
+                )),
+            ),
+            LoadOps::Lw => (OpID::LW.0 as usize, *value),
+            LoadOps::Lbu => (OpID::LBU.0 as usize, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
+            LoadOps::Lhu => (
+                OpID::LHU.0 as usize,
+                [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
+            ),
+        }
+    }
 }
 
 #[non_exhaustive]

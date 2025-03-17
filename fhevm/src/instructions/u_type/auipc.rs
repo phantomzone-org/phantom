@@ -14,19 +14,14 @@
 //!
 //! | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = pc + sext(imm[19:0] << 12)
 
-use crate::instructions::{decompose, reconstruct, PcUpdates};
+use crate::instructions::{decompose, reconstruct};
 
 pub struct Auipc();
 
-impl PcUpdates for Auipc {
-    fn apply(
-        imm: &[u8; 8],
-        _x_rs1: &[u8; 8],
-        _x_rs2: &[u8; 8],
-        pc: &[u8; 8],
-    ) -> ([u8; 8], [u8; 8]) {
+impl Auipc {
+    pub fn apply(imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> [u8; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let pc_u32: u32 = reconstruct(pc);
-        (decompose(pc_u32 + imm_u32), *pc)
+        decompose(pc_u32.wrapping_add(imm_u32))
     }
 }
