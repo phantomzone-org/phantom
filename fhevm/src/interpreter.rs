@@ -4,14 +4,16 @@ use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrap
 use crate::decompose::Decomposer;
 use crate::instructions::memory::{load, prepare_address, store};
 use crate::instructions::{
-    decompose, reconstruct, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
+    decompose, reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST,
+    STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
-    DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGN_DECOMP, LOGN_LWE,
+    DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK, LOGN_DECOMP, LOGN_LWE,
     MAXMEMORYADDRESS, MAXOPSADDRESS, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::Module;
+use itertools::izip;
 
 pub struct Interpreter {
     pub pc: Address,
@@ -23,27 +25,44 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(module: &Module) -> Self {
-        let log_n: usize = module.log_n();
+    pub fn new(module_lwe: &Module) -> Self {
+        let log_n: usize = module_lwe.log_n();
         assert_eq!(
             log_n, LOGN_LWE,
-            "invalid module: module.log_n()={} != LOGN_LWE={}",
+            "invalid module_lwe: module_lwe.log_n()={} != LOGN_LWE={}",
             log_n, LOGN_LWE
         );
         Self {
             pc: Address::new(
-                module,
+                module_lwe,
                 LOGN_DECOMP,
                 MAXOPSADDRESS,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
-            imm: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            instructions: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            register: Memory::new(module, LOGBASE2K, RLWE_COLS, 32),
-            memory: Memory::new(module, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
+            imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
+            instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
+            register: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, 32),
+            memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
             ret: false,
         }
+    }
+
+    pub fn init_instructions(&mut self, instructions: InstructionsParser) {
+        self.imm.set(&instructions.imm, LOGK);
+        self.instructions.set(&instructions.instructions, LOGK);
+    }
+
+    pub fn init_registers(&mut self, registers: &[u32; 32]) {
+        let mut registers_i64: [i64; 32] = [0i64; 32];
+        izip!(registers_i64.iter_mut(), registers.iter()).for_each(|(a, b)| *a = *b as i64);
+        self.register.set(&registers_i64[..], LOGK);
+    }
+
+    pub fn init_memory(&mut self, memory: &Vec<u32>) {
+        let mut memory_i64: Vec<i64> = vec![i64::default(); memory.len()];
+        izip!(memory_i64.iter_mut(), memory.iter()).for_each(|(a, b)| *a = *b as i64);
+        self.memory.set(&memory_i64[..], LOGK);
     }
 
     pub fn next(&mut self, module_pbs: &Module, module_lwe: &Module, tmp_bytes: &mut [u8]) {
@@ -74,9 +93,7 @@ impl Interpreter {
             tmp_bytes,
         );
 
-        // 1) Retrieve LWE 8xu4 inputs (imm, rs2, rs1, pc)
-        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        let mut tmp_address_input: Address = Address::new(
+        let mut tmp_address_instructions: Address = Address::new(
             module_lwe,
             LOGN_DECOMP,
             MAXOPSADDRESS,
@@ -84,6 +101,19 @@ impl Interpreter {
             VMPPMAT_COLS,
         );
 
+        let mut tmp_address_memory: Address = Address::new(
+            module_lwe,
+            LOGN_DECOMP,
+            MAXMEMORYADDRESS,
+            VMPPMAT_ROWS,
+            VMPPMAT_COLS,
+        );
+
+        let mut tmp_address_register: Address =
+            Address::new(module_lwe, LOGN_DECOMP, 32, VMPPMAT_ROWS, VMPPMAT_COLS);
+
+        // 1) Retrieve LWE 8xu4 inputs (imm, rs2, rs1, pc)
+        // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
         let imm_lwe: [u8; 8] = get_imm_lwe(
             module_pbs,
             module_lwe,
@@ -100,7 +130,7 @@ impl Interpreter {
             &mut decomposer_arithmetic,
             &self.register,
             rs2_u5,
-            &mut tmp_address_input,
+            &mut tmp_address_instructions,
             tmp_bytes,
         );
         let rs1_lwe: [u8; 8] = get_input_from_register_lwe(
@@ -110,7 +140,7 @@ impl Interpreter {
             &mut decomposer_arithmetic,
             &self.register,
             rs1_u5,
-            &mut tmp_address_input,
+            &mut tmp_address_instructions,
             tmp_bytes,
         );
 
@@ -138,14 +168,14 @@ impl Interpreter {
             &imm_lwe,
             &rs1_lwe,
             &circuit_btp,
-            &mut tmp_address_input,
+            &mut tmp_address_memory,
             tmp_bytes,
         );
 
         let loaded: [u8; 8] = load(
             module_lwe,
             &mut self.memory,
-            &mut tmp_address_input,
+            &mut tmp_address_memory,
             tmp_bytes,
         );
 
@@ -174,19 +204,22 @@ impl Interpreter {
             module_lwe,
             &mem_lwe,
             &mut self.memory,
-            &mut tmp_address_input,
+            &mut tmp_address_memory,
             tmp_bytes,
         );
 
         // 4) UPDATE REGISTERS
         // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        tmp_address_input.set(module_lwe, rd_w_u5 as u32); // TODO: bootstrap address
+        tmp_address_register.set(module_lwe, rd_w_u5 as u32); // TODO: bootstrap address
 
+        // dummy read
+        self.register
+            .read_prepare_write(module_lwe, &tmp_address_register, tmp_bytes);
         store(
             module_lwe,
             &rd_lwe,
             &mut self.register,
-            &mut tmp_address_input,
+            &mut tmp_address_register,
             tmp_bytes,
         );
 
@@ -213,7 +246,7 @@ impl Interpreter {
 
 pub fn next_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
     read_tmp_bytes(module_lwe, RLWE_COLS, VMPPMAT_ROWS, VMPPMAT_COLS)
-        + bootstrap_address_tmp_bytes(module_pbs, module_lwe, RLWE_COLS)
+        + bootstrap_address_tmp_bytes(module_pbs, module_lwe, VMPPMAT_COLS)
 }
 
 pub fn get_pc_lwe(
@@ -316,7 +349,7 @@ pub fn get_input_from_register_lwe(
         tmp_bytes_bootstrap_address,
     );
     let value: u32 = registers.read(module_lwe, tmp_address, tmp_bytes_read);
-    let value_u8 = decomposer_arithmetic.decompose(module_pbs, value);
+    let value_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, value);
     [
         value_u8[0] as u8,
         value_u8[1] as u8,

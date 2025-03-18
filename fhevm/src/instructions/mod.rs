@@ -371,14 +371,14 @@ impl LoadOps {
                 OpID::LB.0 as usize,
                 decompose(sext(
                     reconstruct(&[value[0], value[1], 0, 0, 0, 0, 0, 0]),
-                    32,
+                    7,
                 )),
             ),
             LoadOps::Lh => (
                 OpID::LH.0 as usize,
                 decompose(sext(
                     reconstruct(&[value[0], value[1], value[2], value[3], 0, 0, 0, 0]),
-                    32,
+                    15,
                 )),
             ),
             LoadOps::Lw => (OpID::LW.0 as usize, *value),
@@ -534,7 +534,7 @@ impl InstructionsParser {
     }
 }
 
-pub struct Instruction(u32);
+pub struct Instruction(pub u32);
 
 pub const RS1MASK: u32 = 0x000F_8000;
 pub const RS2MASK: u32 = 0x01F0_0000;

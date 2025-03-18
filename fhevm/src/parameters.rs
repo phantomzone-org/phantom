@@ -1,12 +1,12 @@
 pub const LOGN_PBS: usize = 12;
 pub const LOGN_LWE: usize = 11;
-pub const RLWE_COLS: usize = 3;
-pub const LOGBASE2K: usize = 17;
+pub const RLWE_COLS: usize = 4;
+pub const LOGBASE2K: usize = 9;
 pub const LOGN_DECOMP: usize = 6;
 pub const VMPPMAT_ROWS: usize = 4;
 pub const VMPPMAT_COLS: usize = 5;
 pub const MAXOPSADDRESS: usize = 65536;
 pub const MAXMEMORYADDRESS: usize = 65536;
-pub const LOGK: usize = LOGBASE2K * 2;
-pub const DECOMPOSE_INSTRUCTIONS: [u8; 5] = [5, 5, 5, 5, 5];
+pub const LOGK: usize = 32;
+pub const DECOMPOSE_INSTRUCTIONS: [u8; 6] = [5, 5, 5, 5, 5, 5];
 pub const DECOMPOSE_ARITHMETIC: [u8; 8] = [4, 4, 4, 4, 4, 4, 4, 4];

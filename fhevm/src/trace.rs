@@ -83,6 +83,7 @@ pub fn trace_inplace_core(
 ) {
     let a_cols: usize = a.cols();
     assert!(tmp_bytes.len() >= trace_tmp_bytes(module, a_cols));
+
     let vec_znx_bytes: usize = module.bytes_of_vec_znx(a_cols);
     let (tmp_bytes_vec_znx, tmp_bytes_carry) = tmp_bytes.split_at_mut(vec_znx_bytes);
     let mut tmp_a: VecZnx = VecZnx::from_bytes_borrow(module.n(), a_cols, tmp_bytes_vec_znx);

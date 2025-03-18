@@ -464,7 +464,7 @@ pub fn bootstrap_address_tmp_bytes(module_pbs: &Module, module_lwe: &Module, col
 }
 
 pub fn post_process_tmp_bytes(module: &Module, cols: usize) -> usize {
-    module.bytes_of_vec_znx(cols) + trace_tmp_bytes(module, cols)
+    2 * module.bytes_of_vec_znx(cols) + trace_tmp_bytes(module, cols)
 }
 
 pub fn circuit_bootstrap_tmp_bytes(module: &Module, cols: usize) -> usize {
