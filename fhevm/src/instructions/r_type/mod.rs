@@ -1,6 +1,14 @@
 pub mod add;
 pub mod and;
+pub mod div;
+pub mod divu;
+pub mod mul;
+pub mod mulh;
+pub mod mulhsu;
+pub mod mulhu;
 pub mod or;
+pub mod rem;
+pub mod remu;
 pub mod sll;
 pub mod slt;
 pub mod sltu;
@@ -8,14 +16,6 @@ pub mod sra;
 pub mod srl;
 pub mod sub;
 pub mod xor;
-pub mod mul;
-pub mod mulh;
-pub mod mulhu;
-pub mod mulhsu;
-pub mod div;
-pub mod divu;
-pub mod rem;
-pub mod remu;
 
 #[cfg(test)]
 mod tests {

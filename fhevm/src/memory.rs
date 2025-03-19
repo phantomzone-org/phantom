@@ -2,7 +2,7 @@ use crate::address::{Address, Coordinate};
 use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
-use base2k::{Encoding, Module, VecZnx, Infos, VecZnxDft, VecZnxDftOps, VecZnxOps, VmpPMatOps};
+use base2k::{Encoding, Infos, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps, VmpPMatOps};
 use itertools::izip;
 
 pub struct Memory {
@@ -85,14 +85,14 @@ impl Memory {
         }
     }
 
-    pub fn print(&self){
+    pub fn print(&self) {
         let n: usize = self.data[0].n();
-        let mut values: Vec<i64> = vec![0i64;n];
-        'outer: for i in 0..self.data.len(){
+        let mut values: Vec<i64> = vec![0i64; n];
+        'outer: for i in 0..self.data.len() {
             self.data[i].decode_vec_i64(self.log_base2k, self.log_k, &mut values);
-            for j in 0..n{
-                print!("{:04}: {}\n", i*n+j, values[j]);
-                if i*n+j > self.max_size{
+            for j in 0..n {
+                print!("{:04}: {}\n", i * n + j, values[j]);
+                if i * n + j > self.max_size {
                     break 'outer;
                 }
             }

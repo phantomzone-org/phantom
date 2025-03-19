@@ -7,7 +7,7 @@ impl Remu {
         let x_rs1_u32: u32 = reconstruct(x_rs1) as u32;
         let x_rs2_u32: u32 = reconstruct(x_rs2) as u32;
         if x_rs2_u32 == 0 {
-            return decompose(x_rs1_u32)
+            return decompose(x_rs1_u32);
         }
         decompose((x_rs1_u32 % x_rs2_u32) as u32)
     }

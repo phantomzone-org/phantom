@@ -48,7 +48,7 @@ impl Interpreter {
         }
     }
 
-    pub fn init_pc(&mut self, module_lwe: &Module){
+    pub fn init_pc(&mut self, module_lwe: &Module) {
         self.pc.set(module_lwe, 0);
     }
 
@@ -97,7 +97,7 @@ impl Interpreter {
             tmp_bytes,
         );
 
-        /* 
+        /*
         println!("rs2_u5  : {:05b}", rs2_u5);
         println!("rs1_u5  : {:05b}", rs1_u5);
         println!("rd_u5   : {:05b}", rd_u5);
@@ -355,7 +355,11 @@ pub fn get_input_from_register_lwe(
     decompose_1xu32_to_8xu4(module_pbs, decomposer_arithmetic, value)
 }
 
-pub fn decompose_1xu32_to_8xu4(module_pbs: &Module, decomposer: &mut Decomposer, value: u32)-> [u8; 8]{
+pub fn decompose_1xu32_to_8xu4(
+    module_pbs: &Module,
+    decomposer: &mut Decomposer,
+    value: u32,
+) -> [u8; 8] {
     let value_u8: Vec<i64> = decomposer.decompose(module_pbs, value);
     [
         value_u8[0] as u8,
