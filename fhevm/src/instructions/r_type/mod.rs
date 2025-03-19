@@ -8,6 +8,14 @@ pub mod sra;
 pub mod srl;
 pub mod sub;
 pub mod xor;
+pub mod mul;
+pub mod mulh;
+pub mod mulhu;
+pub mod mulhsu;
+pub mod div;
+pub mod divu;
+pub mod rem;
+pub mod remu;
 
 #[cfg(test)]
 mod tests {
@@ -63,6 +71,46 @@ mod tests {
     fn xor() {
         test_instruction(0, 0b100, 0b0110011, OpID::XOR)
     }
+
+    #[test]
+    fn mul() {
+        test_instruction(0b0000001, 0b000, 0b0110011, OpID::MUL)
+    }
+
+    #[test]
+    fn mulh() {
+        test_instruction(0b0000001, 0b001, 0b0110011, OpID::MULH)
+    }
+
+    #[test]
+    fn mulhsu() {
+        test_instruction(0b0000001, 0b010, 0b0110011, OpID::MULHSU)
+    }
+
+    #[test]
+    fn mulhu() {
+        test_instruction(0b0000001, 0b011, 0b0110011, OpID::MULHU)
+    }
+
+    #[test]
+    fn div() {
+        test_instruction(0b0000001, 0b100, 0b0110011, OpID::DIV)
+    }
+
+    #[test]
+    fn divu() {
+        test_instruction(0b0000001, 0b101, 0b0110011, OpID::DIVU)
+    }
+
+    #[test]
+    fn rem() {
+        test_instruction(0b0000001, 0b110, 0b0110011, OpID::REM)
+    }
+
+    #[test]
+    fn remu() {
+        test_instruction(0b0000001, 0b111, 0b0110011, OpID::REMU)
+    }
 }
 
 use crate::instructions::{Instruction, InstructionsParser};
@@ -81,6 +129,7 @@ fn test_instruction(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
     instruction.set_rd(rd);
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
+    println!("{:30b}", m.instructions[0]);
     m.assert_size(1);
     m.assert_instruction(
         0,

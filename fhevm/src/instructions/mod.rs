@@ -33,6 +33,15 @@
 //!
 //! 27 |jal   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = pc + 4
 //! 28 |jalr  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = pc + 4
+//! 
+//! 29 |mul   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1]s * x[rs2]s
+//! 30 |mulh  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = (x[rs1]s * x[rs2]s)>>32
+//! 31 |mulhsu| imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = (x[rs1]s * x[rs2]u)>>32
+//! 32 |mulhu | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = (x[rs1]u * x[rs2]u)>>32
+//! 33 |div   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1]s / x[rs2]s
+//! 34 |divu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1]u / x[rs2]u
+//! 35 |rem   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1]s % x[rs2]s
+//! 36 |remu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1]u % x[rs2]u
 //!
 //! # MEMORY UPDATE
 //! ID |  OP  |     4      |      4     |     4     |     4    |     4    |  5  |  5  |  5 |
@@ -213,6 +222,14 @@ pub enum RdOps {
     And,
     Jal,
     Jalr,
+    Mul,
+    Mulh,
+    Mulhsu,
+    Mulhu,
+    Div,
+    Divu,
+    Rem,
+    Remu
 }
 
 impl RdOps {
@@ -317,6 +334,38 @@ impl RdOps {
                 OpID::JALR.0 as usize,
                 i_type::jalr::Jalr::apply_rd(imm, x_rs1, x_rs2, pc),
             ),
+            RdOps::Mul => (
+                OpID::MUL.0 as usize,
+                r_type::mul::Mul::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Mulh => (
+                OpID::MULH.0 as usize,
+                r_type::mulh::Mulh::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Mulhsu => (
+                OpID::MULHSU.0 as usize,
+                r_type::mulhsu::Mulhsu::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Mulhu => (
+                OpID::MULHU.0 as usize,
+                r_type::mulhu::Mulhu::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Div => (
+                OpID::DIV.0 as usize,
+                r_type::div::Div::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Divu => (
+                OpID::DIVU.0 as usize,
+                r_type::divu::Divu::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Rem => (
+                OpID::REM.0 as usize,
+                r_type::rem::Rem::apply(imm, x_rs1, x_rs2),
+            ),
+            RdOps::Remu => (
+                OpID::REMU.0 as usize,
+                r_type::remu::Remu::apply(imm, x_rs1, x_rs2),
+            ),
         }
     }
 }
@@ -346,6 +395,14 @@ pub static RD_OPS_LIST: &[RdOps] = &[
     RdOps::And,
     RdOps::Jal,
     RdOps::Jalr,
+    RdOps::Mul,
+    RdOps::Mulh,
+    RdOps::Mulhsu,
+    RdOps::Mulhu,
+    RdOps::Div,
+    RdOps::Divu,
+    RdOps::Rem,
+    RdOps::Remu,
 ];
 
 pub enum LoadOps {
@@ -421,6 +478,14 @@ impl OpID {
     pub const LW: (u8, u8, u8) = (24, 0, 0);
     pub const LBU: (u8, u8, u8) = (25, 0, 0);
     pub const LHU: (u8, u8, u8) = (26, 0, 0);
+    pub const MUL: (u8, u8, u8) = (29, 0, 0);
+    pub const MULH: (u8, u8, u8) = (30, 0, 0);
+    pub const MULHSU: (u8, u8, u8) = (31, 0, 0);
+    pub const MULHU: (u8, u8, u8) = (32, 0, 0);
+    pub const DIV: (u8, u8, u8) = (33, 0, 0);
+    pub const DIVU: (u8, u8, u8) = (34, 0, 0);
+    pub const REM: (u8, u8, u8) = (35, 0, 0);
+    pub const REMU: (u8, u8, u8) = (36, 0, 0);
     pub const SB: (u8, u8, u8) = (0, 1, 0);
     pub const SH: (u8, u8, u8) = (0, 2, 0);
     pub const SW: (u8, u8, u8) = (0, 3, 0);
@@ -450,11 +515,12 @@ impl InstructionsParser {
     pub fn add(&mut self, instruction: Instruction) {
         let (rs2, rs1, rd) = instruction.get_registers();
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
+        println!("{} {} {}", rd_w, mem_w, pc_w);
         self.imm.push(instruction.get_immediate() as i64);
         self.instructions.push(
-            (rs2 as i64) << 25
-                | (rs1 as i64) << 20
-                | (rd as i64) << 15
+            (rs2 as i64) << 26
+                | (rs1 as i64) << 21
+                | (rd as i64) << 16
                 | (rd_w as i64) << 10
                 | (mem_w as i64) << 5
                 | (pc_w as i64),
@@ -471,10 +537,10 @@ impl InstructionsParser {
         let data = self.instructions[idx];
         (
             self.imm[idx] as i64,
-            ((data >> 25) & 0x1F) as i64,
-            ((data >> 20) & 0x1F) as i64,
-            ((data >> 15) & 0x1F) as i64,
-            ((data >> 10) & 0x1F) as i64,
+            ((data >> 26) & 0x1F) as i64,
+            ((data >> 21) & 0x1F) as i64,
+            ((data >> 16) & 0x1F) as i64,
+            ((data >> 10) & 0x3F) as i64,
             ((data >> 5) & 0x1F) as i64,
             (data & 0x1F) as i64,
         )
@@ -833,6 +899,14 @@ impl Instruction {
                 (0b0100000, 0b101) => OpID::SRA,
                 (0b0000000, 0b110) => OpID::OR,
                 (0b0000000, 0b111) => OpID::AND,
+                (0b0000001, 0b000) => OpID::MUL,
+                (0b0000001, 0b001) => OpID::MULH,
+                (0b0000001, 0b010) => OpID::MULHSU,
+                (0b0000001, 0b011) => OpID::MULHU,
+                (0b0000001, 0b100) => OpID::DIV,
+                (0b0000001, 0b101) => OpID::DIVU,
+                (0b0000001, 0b110) => OpID::REM,
+                (0b0000001, 0b111) => OpID::REMU,
                 _ => panic!(
                     "invalid funct3 {:03b} or funct7 {:07b}: {:032b}",
                     self.get_funct3(),
