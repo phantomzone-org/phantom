@@ -48,6 +48,10 @@ impl Interpreter {
         }
     }
 
+    pub fn init_pc(&mut self, module_lwe: &Module){
+        self.pc.set(module_lwe, 0);
+    }
+
     pub fn init_instructions(&mut self, instructions: InstructionsParser) {
         self.imm.set(&instructions.imm, LOGK);
         self.instructions.set(&instructions.instructions, LOGK);
@@ -92,6 +96,15 @@ impl Interpreter {
             &self.pc,
             tmp_bytes,
         );
+
+        /* 
+        println!("rs2_u5  : {:05b}", rs2_u5);
+        println!("rs1_u5  : {:05b}", rs1_u5);
+        println!("rd_u5   : {:05b}", rd_u5);
+        println!("rd_w_u5 : {:05b}", rd_w_u5);
+        println!("mem_w_u5: {:05b}", mem_w_u5);
+        println!("pc_w_u5 : {:05b}", pc_w_u5);
+        */
 
         let mut tmp_address_instructions: Address = Address::new(
             module_lwe,
@@ -184,7 +197,14 @@ impl Interpreter {
             rd_out[idx] = out
         });
 
-        let rd_lwe: [u8; 8] = rd_out[rd_u5 as usize]; // Select new RD
+        /*
+        println!("RD_OUT");
+        rd_out.iter().enumerate().for_each(|(i, x)|{
+            println!("{:03}: {:?}", i, x);
+        });
+        */
+
+        let rd_lwe: [u8; 8] = rd_out[rd_w_u5 as usize]; // Select new RD
 
         // 3) UPDATE MEMORY
         // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
@@ -210,7 +230,7 @@ impl Interpreter {
 
         // 4) UPDATE REGISTERS
         // >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-        tmp_address_register.set(module_lwe, rd_w_u5 as u32); // TODO: bootstrap address
+        tmp_address_register.set(module_lwe, rd_u5 as u32); // TODO: bootstrap address
 
         // dummy read
         self.register
@@ -249,6 +269,10 @@ pub fn next_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
         + bootstrap_address_tmp_bytes(module_pbs, module_lwe, VMPPMAT_COLS)
 }
 
+pub fn get_lwe_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
+    next_tmp_bytes(module_pbs, module_lwe)
+}
+
 pub fn get_pc_lwe(
     module_pbs: &Module,
     module_lwe: &Module,
@@ -262,19 +286,8 @@ pub fn get_pc_lwe(
     let mut data: Vec<i64> = vec![i64::default(); MAXOPSADDRESS];
     data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
     mem.set(&data, log_k);
-
     let pc_u32: u32 = mem.read(module_lwe, pc, tmp_bytes);
-    let pc_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, pc_u32);
-    [
-        pc_u8[0] as u8,
-        pc_u8[1] as u8,
-        pc_u8[2] as u8,
-        pc_u8[3] as u8,
-        pc_u8[4] as u8,
-        pc_u8[5] as u8,
-        pc_u8[6] as u8,
-        pc_u8[7] as u8,
-    ]
+    decompose_1xu32_to_8xu4(module_pbs, decomposer_arithmetic, pc_u32)
 }
 
 pub fn get_imm_lwe(
@@ -286,17 +299,7 @@ pub fn get_imm_lwe(
     tmp_bytes: &mut [u8],
 ) -> [u8; 8] {
     let imm_u32: u32 = location.read(module_lwe, pc, tmp_bytes);
-    let imm_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, imm_u32);
-    [
-        imm_u8[0] as u8,
-        imm_u8[1] as u8,
-        imm_u8[2] as u8,
-        imm_u8[3] as u8,
-        imm_u8[4] as u8,
-        imm_u8[5] as u8,
-        imm_u8[6] as u8,
-        imm_u8[7] as u8,
-    ]
+    decompose_1xu32_to_8xu4(module_pbs, decomposer_arithmetic, imm_u32)
 }
 
 pub fn get_instructions(
@@ -316,12 +319,12 @@ pub fn get_instructions(
     let instructions: u32 = location.read(module_lwe, pc, tmp_bytes_read);
     let ii: Vec<i64> = instructions_decomposer.decompose(module_pbs, instructions);
     (
-        ii[0] as u8,
-        ii[1] as u8,
-        ii[2] as u8,
-        ii[3] as u8,
-        ii[4] as u8,
         ii[5] as u8,
+        ii[4] as u8,
+        ii[3] as u8,
+        ii[2] as u8,
+        ii[1] as u8,
+        ii[0] as u8,
     )
 }
 
@@ -349,7 +352,11 @@ pub fn get_input_from_register_lwe(
         tmp_bytes_bootstrap_address,
     );
     let value: u32 = registers.read(module_lwe, tmp_address, tmp_bytes_read);
-    let value_u8: Vec<i64> = decomposer_arithmetic.decompose(module_pbs, value);
+    decompose_1xu32_to_8xu4(module_pbs, decomposer_arithmetic, value)
+}
+
+pub fn decompose_1xu32_to_8xu4(module_pbs: &Module, decomposer: &mut Decomposer, value: u32)-> [u8; 8]{
+    let value_u8: Vec<i64> = decomposer.decompose(module_pbs, value);
     [
         value_u8[0] as u8,
         value_u8[1] as u8,
@@ -360,35 +367,4 @@ pub fn get_input_from_register_lwe(
         value_u8[6] as u8,
         value_u8[7] as u8,
     ]
-}
-
-pub fn get_inputs(
-    module_pbs: &Module,
-    module_lwe: &Module,
-    location: &Memory,
-    registers: &Memory,
-    pc: &Address,
-    circuit_btp: &CircuitBootstrapper,
-    tmp_address: &mut Address,
-    tmp_bytes: &mut [u8],
-) -> u32 {
-    let (tmp_bytes_read, tmp_bytes_bootstrap_address) = tmp_bytes.split_at_mut(read_tmp_bytes(
-        module_lwe,
-        RLWE_COLS,
-        VMPPMAT_ROWS,
-        VMPPMAT_COLS,
-    ));
-    let idx_lwe: u32 = location.read(module_lwe, pc, tmp_bytes_read);
-    circuit_btp.bootstrap_to_address(
-        module_pbs,
-        module_lwe,
-        idx_lwe,
-        tmp_address,
-        tmp_bytes_bootstrap_address,
-    );
-    registers.read(module_lwe, tmp_address, tmp_bytes_read)
-}
-
-pub fn get_lwe_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
-    next_tmp_bytes(module_pbs, module_lwe)
 }
