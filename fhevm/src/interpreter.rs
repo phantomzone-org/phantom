@@ -11,7 +11,7 @@ use crate::instructions::{
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK, LOGN_DECOMP, LOGN_LWE,
-    MAXMEMORYADDRESS, MAXOPSADDRESS, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    MAXMEMORYADDRESS, MAXOPSADDRESS, REGISTERSCOUNT, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::{alloc_aligned, Module};
 use itertools::izip;
@@ -32,7 +32,6 @@ pub struct Interpreter {
     pub tmp_address_instructions: Address,
     pub tmp_address_memory: Address,
     pub tmp_address_register: Address,
-
     pub tmp_address_memory_state: bool,
 }
 
@@ -62,7 +61,7 @@ impl Interpreter {
             ),
             imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
             instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, 32),
+            registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, REGISTERSCOUNT),
             memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
             ret: false,
             ram_offset: 0,
@@ -104,7 +103,7 @@ impl Interpreter {
             tmp_address_register: Address::new(
                 module_lwe,
                 LOGN_DECOMP,
-                32,
+                REGISTERSCOUNT,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
@@ -120,8 +119,8 @@ impl Interpreter {
         self.instructions.set(&instructions.instructions, LOGK);
     }
 
-    pub fn init_registers(&mut self, registers: &[u32; 32]) {
-        let mut registers_i64: [i64; 32] = [0i64; 32];
+    pub fn init_registers(&mut self, registers: &[u32; REGISTERSCOUNT]) {
+        let mut registers_i64: [i64; 32] = [0i64; REGISTERSCOUNT];
         izip!(registers_i64.iter_mut(), registers.iter()).for_each(|(a, b)| *a = *b as i64);
         self.registers.set(&registers_i64[..], LOGK);
     }
