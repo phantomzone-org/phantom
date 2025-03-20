@@ -1,11 +1,12 @@
+use std::time::Instant;
+
 //use crate::gadget::Gadget;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::Decomposer;
 use crate::instructions::memory::{load, prepare_address, store};
 use crate::instructions::{
-    decompose, reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST,
-    STORE_OPS_LIST,
+    reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
@@ -133,29 +134,64 @@ impl Interpreter {
 
     pub fn step(&mut self, module_pbs: &Module, module_lwe: &Module) {
         // 0) Fetches instructions selectors
+        let now: Instant = Instant::now();
         let (rs2_u5, rs1_u5, rd_u5, rd_w_u6, mem_w_u5, pc_w_u5) =
-            self.get_instructions(module_pbs, module_lwe);
+            self.get_instruction_selectors(module_pbs, module_lwe);
+        println!(
+            "get_instruction_selectors: {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 1) Retrieve 8xLWE(u4) inputs (imm, rs2, rs1, pc)
+        let now: Instant = Instant::now();
         let (imm_lwe, rs2_lwe, rs1_lwe, pc_lwe) =
             self.get_lwe_inputs(module_pbs, module_lwe, rs2_u5, rs1_u5);
+        println!(
+            "get_lwe_inputs           : {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 2) Prepares memory address address read/write (x_rs1 + sext(imm)) & loads value from memory
+        let now: Instant = Instant::now();
         let loaded: [u8; 8] = self.read_memory(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
+        println!(
+            "read_memory              : {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 3) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
+        let now: Instant = Instant::now();
         let rd_lwe: [u8; 8] =
             self.evaluate_ops(&imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, &loaded, rd_w_u6);
+        println!(
+            "evaluate_ops             : {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 4) Updates memory from {RD|LOADED}[mem_w_u5]
+        let now: Instant = Instant::now();
         self.store_memory(module_lwe, &rd_lwe, &loaded, mem_w_u5);
+        println!(
+            "store_memory             : {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 5) Updates registers from RD
+        let now: Instant = Instant::now();
         self.store_registers(module_lwe, &rd_lwe, rd_u5);
+        println!(
+            "store_registers          : {} ms",
+            now.elapsed().as_millis()
+        );
 
         // 6) Update PC from OPS(imm, rs1, rs2, pc)[pc_w_u5]
+        let now: Instant = Instant::now();
         self.update_pc(
             module_pbs, module_lwe, &imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, pc_w_u5,
+        );
+        println!(
+            "update_pc                : {} ms",
+            now.elapsed().as_millis()
         );
 
         // Reinitialize checks
@@ -349,14 +385,17 @@ impl Interpreter {
         decompose_1xu32_to_8xu4(module_pbs, &mut self.decomposer_arithmetic, value)
     }
 
-    fn get_instructions(
+    fn get_instruction_selectors(
         &mut self,
         module_pbs: &Module,
         module_lwe: &Module,
     ) -> (u8, u8, u8, u8, u8, u8) {
-        let (tmp_bytes_read, tmp_bytes_bootstrap_address) = self.tmp_bytes.split_at_mut(
-            read_tmp_bytes(module_lwe, RLWE_COLS, VMPPMAT_ROWS, VMPPMAT_COLS),
-        );
+        let (tmp_bytes_read, _) = self.tmp_bytes.split_at_mut(read_tmp_bytes(
+            module_lwe,
+            RLWE_COLS,
+            VMPPMAT_ROWS,
+            VMPPMAT_COLS,
+        ));
         let instructions: u32 = self.instructions.read(module_lwe, &self.pc, tmp_bytes_read);
         let ii: Vec<i64> = self
             .decomposer_instructions

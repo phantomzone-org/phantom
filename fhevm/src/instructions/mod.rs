@@ -119,7 +119,6 @@ impl StoreOps {
                 [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
             ),
             StoreOps::Sw => (OpID::SW.1 as usize, *value),
-            _ => panic!("invalid store op"),
         }
     }
 }

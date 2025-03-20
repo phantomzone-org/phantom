@@ -1,6 +1,5 @@
 use crate::address::Address;
 use crate::decompose::Decomposer;
-use crate::memory::Memory;
 use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
     alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxOps, VecZnxVec, VmpPMatOps,
