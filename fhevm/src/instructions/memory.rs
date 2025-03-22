@@ -1,5 +1,6 @@
 use crate::address::Address;
 use crate::circuit_bootstrapping::CircuitBootstrapper;
+use crate::decompose::Decomposer;
 use crate::instructions::{decompose, reconstruct};
 use crate::memory::Memory;
 use base2k::Module;
@@ -10,13 +11,17 @@ pub fn prepare_address(
     imm: &[u8; 8],
     x_rs1: &[u8; 8],
     circuit_btp: &CircuitBootstrapper,
+    decomposer: &mut Decomposer,
     address: &mut Address,
     tmp_bytes: &mut [u8],
-) {
+) -> u8 {
     let imm_u32: u32 = reconstruct(imm);
     let x_rs1_u32: u32 = reconstruct(x_rs1);
-    let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
+    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
+    let offset: u32 = decomposer.decompose(module_pbs, idx)[0] as u32;
+    idx -= offset;
     circuit_btp.bootstrap_to_address(module_pbs, module_lwe, idx, address, tmp_bytes);
+    offset as u8
 }
 
 pub fn load(
@@ -45,6 +50,7 @@ mod tests {
     use crate::circuit_bootstrapping::circuit_bootstrap_tmp_bytes;
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
+    use crate::parameters::DECOMPOSE_BYTEOFFSET;
     use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 
     #[test]
@@ -84,18 +90,28 @@ mod tests {
         let circuit_btp: CircuitBootstrapper =
             CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, cols_gct);
 
+        let mut offset_decomposer: Decomposer = Decomposer::new(
+            &module_pbs,
+            &DECOMPOSE_BYTEOFFSET.to_vec(),
+            log_base2k,
+            cols,
+        );
+
         let imm: u32 = sext(0xF, 11);
         let x_rs1: u32 = n as u32;
 
-        prepare_address(
+        let offset: u8 = prepare_address(
             &module_pbs,
             &module_lwe,
             &decompose(imm),
             &decompose(x_rs1),
             &circuit_btp,
+            &mut offset_decomposer,
             &mut address,
             &mut tmp_bytes,
         );
+
+        assert_eq!((x_rs1.wrapping_add(imm) & 3) as u8, offset);
 
         let loaded: [u8; 8] = load(&module_lwe, &mut memory, &mut address, &mut tmp_bytes);
 

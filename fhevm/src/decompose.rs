@@ -52,10 +52,10 @@ impl Decomposer {
         }
     }
 
-    pub fn decompose(&mut self, module: &Module, value: u32) -> Vec<i64> {
+    pub fn decompose(&mut self, module_pbs: &Module, value: u32) -> Vec<i64> {
         //println!("value: {:032b}", value);
 
-        let n: usize = module.n();
+        let n: usize = module_pbs.n();
 
         assert!(
             n == self.test_vector_quo[0].0.n(),
@@ -64,7 +64,7 @@ impl Decomposer {
             self.test_vector_quo[0].0.n()
         );
 
-        let log_n: usize = module.log_n();
+        let log_n: usize = module_pbs.log_n();
         let log_2n: usize = log_n + 1;
 
         let mut vec: Vec<i64> = Vec::new();
@@ -80,7 +80,7 @@ impl Decomposer {
         self.log_bases.iter().enumerate().for_each(|(i, base)| {
             //assert!(
             //    log_2n - 2 > *base,
-            //    "invalid module: log_2n={} < base+2={}",
+            //    "invalid module_pbs: log_2n={} < base+2={}",
             //    log_2n,
             //    base + 2
             //);
@@ -122,7 +122,7 @@ impl Decomposer {
 
             // 3) PBS to extract msb
             // [1] [111111] [10000] -> [1] [00000] [00000]
-            module.vec_znx_rotate(x as i64, buf, &self.test_vector_msb.0);
+            module_pbs.vec_znx_rotate(x as i64, buf, &self.test_vector_msb.0);
 
             // 4) Subtracts msb from x
             // [1] [111111] [10000] ->  [0] [111111] [10000]
@@ -139,7 +139,7 @@ impl Decomposer {
 
             // 5) PBS bit-extraction
             // [0] [111111] [10000] ->  [0] [111111] [00000]
-            module.vec_znx_rotate(x as i64, buf, &self.test_vector_quo[i].0);
+            module_pbs.vec_znx_rotate(x as i64, buf, &self.test_vector_quo[i].0);
 
             // Adds back MSB if this is the last iteration
             let mut digits: u64 =

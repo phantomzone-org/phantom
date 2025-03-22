@@ -10,8 +10,9 @@ use crate::instructions::{
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
-    DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK, LOGN_DECOMP, LOGN_LWE,
-    MAXMEMORYADDRESS, MAXOPSADDRESS, REGISTERSCOUNT, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
+    LOGN_DECOMP, LOGN_LWE, MAXMEMORYADDRESS, MAXOPSADDRESS, REGISTERSCOUNT, RLWE_COLS,
+    VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::{alloc_aligned, Module};
 use itertools::izip;
@@ -28,6 +29,7 @@ pub struct Interpreter {
     pub circuit_btp: CircuitBootstrapper,
     pub decomposer_instructions: Decomposer,
     pub decomposer_arithmetic: Decomposer,
+    pub decomposer_offset: Decomposer,
     pub tmp_bytes: Vec<u8>,
     pub tmp_address_instructions: Address,
     pub tmp_address_memory: Address,
@@ -81,6 +83,12 @@ impl Interpreter {
             decomposer_instructions: Decomposer::new(
                 module_pbs,
                 &DECOMPOSE_INSTRUCTIONS.to_vec(),
+                LOGBASE2K,
+                RLWE_COLS,
+            ),
+            decomposer_offset: Decomposer::new(
+                module_pbs,
+                &DECOMPOSE_BYTEOFFSET.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
@@ -150,15 +158,23 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        // 2) Prepares memory address address read/write (x_rs1 + sext(imm)) & loads value from memory
+        // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         let now: Instant = Instant::now();
-        let loaded: [u8; 8] = self.read_memory(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
+        let offset: u8 = self.prepare_memory_address(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
+        println!(
+            "prepare_memory_address   : {} ms",
+            now.elapsed().as_millis()
+        );
+
+        // 3)  loads value from memory
+        let now: Instant = Instant::now();
+        let loaded: [u8; 8] = self.read_memory(module_lwe, offset);
         println!(
             "read_memory              : {} ms",
             now.elapsed().as_millis()
         );
 
-        // 3) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
+        // 4) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
         let now: Instant = Instant::now();
         let rd_lwe: [u8; 8] =
             self.evaluate_ops(&imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, &loaded, rd_w_u6);
@@ -167,15 +183,15 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        // 4) Updates memory from {RD|LOADED}[mem_w_u5]
+        // 5) Updates memory from {RD|LOADED}[mem_w_u5]
         let now: Instant = Instant::now();
-        self.store_memory(module_lwe, &rd_lwe, &loaded, mem_w_u5);
+        self.store_memory(module_lwe, &rd_lwe, &loaded, offset, mem_w_u5);
         println!(
             "store_memory             : {} ms",
             now.elapsed().as_millis()
         );
 
-        // 5) Updates registers from RD
+        // 6) Updates registers from RD
         let now: Instant = Instant::now();
         self.store_registers(module_lwe, &rd_lwe, rd_u5);
         println!(
@@ -183,7 +199,7 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        // 6) Update PC from OPS(imm, rs1, rs2, pc)[pc_w_u5]
+        // 7) Update PC from OPS(imm, rs1, rs2, pc)[pc_w_u5]
         let now: Instant = Instant::now();
         self.update_pc(
             module_pbs, module_lwe, &imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, pc_w_u5,
@@ -223,20 +239,25 @@ impl Interpreter {
         rd_out[rd_w_u6 as usize]
     }
 
-    fn read_memory(
-        &mut self,
-        module_pbs: &Module,
-        module_lwe: &Module,
-        imm_lwe: &[u8; 8],
-        rs1_lwe: &[u8; 8],
-    ) -> [u8; 8] {
-        self.prepare_memory_address(module_pbs, module_lwe, imm_lwe, rs1_lwe);
-        load(
+    fn read_memory(&mut self, module_lwe: &Module, offset: u8) -> [u8; 8] {
+        assert_eq!(
+            self.tmp_address_memory_state, true,
+            "trying to read memory but memory address hasn't been prepared"
+        );
+        let loaded: [u8; 8] = load(
             module_lwe,
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
-        )
+        );
+
+        let loaded_list: [[u8; 8]; 4] = [
+            loaded,
+            [0, 0, 0, 0, 0, 0, 0, 0], // Never used since we can only load 1, 2 or 4 bytes
+            [loaded[0], loaded[1], loaded[2], loaded[3], 0, 0, 0, 0],
+            [loaded[0], loaded[1], 0, 0, 0, 0, 0, 0],
+        ];
+        loaded_list[offset as usize]
     }
 
     fn store_memory(
@@ -244,6 +265,7 @@ impl Interpreter {
         module_lwe: &Module,
         rd_lwe: &[u8; 8],
         loaded: &[u8; 8],
+        offset: u8,
         mem_w_u5: u8,
     ) {
         assert_eq!(
@@ -263,9 +285,22 @@ impl Interpreter {
 
         let mem_lwe: [u8; 8] = mem_out[mem_w_u5 as usize];
 
+        let mem_lwe_list: [[u8; 8]; 4] = [
+            mem_lwe,
+            [0, 0, 0, 0, 0, 0, 0, 0], // Never used since offset is 0, 2, 3 (4 bytes, 2 bytes, 1 byte)
+            [
+                mem_lwe[0], mem_lwe[1], mem_lwe[2], mem_lwe[3], loaded[4], loaded[5], loaded[6],
+                loaded[7],
+            ],
+            [
+                mem_lwe[0], loaded[1], loaded[2], loaded[3], loaded[4], loaded[5], loaded[6],
+                loaded[7],
+            ],
+        ];
+
         store(
             module_lwe,
-            &mem_lwe,
+            &mem_lwe_list[offset as usize],
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
@@ -339,21 +374,23 @@ impl Interpreter {
         module_lwe: &Module,
         imm_lwe: &[u8; 8],
         rs1_lwe: &[u8; 8],
-    ) {
+    ) -> u8 {
         assert_eq!(
             self.tmp_address_memory_state, false,
             "trying to prepare address rs1 + imm but state indicates it has already been done"
         );
-        prepare_address(
+        let offset: u8 = prepare_address(
             module_pbs,
             module_lwe,
             imm_lwe,
             rs1_lwe,
             &self.circuit_btp,
+            &mut self.decomposer_offset,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
         );
         self.tmp_address_memory_state = true;
+        offset
     }
 
     fn get_pc_lwe(&mut self, module_pbs: &Module, module_lwe: &Module) -> [u8; 8] {
