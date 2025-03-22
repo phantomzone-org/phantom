@@ -1,26 +1,26 @@
 # Phantom
 
-Phantom is prototype of a fully encrypted risc-v virtual machine. It runs encrypted risc-v binaries on encrypted inputs.
+Phantom is a prototype fully encrypted RISC-V virtual machine that executes encrypted RISC-V binaries on encrypted inputs.
 
-Phantom enables encrypted programs, programs that are complete black-box to any observer. This allows developers to write programs with hidden instructions, constants, and states. And can be used for variety of new types of applications.
+It enables black-box execution of any RISC-V program, allowing developers to write code with hidden instructions, constants, and states. This opens the door to new types of applications.
 
 ## How it works
 
-Developers write their program as a rust program. Rust program is then compiled to a risc-v binary. The risc-v binary is transformed to a representation that is efficient to execute in plaintext space of FHE schemes. Concretely, the binary is transformed into a collection of polynomials. The polynomials are then encrypted by the developer and the resulting collection of encrypted polynomials is the encrypted program. The encrypted program can then be executed in the phantom executor on arbitrary encrypted inputs.
+Developers write their programs in Rust, which are then compiled into RISC-V binaries. These binaries are transformed into a polynomial representation, optimized for execution within the plaintext space of RLWE-base FHE. These polynomials are then encrypted, producing the encrypted program, which can then be executed by the Phantom executor on arbitrary encrypted and/or plaintext inputs.
 
-To we recommed to look at full end to end examples in `compiler-tests` directory. In particular, the [sybil-resistant-id](./compiler-tests/sybil-resistant-id/) example.
+To we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [sybil-resistant-id](./compiler-tests/sybil-resistant-id/) example.
 
-Phantom executor is a collection of FHE circuits that as a whole simulate risc-v virtual machine. The executor is implemented in `fhevm` directory. The specs of the implementaion are described inside [./fhevm/doc](./fhevm/doc) directory. There's also a [poster]() that captures the end to end execution flow at once. Both the implementation and the specs are under development and will change in future. We encourage others to ask questions, if any, by opening an issue.
+The Phantom executor is a collection of FHE circuits that, collectively, simulate a RISC-V virtual machine. It is implemented in the `./fhevm` directory, with specifications detailed in [./fhevm/doc](./fhevm/doc). A [poster]() also provides a high-level overview of the end-to-end execution flow.
+
+Both the implementation and specifications are actively evolving and subject to change. We encourage feedback and questions—feel free to open an issue.
 
 ## Current status
 
-Phantom is under construction. At the moment, it only implements a prototype of the actual encrypted executore. All the circuits are implemented using plaintext polynomials. Doing so provides us with good estimations of runtime of a single cylce. In coming months, the plaintext circuits will be replaced with circuits that work over encrypted polynomials.
+Phantom is still in active development and currently implements only a prototype of the polynomial executor. All circuits are built using plaintext polynomials, allowing for accurate runtime estimations of a single cycle. In the coming months, these plaintext circuits will be replaced with versions that operate on encrypted polynomials.
 
 ## Program obfuscation
 
-Phantom may sound like program obfuscation, but it isn't. However, phantom may well be in future used for practical program obfuscation (in case, program obfuscation scheme off-loads all compute inside FHE while restricting itself to obfuscation of a [conditional decryptor](https://eprint.iacr.org/2017/240.pdf)).
-
-Phantom, at the moment, can at-best offer `T-out-of-N` security. That is, assuming the ideal FHE secret key is sharded among N parties, Phantom remains secure unless `>T` parties collude.
+Phantom may resemble program obfuscation, but it is not. However, it could potentially be used for practical program obfuscation in the future, by offloading the main computation to an FHE-scheme and limiting the obfuscation to a [conditional decryptor](https://eprint.iacr.org/2017/240.pdf)).
 
 ## Setup
 
@@ -30,7 +30,7 @@ After cloning the repository, run the following script at the root
 ./setup.sh
 ```
 
-The script clones `pouply`, our FHE backend library, and initialises necessary submodules. `poulpy` is cloned at `..`, that is parent directory of `phantom`.
+The script clones `pouply`, our FHE backend library, and initializes the submodules. `poulpy` is cloned at `..`, that is parent directory of `phantom`.
 
 After this you're ready to run examples under `compiler-tests`.
 
