@@ -8,11 +8,11 @@ It enables black-box execution of any RISC-V program, allowing developers to wri
 
 Developers write their programs in Rust, which are then compiled into RISC-V binaries. These binaries are transformed into a polynomial representation, optimized for execution within the plaintext space of RLWE-base FHE. These polynomials are then encrypted, producing the encrypted program, which can then be executed by the Phantom executor on arbitrary encrypted and/or plaintext inputs.
 
-To we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [sybil-resistant-id](./compiler-tests/sybil-resistant-id/) example.
+To use, we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [sybil-resistant-id](./compiler-tests/sybil-resistant-id/) example.
 
 The Phantom executor is a collection of FHE circuits that, collectively, simulate a RISC-V virtual machine. It is implemented in the `./fhevm` directory, with specifications detailed in [./fhevm/doc](./fhevm/doc). A [poster]() also provides a high-level overview of the end-to-end execution flow.
 
-Both the implementation and specifications are actively evolving and subject to change. We encourage feedback and questions—feel free to open an issue.
+Both the implementation and specifications are actively evolving and subject to change. We encourage feedback and questions — feel free to open an issue.
 
 ## Current status
 

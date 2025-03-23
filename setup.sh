@@ -42,4 +42,4 @@ case "$OS" in
 esac
 
 echo "Installation complete."
-cd ../phantom
+cd ../../../phantom
