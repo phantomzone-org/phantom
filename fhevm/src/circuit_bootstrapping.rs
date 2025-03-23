@@ -1,5 +1,6 @@
 use crate::address::Address;
-use crate::decompose::Decomposer;
+use crate::decompose::{Decomposer, Precomp};
+use crate::instructions::r_type::add;
 use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
     alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxOps, VecZnxVec, VmpPMatOps,
@@ -116,19 +117,16 @@ impl CircuitBootstrapper {
         &self,
         module_pbs: &Module,
         module_lwe: &Module,
+        decomposer: &mut Decomposer,
+        precomp: &Precomp,
         value: u32,
         address: &mut Address,
         tmp_bytes: &mut [u8],
     ) {
-        // 3) LWE -> [LWE, LWE, LWE, ...]
-        let mut decomposer: Decomposer = Decomposer::new(
-            &module_pbs,
-            &address.decomp(),
-            self.log_base2k,
-            address.cols,
-        );
+        debug_assert_eq!(precomp.log_bases, address.decomp_flattened());
 
-        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, value);
+        // 3) LWE -> [LWE, LWE, LWE, ...]
+        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, precomp, value);
 
         //println!("cols: {}", address.cols);
 
@@ -139,19 +137,17 @@ impl CircuitBootstrapper {
         let log_gap: usize = 3;
         let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
 
-        let dims_n_decomp: usize = address.dims_n_decomp();
-
         let mut buf: Vec<u8> =
             alloc_aligned(module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols()));
 
         //println!();
 
         let mut i: usize = 0;
-        (0..address.dims_n()).for_each(|hi| {
+        (0..address.dims_n1()).for_each(|hi| {
             let mut sum_base: u8 = 0;
 
-            (0..dims_n_decomp).for_each(|lo: usize| {
-                let base: u8 = address.decomp_size[hi][lo];
+            (0..address.dims_n2()).for_each(|lo: usize| {
+                let base: u8 = address.decomp[hi][lo];
 
                 //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
 

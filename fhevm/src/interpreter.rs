@@ -3,8 +3,10 @@ use std::time::Instant;
 //use crate::gadget::Gadget;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
-use crate::decompose::Decomposer;
-use crate::instructions::memory::{load, prepare_address, store};
+use crate::decompose::{Decomposer, Precomp};
+use crate::instructions::memory::{
+    load, prepare_address, prepare_address_floor_byte_offset, store,
+};
 use crate::instructions::{
     reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
 };
@@ -27,9 +29,10 @@ pub struct Interpreter {
     pub ram_offset: u32,
     pub pc_recomposition: Memory,
     pub circuit_btp: CircuitBootstrapper,
-    pub decomposer_instructions: Decomposer,
-    pub decomposer_arithmetic: Decomposer,
-    pub decomposer_offset: Decomposer,
+    pub decomposer: Decomposer,
+    pub precomp_decompose_instructions: Precomp,
+    pub precomp_decompose_arithmetic: Precomp,
+    pub precomp_decompose_byte_offset: Precomp,
     pub tmp_bytes: Vec<u8>,
     pub tmp_address_instructions: Address,
     pub tmp_address_memory: Address,
@@ -74,20 +77,21 @@ impl Interpreter {
                 LOGBASE2K,
                 VMPPMAT_COLS,
             ),
-            decomposer_arithmetic: Decomposer::new(
-                module_pbs,
+            decomposer: Decomposer::new(module_pbs, RLWE_COLS),
+            precomp_decompose_instructions: Precomp::new(
+                module_pbs.n(),
                 &DECOMPOSE_ARITHMETIC.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
-            decomposer_instructions: Decomposer::new(
-                module_pbs,
+            precomp_decompose_arithmetic: Precomp::new(
+                module_pbs.n(),
                 &DECOMPOSE_INSTRUCTIONS.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
-            decomposer_offset: Decomposer::new(
-                module_pbs,
+            precomp_decompose_byte_offset: Precomp::new(
+                module_pbs.n(),
                 &DECOMPOSE_BYTEOFFSET.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
@@ -160,7 +164,8 @@ impl Interpreter {
 
         // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         let now: Instant = Instant::now();
-        let offset: u8 = self.prepare_memory_address(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
+        let offset: u8 = self
+            .prepare_memory_address_floor_byte_offset(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
         println!(
             "prepare_memory_address   : {} ms",
             now.elapsed().as_millis()
@@ -368,7 +373,7 @@ impl Interpreter {
         );
     }
 
-    fn prepare_memory_address(
+    fn prepare_memory_address_floor_byte_offset(
         &mut self,
         module_pbs: &Module,
         module_lwe: &Module,
@@ -379,13 +384,14 @@ impl Interpreter {
             self.tmp_address_memory_state, false,
             "trying to prepare address rs1 + imm but state indicates it has already been done"
         );
-        let offset: u8 = prepare_address(
+        let offset: u8 = prepare_address_floor_byte_offset(
             module_pbs,
             module_lwe,
             imm_lwe,
             rs1_lwe,
             &self.circuit_btp,
-            &mut self.decomposer_offset,
+            &mut self.decomposer,
+            &self.precomp_decompose_byte_offset,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
         );
@@ -397,7 +403,12 @@ impl Interpreter {
         let pc_u32: u32 = self
             .pc_recomposition
             .read(module_lwe, &self.pc, &mut self.tmp_bytes);
-        decompose_1xu32_to_8xu4(module_pbs, &mut self.decomposer_arithmetic, pc_u32)
+        decompose_1xu32_to_8xu4(
+            module_pbs,
+            &mut self.decomposer,
+            &self.precomp_decompose_arithmetic,
+            pc_u32,
+        )
     }
 
     fn get_input_from_register_lwe(
@@ -418,7 +429,12 @@ impl Interpreter {
             tmp_bytes_bootstrap_address,
         );
         let value: u32 = self.registers.read(module_lwe, tmp_address, tmp_bytes_read);
-        decompose_1xu32_to_8xu4(module_pbs, &mut self.decomposer_arithmetic, value)
+        decompose_1xu32_to_8xu4(
+            module_pbs,
+            &mut self.decomposer,
+            &self.precomp_decompose_arithmetic,
+            value,
+        )
     }
 
     fn get_instruction_selectors(
@@ -433,9 +449,11 @@ impl Interpreter {
             VMPPMAT_COLS,
         ));
         let instructions: u32 = self.instructions.read(module_lwe, &self.pc, tmp_bytes_read);
-        let ii: Vec<i64> = self
-            .decomposer_instructions
-            .decompose(module_pbs, instructions);
+        let ii: Vec<i64> = self.decomposer.decompose(
+            module_pbs,
+            &self.precomp_decompose_instructions,
+            instructions,
+        );
         (
             ii[5] as u8,
             ii[4] as u8,
@@ -448,7 +466,12 @@ impl Interpreter {
 
     fn get_imm_lwe(&mut self, module_pbs: &Module, module_lwe: &Module) -> [u8; 8] {
         let imm_u32: u32 = self.imm.read(module_lwe, &self.pc, &mut self.tmp_bytes);
-        decompose_1xu32_to_8xu4(module_pbs, &mut self.decomposer_arithmetic, imm_u32)
+        decompose_1xu32_to_8xu4(
+            module_pbs,
+            &mut self.decomposer,
+            &self.precomp_decompose_arithmetic,
+            imm_u32,
+        )
     }
 }
 
@@ -464,9 +487,10 @@ pub fn get_lwe_tmp_bytes(module_pbs: &Module, module_lwe: &Module) -> usize {
 pub fn decompose_1xu32_to_8xu4(
     module_pbs: &Module,
     decomposer: &mut Decomposer,
+    precomp: &Precomp,
     value: u32,
 ) -> [u8; 8] {
-    let value_u8: Vec<i64> = decomposer.decompose(module_pbs, value);
+    let value_u8: Vec<i64> = decomposer.decompose(module_pbs, precomp, value);
     [
         value_u8[0] as u8,
         value_u8[1] as u8,

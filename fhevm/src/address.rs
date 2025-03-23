@@ -5,62 +5,35 @@ use base2k::{
 use itertools::izip;
 
 pub struct Address {
-    pub log_n_decomp: usize,
     pub rows: usize,
     pub cols: usize,
     pub coordinates_lsh: Vec<Coordinate>,
     pub coordinates_rsh: Vec<Coordinate>,
-    pub decomp_size: Vec<Vec<u8>>,
+    pub decomp: Vec<Vec<u8>>,
 }
 
 impl Address {
-    pub fn new(
-        module: &Module,
-        log_n_decomp: usize,
-        max_address: usize,
-        rows: usize,
-        cols: usize,
-    ) -> Self {
-        let log_n: usize = module.log_n();
+    pub fn new(module: &Module, decomp: Vec<Vec<u8>>, rows: usize, cols: usize) -> Self {
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
-        let dims_n: usize =
-            ((usize::BITS - (max_address - 1).leading_zeros()) as usize + log_n - 1) / log_n;
-        let dims_n_decomp: usize = (log_n + log_n_decomp - 1) / log_n_decomp;
-        let mut decomp_size: Vec<Vec<u8>> = Vec::new();
-        (0..dims_n).for_each(|_| {
-            coordinates_lsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
-            coordinates_rsh.push(Coordinate::new(module, rows, cols, dims_n_decomp));
-
-            let mut sub_decomp: Vec<u8> = Vec::new();
-            let mut k: usize = log_n;
-            (0..dims_n_decomp).for_each(|_| {
-                if k < log_n_decomp {
-                    sub_decomp.push(k as u8)
-                } else {
-                    sub_decomp.push(log_n_decomp as u8);
-                    k -= log_n_decomp
-                }
-            });
-
-            decomp_size.push(sub_decomp);
+        (0..decomp.len()).for_each(|i| {
+            coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp[i].len()));
+            coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp[i].len()));
         });
-
         Self {
             rows: rows,
             cols: cols,
             coordinates_lsh: coordinates_lsh,
             coordinates_rsh: coordinates_rsh,
-            log_n_decomp: log_n_decomp,
-            decomp_size: decomp_size,
+            decomp: decomp.clone(),
         }
     }
 
-    pub fn decomp(&self) -> Vec<u8> {
+    pub fn decomp_flattened(&self) -> Vec<u8> {
         let mut decomp: Vec<u8> = Vec::new();
-        for i in 0..self.decomp_size.len() {
-            for j in 0..self.decomp_size[i].len() {
-                decomp.push(self.decomp_size[i][j])
+        for i in 0..self.decomp.len() {
+            for j in 0..self.decomp[i].len() {
+                decomp.push(self.decomp[i][j])
             }
         }
         decomp
@@ -74,11 +47,11 @@ impl Address {
         self.coordinates_rsh[0].0[0].cols()
     }
 
-    pub fn dims_n(&self) -> usize {
+    pub fn dims_n1(&self) -> usize {
         self.coordinates_rsh.len()
     }
 
-    pub fn dims_n_decomp(&self) -> usize {
+    pub fn dims_n2(&self) -> usize {
         self.coordinates_rsh[0].0.len()
     }
 
@@ -90,7 +63,7 @@ impl Address {
         izip!(
             self.coordinates_lsh.iter_mut(),
             self.coordinates_rsh.iter_mut(),
-            self.decomp_size.iter(),
+            self.decomp.iter(),
         )
         .for_each(|(coordinate_lsh, coordinate_rsh, decomp)| {
             let k: usize = remain & mask_log_n;
