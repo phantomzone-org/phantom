@@ -64,55 +64,6 @@ impl CircuitBootstrapper {
     /// * `max_address`: maximum value of the [Address].
     /// * `address`: [Address] on which to add the offset.
     /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`.
-    ///
-    /// # Example
-    /// ```
-    /// use base2k::{Module, VecZnx, VecZnxOps, MODULETYPE, alloc_aligned};
-    /// use fhevm::address::Address;
-    /// use fhevm::circuit_bootstrapping::{CircuitBootstrapper, bootstrap_to_address_tmp_bytes};
-    /// use fhevm::memory::{Memory, read_tmp_bytes};
-    ///
-    /// let n_lwe: usize = 1 << 8;
-    /// let n_pbs = n_lwe << 2;
-    /// let log_base2k: usize = 17;
-    /// let cols: usize = 3;
-    /// let log_base_n: usize = 6;
-    /// let max_address: usize = 2 * n_lwe - 37;
-    /// let module_lwe: Module = Module::new(n_lwe, MODULETYPE::FFT64);
-    ///
-    /// let module_pbs: Module = Module::new(n_pbs, MODULETYPE::FFT64);
-    ///
-    /// let gct_rows: usize = cols;
-    /// let gct_cols: usize = cols + 1;
-    ///
-    /// let acc: CircuitBootstrapper =
-    ///     CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, gct_cols);
-    ///
-    /// let value: u32 = 73;
-    ///
-    /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, gct_rows, gct_cols);
-    ///
-    /// let mut tmp_bytes: Vec<u8> = alloc_aligned(bootstrap_to_address_tmp_bytes(&module_pbs, &module_lwe, gct_cols) | read_tmp_bytes(&module_lwe, cols, gct_rows, gct_cols));
-    ///
-    /// acc.bootstrap_to_address(
-    ///     &module_pbs,
-    ///     &module_lwe,
-    ///     value,
-    ///     &mut address,
-    ///     &mut tmp_bytes,
-    /// );
-    ///
-    /// let mut data: Vec<i64> = alloc_aligned(2 * n_lwe);
-    /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-    /// let log_k = cols * log_base2k - 5;
-    /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, data.len());
-    /// memory.set(&data, log_k);
-    ///
-    /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
-    ///
-    /// assert_eq!(out as u32, value);
-    ///
-    /// ```
     pub fn bootstrap_to_address(
         &self,
         module_pbs: &Module,

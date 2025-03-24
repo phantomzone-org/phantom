@@ -4,17 +4,16 @@ use std::time::Instant;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::{Decomposer, Precomp};
-use crate::instructions::memory::{
-    load, prepare_address, prepare_address_floor_byte_offset, store,
-};
+use crate::instructions::memory::{load, prepare_address_floor_byte_offset, store};
 use crate::instructions::{
     reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
-    DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
-    LOGN_DECOMP, LOGN_LWE, MAXMEMORYADDRESS, MAXOPSADDRESS, REGISTERSCOUNT, RLWE_COLS,
-    VMPPMAT_COLS, VMPPMAT_ROWS,
+    get_mem_address_decomp, get_pc_address_decomp, get_register_address_decomp, ADDRESS_MEM_DECOMP,
+    ADDRESS_PC_DECOMP, ADDRESS_REGISTER_DECOMP, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET,
+    DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK, LOGN_LWE, MAX_MEMORY_ADDRESS, MAX_PC_ADDRESS,
+    REGISTERSCOUNT, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::{alloc_aligned, Module};
 use itertools::izip;
@@ -30,9 +29,12 @@ pub struct Interpreter {
     pub pc_recomposition: Memory,
     pub circuit_btp: CircuitBootstrapper,
     pub decomposer: Decomposer,
+    pub precomp_decompose_pc: Precomp,
     pub precomp_decompose_instructions: Precomp,
     pub precomp_decompose_arithmetic: Precomp,
     pub precomp_decompose_byte_offset: Precomp,
+    pub precomp_decompose_memory: Precomp,
+    pub precomp_decompose_register: Precomp,
     pub tmp_bytes: Vec<u8>,
     pub tmp_address_instructions: Address,
     pub tmp_address_memory: Address,
@@ -51,23 +53,22 @@ impl Interpreter {
 
         let log_k: usize = LOGBASE2K * (VMPPMAT_COLS - 1) - 5;
         let cols: usize = (log_k + LOGBASE2K - 1) / LOGBASE2K;
-        let mut pc_recomposition: Memory = Memory::new(module_lwe, LOGBASE2K, cols, MAXOPSADDRESS);
-        let mut data: Vec<i64> = vec![i64::default(); MAXOPSADDRESS];
+        let mut pc_recomposition: Memory = Memory::new(module_lwe, LOGBASE2K, cols, MAX_PC_ADDRESS);
+        let mut data: Vec<i64> = vec![i64::default(); MAX_PC_ADDRESS];
         data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
         pc_recomposition.set(&data, log_k);
 
         Self {
             pc: Address::new(
                 module_lwe,
-                LOGN_DECOMP,
-                MAXOPSADDRESS,
+                get_pc_address_decomp(),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
-            imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
-            instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXOPSADDRESS),
+            imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAX_PC_ADDRESS),
+            instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAX_PC_ADDRESS),
             registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, REGISTERSCOUNT),
-            memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAXMEMORYADDRESS),
+            memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, MAX_MEMORY_ADDRESS),
             ret: false,
             ram_offset: 0,
             pc_recomposition: pc_recomposition,
@@ -78,15 +79,21 @@ impl Interpreter {
                 VMPPMAT_COLS,
             ),
             decomposer: Decomposer::new(module_pbs, RLWE_COLS),
+            precomp_decompose_pc: Precomp::new(
+                module_pbs.n(),
+                &ADDRESS_PC_DECOMP.to_vec(),
+                LOGBASE2K,
+                RLWE_COLS,
+            ),
             precomp_decompose_instructions: Precomp::new(
                 module_pbs.n(),
-                &DECOMPOSE_ARITHMETIC.to_vec(),
+                &DECOMPOSE_INSTRUCTIONS.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
             precomp_decompose_arithmetic: Precomp::new(
                 module_pbs.n(),
-                &DECOMPOSE_INSTRUCTIONS.to_vec(),
+                &DECOMPOSE_ARITHMETIC.to_vec(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
@@ -96,26 +103,35 @@ impl Interpreter {
                 LOGBASE2K,
                 RLWE_COLS,
             ),
+            precomp_decompose_memory: Precomp::new(
+                module_pbs.n(),
+                &ADDRESS_MEM_DECOMP.to_vec(),
+                LOGBASE2K,
+                RLWE_COLS,
+            ),
+            precomp_decompose_register: Precomp::new(
+                module_pbs.n(),
+                &ADDRESS_REGISTER_DECOMP.to_vec(),
+                LOGBASE2K,
+                RLWE_COLS,
+            ),
             tmp_bytes: alloc_aligned(next_tmp_bytes(module_pbs, module_lwe)),
             tmp_address_instructions: Address::new(
                 module_lwe,
-                LOGN_DECOMP,
-                MAXOPSADDRESS,
+                get_pc_address_decomp(),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             tmp_address_memory: Address::new(
                 module_lwe,
-                LOGN_DECOMP,
-                MAXMEMORYADDRESS,
+                get_mem_address_decomp(),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             tmp_address_memory_state: false,
             tmp_address_register: Address::new(
                 module_lwe,
-                LOGN_DECOMP,
-                REGISTERSCOUNT,
+                get_register_address_decomp(),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
@@ -320,12 +336,9 @@ impl Interpreter {
         rs1_u5: u8,
     ) -> ([u8; 8], [u8; 8], [u8; 8], [u8; 8]) {
         let imm_lwe: [u8; 8] = self.get_imm_lwe(module_pbs, module_lwe);
-
         let rs2_lwe: [u8; 8] = self.get_input_from_register_lwe(module_pbs, module_lwe, rs2_u5);
         let rs1_lwe: [u8; 8] = self.get_input_from_register_lwe(module_pbs, module_lwe, rs1_u5);
-
         let pc_lwe: [u8; 8] = self.get_pc_lwe(module_pbs, module_lwe);
-
         (imm_lwe, rs2_lwe, rs1_lwe, pc_lwe)
     }
 
@@ -351,6 +364,8 @@ impl Interpreter {
         self.circuit_btp.bootstrap_to_address(
             module_pbs,
             module_lwe,
+            &mut self.decomposer,
+            &self.precomp_decompose_pc,
             reconstruct(&pc_lwe),
             &mut self.pc,
             &mut self.tmp_bytes,
@@ -392,6 +407,7 @@ impl Interpreter {
             &self.circuit_btp,
             &mut self.decomposer,
             &self.precomp_decompose_byte_offset,
+            &self.precomp_decompose_memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
         );
@@ -424,6 +440,8 @@ impl Interpreter {
         self.circuit_btp.bootstrap_to_address(
             module_pbs,
             module_lwe,
+            &mut self.decomposer,
+            &self.precomp_decompose_register,
             address as u32,
             tmp_address,
             tmp_bytes_bootstrap_address,
@@ -449,18 +467,18 @@ impl Interpreter {
             VMPPMAT_COLS,
         ));
         let instructions: u32 = self.instructions.read(module_lwe, &self.pc, tmp_bytes_read);
-        let ii: Vec<i64> = self.decomposer.decompose(
+        let selector: Vec<i64> = self.decomposer.decompose(
             module_pbs,
             &self.precomp_decompose_instructions,
             instructions,
         );
         (
-            ii[5] as u8,
-            ii[4] as u8,
-            ii[3] as u8,
-            ii[2] as u8,
-            ii[1] as u8,
-            ii[0] as u8,
+            selector[5] as u8,
+            selector[4] as u8,
+            selector[3] as u8,
+            selector[2] as u8,
+            selector[1] as u8,
+            selector[0] as u8,
         )
     }
 

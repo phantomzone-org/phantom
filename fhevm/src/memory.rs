@@ -117,6 +117,10 @@ impl Memory {
     }
 
     pub fn read(&self, module: &Module, address: &Address, tmp_bytes: &mut [u8]) -> u32 {
+        assert!(
+            self.data.len() != 0,
+            "unitialized memory: self.data.len()=0"
+        );
         assert_eq!(
             self.state, false,
             "invalid call to Memory.read: internal state is true -> requires calling Memory.write"

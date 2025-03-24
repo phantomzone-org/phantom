@@ -93,7 +93,6 @@ mod tests {
         let n_acc = n << 2;
         let log_q: usize = 54;
         let log_base2k: usize = 17;
-        let log_base_n: usize = 6;
 
         let cols: usize = (log_q + log_base2k - 1) / log_base2k;
         let rows: usize = cols;
@@ -111,7 +110,7 @@ mod tests {
         let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, size);
         memory.set(&data, 2 * log_base2k);
 
-        let address_decomp: Vec<Vec<u8>> = vec![vec![4, 4, 4], vec![4, 4, 4]];
+        let address_decomp: Vec<Vec<u8>> = vec![vec![3, 3], vec![3, 3]];
 
         let mut address: Address = Address::new(&module_lwe, address_decomp, rows, cols);
 
@@ -155,9 +154,13 @@ mod tests {
             &mut tmp_bytes,
         );
 
+        println!("address_value: {}", address.evaluate_dummy(&module_lwe));
+
         assert_eq!((x_rs1.wrapping_add(imm) & 3) as u8, offset);
 
         let loaded: [u8; 8] = load(&module_lwe, &mut memory, &mut address, &mut tmp_bytes);
+
+        println!("loaded: {:?}", loaded);
 
         assert_eq!(
             data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] as u32,

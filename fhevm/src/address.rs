@@ -4,6 +4,8 @@ use base2k::{
 };
 use itertools::izip;
 
+use crate::memory::{read_tmp_bytes, Memory};
+
 pub struct Address {
     pub rows: usize,
     pub cols: usize,
@@ -79,6 +81,25 @@ impl Address {
 
     pub fn at_rsh(&self, i: usize) -> &Coordinate {
         &self.coordinates_rsh[i]
+    }
+
+    pub fn max(&self) -> usize {
+        let mut max = 1;
+        self.decomp_flattened().iter().for_each(|i| {
+            max <<= i;
+        });
+        max
+    }
+
+    pub fn evaluate_dummy(&self, module: &Module) -> u32 {
+        let cols: usize = 3;
+        let mut mem: Memory = Memory::new(module, 16, cols, self.max());
+        let mut data: Vec<i64> = vec![0; self.max()];
+        data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
+        mem.set(&data, 32);
+        let mut tmp_bytes: Vec<u8> =
+            alloc_aligned(read_tmp_bytes(module, cols, self.rows(), self.cols()));
+        mem.read(module, &self, &mut tmp_bytes)
     }
 }
 
