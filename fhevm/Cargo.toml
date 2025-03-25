@@ -5,8 +5,8 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
-base2k = { path = "../../fhe/base2k"}
-sampling = { path = "../../fhe/sampling"}
+base2k = { path = "../../poulpy/base2k"}
+sampling = { path = "../../poulpy/sampling"}
 rand_core = "0.6.4"
 
 [profile.release]
