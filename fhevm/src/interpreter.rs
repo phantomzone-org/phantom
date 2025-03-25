@@ -4,7 +4,9 @@ use std::time::Instant;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::{Decomposer, Precomp};
-use crate::instructions::memory::{load, prepare_address_floor_byte_offset, store};
+use crate::instructions::memory::{
+    extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store, store,
+};
 use crate::instructions::{
     reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
 };
@@ -265,20 +267,15 @@ impl Interpreter {
             self.tmp_address_memory_state, true,
             "trying to read memory but memory address hasn't been prepared"
         );
-        let loaded: [u8; 8] = load(
+        let value: [u8; 8] = load(
             module_lwe,
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
         );
-
-        let loaded_list: [[u8; 8]; 4] = [
-            loaded,
-            [0, 0, 0, 0, 0, 0, 0, 0], // Never used since we can only load 1, 2 or 4 bytes
-            [loaded[0], loaded[1], loaded[2], loaded[3], 0, 0, 0, 0],
-            [loaded[0], loaded[1], 0, 0, 0, 0, 0, 0],
-        ];
-        loaded_list[offset as usize]
+        // Selects [4, 2, 1] bytes from loaded value
+        // according to offset.
+        extract_from_byte_offset(&value, offset)
     }
 
     fn store_memory(
@@ -304,24 +301,15 @@ impl Interpreter {
 
         mem_out[0] = *loaded; // if store op is identity
 
-        let mem_lwe: [u8; 8] = mem_out[mem_w_u5 as usize];
+        let to_store: [u8; 8] = mem_out[mem_w_u5 as usize];
 
-        let mem_lwe_list: [[u8; 8]; 4] = [
-            mem_lwe,
-            [0, 0, 0, 0, 0, 0, 0, 0], // Never used since offset is 0, 2, 3 (4 bytes, 2 bytes, 1 byte)
-            [
-                mem_lwe[0], mem_lwe[1], mem_lwe[2], mem_lwe[3], loaded[4], loaded[5], loaded[6],
-                loaded[7],
-            ],
-            [
-                mem_lwe[0], loaded[1], loaded[2], loaded[3], loaded[4], loaded[5], loaded[6],
-                loaded[7],
-            ],
-        ];
+        // Selects 4, 2, 1 bytes from to_store and combines with 0, 2, 3 bytes
+        // of loaded, according to offset = [0, 2, 3].
+        let value_store: [u8; 8] = select_store(&to_store, loaded, offset);
 
         store(
             module_lwe,
-            &mem_lwe_list[offset as usize],
+            &value_store,
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
@@ -359,14 +347,14 @@ impl Interpreter {
             pc_out[idx] = out
         });
 
-        let pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
+        let mut pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
 
         self.circuit_btp.bootstrap_to_address(
             module_pbs,
             module_lwe,
             &mut self.decomposer,
             &self.precomp_decompose_pc,
-            reconstruct(&pc_lwe),
+            reconstruct(&pc_lwe)>>2, // TODO: HE DIV by 4
             &mut self.pc,
             &mut self.tmp_bytes,
         );

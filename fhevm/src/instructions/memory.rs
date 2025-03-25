@@ -19,7 +19,7 @@ pub fn prepare_address(
 ) {
     let imm_u32: u32 = reconstruct(imm);
     let x_rs1_u32: u32 = reconstruct(x_rs1);
-    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
+    let idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
     circuit_btp.bootstrap_to_address(
         module_pbs, module_lwe, decomposer, precomp, idx, address, tmp_bytes,
     );
@@ -44,6 +44,7 @@ pub fn prepare_address_floor_byte_offset(
     let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
     let offset: u32 = decomposer.decompose(module_pbs, precomp_byte_offset, idx)[0] as u32;
     assert_eq!(idx & 3, offset);
+    assert!(offset != 1, "invalid offset: 1");
     idx -= offset;
     circuit_btp.bootstrap_to_address(
         module_pbs,
@@ -74,6 +75,48 @@ pub fn store(
     tmp_bytes: &mut [u8],
 ) {
     memory.write(module_lwe, &address, reconstruct(value), tmp_bytes)
+}
+
+// TODO: bootstrapp offset to address
+pub fn extract_from_byte_offset(value: &[u8; 8], offset: u8) -> [u8; 8] {
+    assert!(offset != 1, "invalid offset: 1");
+    let values: [[u8; 8]; 4] = [
+        *value,
+        [0, 0, 0, 0, 0, 0, 0, 0], // Never used since offset is 0, 2, 3 (4, 2, 1 bytes)
+        [value[4], value[5], value[6], value[7], 0, 0, 0, 0],
+        [value[6], value[7], 0, 0, 0, 0, 0, 0],
+    ];
+    values[offset as usize]
+}
+
+// TODO: bootstrapp offset to address
+pub fn select_store(to_store: &[u8; 8], loaded: &[u8; 8], offset: u8) -> [u8; 8] {
+    assert!(offset != 1, "invalid offset: 1");
+    let values: [[u8; 8]; 4] = [
+        *to_store,
+        [0, 0, 0, 0, 0, 0, 0, 0], // Never used since offset is 0, 2, 3 (4, 2, 1 bytes)
+        [
+            loaded[0],
+            loaded[1],
+            loaded[2],
+            loaded[3],
+            to_store[0],
+            to_store[1],
+            to_store[2],
+            to_store[3],
+        ],
+        [
+            loaded[0],
+            loaded[1],
+            loaded[2],
+            loaded[3],
+            loaded[4],
+            loaded[5],
+            to_store[0],
+            to_store[1],
+        ],
+    ];
+    values[offset as usize]
 }
 
 #[cfg(test)]
@@ -138,47 +181,75 @@ mod tests {
             log_base2k,
             cols,
         );
-        let imm: u32 = sext(0xF, 11);
-        let x_rs1: u32 = n as u32;
 
-        let offset: u8 = prepare_address_floor_byte_offset(
-            &module_pbs,
-            &module_lwe,
-            &decompose(imm),
-            &decompose(x_rs1),
-            &circuit_btp,
-            &mut decomposer,
-            &precomp_byte_offset,
-            &precomp_address,
-            &mut address,
-            &mut tmp_bytes,
-        );
+        for i in [0, 2, 3] {
+            println!("i: {}", i);
+            let imm: u32 = sext(0xC + i, 11);
+            let x_rs1: u32 = n as u32;
 
-        println!("address_value: {}", address.evaluate_dummy(&module_lwe));
+            let offset: u8 = prepare_address_floor_byte_offset(
+                &module_pbs,
+                &module_lwe,
+                &decompose(imm),
+                &decompose(x_rs1),
+                &circuit_btp,
+                &mut decomposer,
+                &precomp_byte_offset,
+                &precomp_address,
+                &mut address,
+                &mut tmp_bytes,
+            );
 
-        assert_eq!((x_rs1.wrapping_add(imm) & 3) as u8, offset);
+            println!("offset: {}", offset);
 
-        let loaded: [u8; 8] = load(&module_lwe, &mut memory, &mut address, &mut tmp_bytes);
+            assert_eq!((x_rs1.wrapping_add(imm) & 3) as u8, offset);
 
-        println!("loaded: {:?}", loaded);
+            let value_full: [u8; 8] = load(&module_lwe, &mut memory, &mut address, &mut tmp_bytes);
 
-        assert_eq!(
-            data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] as u32,
-            reconstruct(&loaded)
-        );
+            println!();
+            assert_eq!(
+                data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] as u32,
+                reconstruct(&value_full)
+            );
 
-        let value: u32 = 0xAABB_CCDD;
+            let loaded_offset: [u8; 8] = extract_from_byte_offset(&value_full, offset);
 
-        store(
-            &module_lwe,
-            &decompose(value),
-            &mut memory,
-            &mut address,
-            &mut tmp_bytes,
-        );
+            assert_eq!(
+                (data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] >> (8 * offset)) as u32,
+                reconstruct(&loaded_offset)
+            );
 
-        let have: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+            let shift: u32 = (offset << 3) as u32;
 
-        assert_eq!(value, have);
+            let value: u32 = 0xAABB_CCDD >> shift;
+
+            let to_store: [u8; 8] = select_store(&decompose(value), &value_full, offset);
+
+            //println!("to_store: {:08x}", reconstruct(&to_store));
+
+            store(
+                &module_lwe,
+                &to_store,
+                &mut memory,
+                &mut address,
+                &mut tmp_bytes,
+            );
+
+            let have: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+            let shift_inv: u32 = 32 - shift;
+            let value_lh: u32 = value << shift;
+            let value_rh: u32 = ((((reconstruct(&value_full) as u64) << shift_inv) as u32 as u64)
+                >> shift_inv) as u32;
+            let want: u32 = value_lh | value_rh;
+
+            // Need to update local reference memory
+            data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] = want as i64;
+
+            //println!("value_lh: {:08x}", value_lh);
+            //println!("value_rh: {:08x}", value_rh);
+            //println!("have: {:08x}", have);
+
+            assert_eq!(have, want);
+        }
     }
 }
