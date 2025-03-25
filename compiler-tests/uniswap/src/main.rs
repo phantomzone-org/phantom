@@ -1,7 +1,6 @@
-use std::ptr;
-
-use compiler::{interpreter::TestVM, CompileOpts};
+use compiler::{CompileOpts, Phantom};
 use rand::{rng, Rng};
+use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
     unsafe { core::slice::from_raw_parts((v as *const T) as *const u8, core::mem::size_of::<T>()) }
@@ -37,14 +36,14 @@ struct Input {
 fn main() {
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
-    // let mut vm = TestVM::init(elf_bytes);
+    let eisc = Phantom::init(elf_bytes);
 
     let mut rng = rng();
     let mut pool = Pool {
         t0: rng.random(),
         t1: rng.random(),
     };
-    for _ in 0..100 {
+    for _ in 0..10 {
         let input = Input {
             pool: pool.clone(),
             inp0: rng.random(),
@@ -52,12 +51,13 @@ fn main() {
         };
 
         // Init -> read input tape -> run -> read output tape
-        let mut vm = TestVM::init(elf_bytes.clone());
+        let mut vm = eisc.test_vm();
         let input_tape = to_u8_slice(&input);
         vm.read_input_tape(input_tape);
         while vm.is_exec() {
             vm.run();
         }
+
         let output_tape = vm.output_tape();
 
         // Check output

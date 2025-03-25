@@ -4,8 +4,8 @@ members = [
     "fhevm",
     "compiler",
     "runtime",
-    "macros"
-]
+    "macros",
+    ]
 
 # Workspace-wide dependencies and settings can go here
 [workspace.package]

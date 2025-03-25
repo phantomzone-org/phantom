@@ -42,17 +42,8 @@ run:
 );
 
 #[cfg(target_arch = "riscv32")]
-pub fn read_input() -> [u8; 4] {
-    let v: u32;
-    unsafe {
-        core::arch::asm!("ecall", out("a0") v);
-    }
-    v.to_le_bytes()
-}
 
-#[cfg(target_arch = "riscv32")]
-
-pub fn produce_output(v: &[u8]) {
+pub fn println(v: &str) {
     let v_addr = v.as_ptr().addr();
     let v_len = v.len();
     unsafe {
@@ -73,7 +64,7 @@ pub unsafe extern "C" fn start_rust(a0: u32, a1: u32, a2: u32) -> u32 {
     main(a0, a1, a2)
 }
 
-/// Following code is taken from nexus which itself refers to risc-v rt
+/// Following code is taken from nexus-zkvm which itself refers to risc-v rt
 
 #[export_name = "error: rt appears more than once"]
 #[doc(hidden)]

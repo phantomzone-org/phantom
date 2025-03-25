@@ -50,7 +50,7 @@ mod tests {
     }
 }
 
-use crate::instructions::{decompose, sext, Instruction, InstructionsParser};
+use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
 fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
     // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011

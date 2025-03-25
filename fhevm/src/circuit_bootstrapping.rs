@@ -1,6 +1,6 @@
 use crate::address::Address;
-use crate::decompose::Decomposer;
-use crate::memory::Memory;
+use crate::decompose::{Decomposer, Precomp};
+use crate::instructions::r_type::add;
 use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
     alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxOps, VecZnxVec, VmpPMatOps,
@@ -64,72 +64,20 @@ impl CircuitBootstrapper {
     /// * `max_address`: maximum value of the [Address].
     /// * `address`: [Address] on which to add the offset.
     /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`.
-    ///
-    /// # Example
-    /// ```
-    /// use base2k::{Module, VecZnx, VecZnxOps, MODULETYPE, alloc_aligned};
-    /// use fhevm::address::Address;
-    /// use fhevm::circuit_bootstrapping::{CircuitBootstrapper, bootstrap_to_address_tmp_bytes};
-    /// use fhevm::memory::{Memory, read_tmp_bytes};
-    ///
-    /// let n_lwe: usize = 1 << 8;
-    /// let n_pbs = n_lwe << 2;
-    /// let log_base2k: usize = 17;
-    /// let cols: usize = 3;
-    /// let log_base_n: usize = 6;
-    /// let max_address: usize = 2 * n_lwe - 37;
-    /// let module_lwe: Module = Module::new(n_lwe, MODULETYPE::FFT64);
-    ///
-    /// let module_pbs: Module = Module::new(n_pbs, MODULETYPE::FFT64);
-    ///
-    /// let gct_rows: usize = cols;
-    /// let gct_cols: usize = cols + 1;
-    ///
-    /// let acc: CircuitBootstrapper =
-    ///     CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, gct_cols);
-    ///
-    /// let value: u32 = 73;
-    ///
-    /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, gct_rows, gct_cols);
-    ///
-    /// let mut tmp_bytes: Vec<u8> = alloc_aligned(bootstrap_to_address_tmp_bytes(&module_pbs, &module_lwe, gct_cols) | read_tmp_bytes(&module_lwe, cols, gct_rows, gct_cols));
-    ///
-    /// acc.bootstrap_to_address(
-    ///     &module_pbs,
-    ///     &module_lwe,
-    ///     value,
-    ///     &mut address,
-    ///     &mut tmp_bytes,
-    /// );
-    ///
-    /// let mut data: Vec<i64> = alloc_aligned(2 * n_lwe);
-    /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-    /// let log_k = cols * log_base2k - 5;
-    /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, data.len());
-    /// memory.set(&data, log_k);
-    ///
-    /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
-    ///
-    /// assert_eq!(out as u32, value);
-    ///
-    /// ```
     pub fn bootstrap_to_address(
         &self,
         module_pbs: &Module,
         module_lwe: &Module,
+        decomposer: &mut Decomposer,
+        precomp: &Precomp,
         value: u32,
         address: &mut Address,
         tmp_bytes: &mut [u8],
     ) {
-        // 3) LWE -> [LWE, LWE, LWE, ...]
-        let mut decomposer: Decomposer = Decomposer::new(
-            &module_pbs,
-            &address.decomp(),
-            self.log_base2k,
-            address.cols,
-        );
+        debug_assert_eq!(precomp.log_bases, address.decomp_flattened());
 
-        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, value);
+        // 3) LWE -> [LWE, LWE, LWE, ...]
+        let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, precomp, value);
 
         //println!("cols: {}", address.cols);
 
@@ -140,19 +88,17 @@ impl CircuitBootstrapper {
         let log_gap: usize = 3;
         let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
 
-        let dims_n_decomp: usize = address.dims_n_decomp();
-
         let mut buf: Vec<u8> =
             alloc_aligned(module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols()));
 
         //println!();
 
         let mut i: usize = 0;
-        (0..address.dims_n()).for_each(|hi| {
+        (0..address.dims_n1()).for_each(|hi| {
             let mut sum_base: u8 = 0;
 
-            (0..dims_n_decomp).for_each(|lo: usize| {
-                let base: u8 = address.decomp_size[hi][lo];
+            (0..address.dims_n2()).for_each(|lo: usize| {
+                let base: u8 = address.decomp[hi][lo];
 
                 //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
 
@@ -203,96 +149,6 @@ impl CircuitBootstrapper {
                 //println!();
             })
         });
-    }
-
-    /// Adds an offset to an address
-    ///
-    /// # Arguments
-    ///
-    /// * `module_pbs`: module for the programmable bootstrapping.
-    /// * `module_lwe`: module of the [Address].
-    /// * `offset`: value to add to the [Address].
-    /// * `max_address`: maximum value of the [Address].
-    /// * `address`: [Address] on which to add the offset.
-    /// * `buf_pbs`: [VecZnx] buffer of degree `module_pbs.n()`.
-    ///
-    /// # Example
-    /// ```
-    /// use base2k::{Module, VecZnx, VecZnxOps, MODULETYPE, alloc_aligned};
-    /// use fhevm::address::Address;
-    /// use fhevm::circuit_bootstrapping::{CircuitBootstrapper, bootstrap_address_tmp_bytes};
-    /// use fhevm::memory::{Memory, read_tmp_bytes};
-    ///
-    /// let n_lwe: usize = 1 << 8;
-    /// let n_pbs = n_lwe << 2;
-    /// let log_base2k: usize = 17;
-    /// let cols: usize = 3;
-    /// let log_base_n: usize = 6;
-    /// let max_address: usize = 2 * n_lwe - 37;
-    /// let module_lwe: Module = Module::new(n_lwe, MODULETYPE::FFT64);
-    ///
-    /// let module_pbs: Module = Module::new(n_pbs, MODULETYPE::FFT64);
-    ///
-    /// let gct_rows: usize = cols;
-    /// let gct_cols: usize = cols + 1;
-    ///
-    /// let acc: CircuitBootstrapper =
-    ///     CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, gct_cols);
-    ///
-    /// let mut address: Address = Address::new(&module_lwe, log_base_n, max_address, gct_rows, gct_cols);
-    ///
-    /// let idx: u32 = 73;
-    ///
-    /// address.set(&module_lwe, idx);
-    ///
-    /// let offset: u32 = 45;
-    ///
-    /// let mut tmp_bytes: Vec<u8> = alloc_aligned(bootstrap_address_tmp_bytes(&module_pbs, &module_lwe, gct_cols) | read_tmp_bytes(&module_lwe, cols, gct_rows, gct_cols));
-    ///
-    /// acc.bootstrap_address(
-    ///     &module_pbs,
-    ///     &module_lwe,
-    ///     offset,
-    ///     max_address,
-    ///     &mut address,
-    ///     &mut tmp_bytes,
-    /// );
-    ///
-    /// let mut data: Vec<i64> = alloc_aligned(2 * n_lwe);
-    /// data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-    /// let log_k = cols * log_base2k - 5;
-    /// let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, data.len());
-    /// memory.set(&data, log_k);
-    ///
-    /// let out: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
-    ///
-    /// assert_eq!(out, idx + offset);
-    ///
-    /// ```
-    pub fn bootstrap_address(
-        &self,
-        module_pbs: &Module,
-        module_lwe: &Module,
-        offset: u32,
-        max_address: usize,
-        address: &mut Address,
-        tmp_bytes: &mut [u8],
-    ) {
-        // 1) RGSW -> LWE
-        let log_k: usize = self.log_base2k * (address.cols - 1) - 5;
-        let cols = (log_k + self.log_base2k - 1) / self.log_base2k;
-        let mut mem: Memory = Memory::new(module_lwe, self.log_base2k, cols, max_address);
-        let mut data: Vec<i64> = vec![i64::default(); max_address];
-        data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-        mem.set(&data, log_k);
-
-        // 2) LWE + offset
-        let mut adr: u32 = mem.read(module_lwe, address, tmp_bytes);
-
-        adr = adr.wrapping_add(offset);
-
-        // 3) LWE -> RGSW
-        self.bootstrap_to_address(module_pbs, module_lwe, adr as u32, address, tmp_bytes);
     }
 
     pub fn circuit_bootstrap(

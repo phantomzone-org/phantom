@@ -8,12 +8,13 @@ fn memory() {
     let n: usize = 1 << log_n;
     let log_q: usize = 54;
     let log_base2k: usize = 15;
-    let log_base_n: usize = 6;
+
+    let addr_decomp: Vec<Vec<u8>> = vec![vec![4, 4, 4], vec![4, 4, 4]];
 
     let rows: usize = (log_q + log_base2k - 1) / log_base2k;
     let cols: usize = rows;
 
-    let module = Module::new(n, MODULETYPE::FFT64);
+    let module: Module = Module::new(n, MODULETYPE::FFT64);
 
     let size: usize = 2 * n + 1;
     let mut data: Vec<i64> = vec![i64::default(); size];
@@ -21,7 +22,7 @@ fn memory() {
 
     let mut memory: Memory = Memory::new(&module, log_base2k, cols, size);
     memory.set(&data, log_q);
-    let mut address: Address = Address::new(&module, log_base_n, size, rows, cols);
+    let mut address: Address = Address::new(&module, addr_decomp, rows, cols);
 
     let write_value: u32 = 255;
 
