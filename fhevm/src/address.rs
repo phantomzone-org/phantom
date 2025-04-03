@@ -4,23 +4,23 @@ use base2k::{
 };
 use itertools::izip;
 
-use crate::memory::{read_tmp_bytes, Memory};
+use crate::{decompose::Decomp, memory::{read_tmp_bytes, Memory}};
 
 pub struct Address {
     pub rows: usize,
     pub cols: usize,
     pub coordinates_lsh: Vec<Coordinate>,
     pub coordinates_rsh: Vec<Coordinate>,
-    pub decomp: Vec<Vec<u8>>,
+    pub decomp: Decomp,
 }
 
 impl Address {
-    pub fn new(module: &Module, decomp: Vec<Vec<u8>>, rows: usize, cols: usize) -> Self {
+    pub fn new(module: &Module, decomp: &Decomp, rows: usize, cols: usize) -> Self {
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
-        (0..decomp.len()).for_each(|i| {
-            coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp[i].len()));
-            coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp[i].len()));
+        (0..decomp.n1()).for_each(|i| {
+            coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp));
+            coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp));
         });
         Self {
             rows: rows,
@@ -31,47 +31,37 @@ impl Address {
         }
     }
 
-    pub fn decomp_flattened(&self) -> Vec<u8> {
-        let mut decomp: Vec<u8> = Vec::new();
-        for i in 0..self.decomp.len() {
-            for j in 0..self.decomp[i].len() {
-                decomp.push(self.decomp[i][j])
-            }
-        }
-        decomp
-    }
-
     pub fn rows(&self) -> usize {
-        self.coordinates_rsh[0].0[0].rows()
+        self.coordinates_rsh[0].value[0].rows()
     }
 
     pub fn cols(&self) -> usize {
-        self.coordinates_rsh[0].0[0].cols()
+        self.coordinates_rsh[0].value[0].cols()
     }
 
-    pub fn dims_n1(&self) -> usize {
+    pub fn n1(&self) -> usize {
         self.coordinates_rsh.len()
     }
 
-    pub fn dims_n2(&self) -> usize {
-        self.coordinates_rsh[0].0.len()
+    pub fn n2(&self) -> usize {
+        self.coordinates_rsh[0].value.len()
     }
 
     pub fn set(&mut self, module: &Module, idx: u32) {
-        let log_n: usize = module.log_n();
-        let mask_log_n: usize = (1 << log_n) - 1;
+        debug_assert!(self.decomp.max() > idx as usize);
+        let max_n1: usize = self.decomp.max_n1();
+        let mask_n1: usize = max_n1-1;
         let mut remain: usize = idx as _;
 
         izip!(
             self.coordinates_lsh.iter_mut(),
             self.coordinates_rsh.iter_mut(),
-            self.decomp.iter(),
         )
-        .for_each(|(coordinate_lsh, coordinate_rsh, decomp)| {
-            let k: usize = remain & mask_log_n;
-            coordinate_lsh.encode(module, -(k as i64), decomp);
-            coordinate_rsh.encode(module, k as i64, decomp);
-            remain >>= log_n;
+        .for_each(|(coordinate_lsh, coordinate_rsh)| {
+            let k: usize = remain & mask_n1;
+            coordinate_lsh.encode(module, -(k as i64));
+            coordinate_rsh.encode(module, k as i64);
+            remain /= max_n1;
         })
     }
 
@@ -84,11 +74,7 @@ impl Address {
     }
 
     pub fn max(&self) -> usize {
-        let mut max = 1;
-        self.decomp_flattened().iter().for_each(|i| {
-            max <<= i;
-        });
-        max
+        self.decomp.max()
     }
 
     pub fn evaluate_dummy(&self, module: &Module) -> u32 {
@@ -103,30 +89,28 @@ impl Address {
     }
 }
 
-pub struct Coordinate(pub Vec<VmpPMat>);
+pub struct Coordinate{
+    value: Vec<VmpPMat>,
+    decomp: Vec<u8>,
+    gap: usize,
+}
 
 impl Coordinate {
-    pub fn new(module: &Module, rows: usize, cols: usize, dims: usize) -> Self {
+    pub fn new(module: &Module, rows: usize, cols: usize, decomp: &Decomp) -> Self {
         let mut coordinates: Vec<VmpPMat> = Vec::new();
-        (0..dims).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
-        Self { 0: coordinates }
+        (0..decomp.n2()).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
+        Self{value: coordinates, decomp: decomp.base.clone(), gap: decomp.gap(module.log_n())}
     }
 
-    pub fn dims(&self) -> usize {
-        self.0.len()
+    pub fn n2(&self) -> usize {
+        self.value.len()
     }
 
-    pub fn encode(&mut self, module: &Module, value: i64, decomp: &Vec<u8>) {
-        assert!(
-            decomp.len() == self.0.len(),
-            "invalid decomp: decomp.len()={} != self.0.len()={}",
-            decomp.len(),
-            self.0.len()
-        );
+    pub fn encode(&mut self, module: &Module, value: i64) {
 
         let n: usize = module.n();
-        let rows: usize = self.0[0].rows();
-        let cols: usize = self.0[0].cols();
+        let rows: usize = self.value[0].rows();
+        let cols: usize = self.value[0].cols();
 
         let sign: i64 = value.signum();
         let mut remain: usize = value.abs() as usize;
@@ -135,10 +119,10 @@ impl Coordinate {
         let mut buf_i64: Vec<i64> = alloc_aligned::<i64>(n * cols);
 
         let mut tot_base: u8 = 0;
-        izip!(self.0.iter_mut(), decomp.iter()).for_each(|(vmp_pmat, base)| {
+        izip!(self.value.iter_mut(), self.decomp.iter()).for_each(|(vmp_pmat, base)| {
             let mask: usize = (1 << base) - 1;
 
-            let chunk: usize = (remain & mask) << tot_base;
+            let chunk: usize = ((remain & mask) << tot_base) * self.gap;
 
             (0..rows).for_each(|row_i| {
                 let offset: usize = n * row_i;
@@ -172,7 +156,7 @@ impl Coordinate {
         tmp_b_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {
-        self.0.iter().enumerate().for_each(|(i, vmp_pmat)| {
+        self.value.iter().enumerate().for_each(|(i, vmp_pmat)| {
             if i == 0 {
                 module.vmp_apply_dft(tmp_b_dft, a, vmp_pmat, buf);
             } else {
@@ -193,7 +177,7 @@ impl Coordinate {
         tmp_a_dft: &mut VecZnxDft,
         buf: &mut [u8],
     ) {
-        self.0.iter().enumerate().for_each(|(i, vmp_pmat)| {
+        self.value.iter().enumerate().for_each(|(i, vmp_pmat)| {
             if i == 0 {
                 module.vmp_apply_dft(tmp_a_dft, a, vmp_pmat, buf);
             } else {

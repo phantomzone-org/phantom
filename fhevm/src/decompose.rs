@@ -5,6 +5,62 @@ pub struct Decomposer {
     pub buf: VecZnx,
 }
 
+#[derive(Clone, Debug)]
+pub struct Decomp {
+    pub n1: usize,
+    pub n2: usize,
+    pub base: Vec<u8>,
+}
+
+impl Decomp {
+    pub fn n1(&self) -> usize {
+        self.n1
+    }
+
+    pub fn n2(&self) -> usize {
+        self.n2
+    }
+
+    pub fn max_n1(&self) -> usize{
+        let mut max: usize = 1;
+        self.base.iter().for_each(|i| max<<=i);
+        max
+    }
+
+    pub fn max(&self) -> usize {
+        let max_n1: usize = self.max_n1();
+        let mut max: usize = 1;
+        for _ in 0..self.n2(){
+            max *= max_n1
+        }
+        max
+    }
+
+    pub fn gap(&self, log_n: usize) -> usize {
+        let mut gap: usize = log_n;
+        self.base.iter().for_each(|i| gap >>= i);
+        gap
+    }
+
+    pub fn basis_1d(&self) -> Vec<u8> {
+        let n1: usize = self.n1();
+        let n2: usize = self.n2();
+        let mut decomp: Vec<u8> = vec![0u8; n1 * n2];
+        for i in 0..n2 {
+            decomp[i * n2..(i + 1) * n2].copy_from_slice(&self.base);
+        }
+        decomp
+    }
+
+    pub fn basis_2d(&self) -> Vec<Vec<u8>> {
+        let mut decomp: Vec<Vec<u8>> = Vec::new();
+        for _ in 0..self.n1() {
+            decomp.push(self.base.clone());
+        }
+        decomp
+    }
+}
+
 pub struct Precomp {
     pub log_base2k: usize,
     pub test_vector_msb: TestVector,

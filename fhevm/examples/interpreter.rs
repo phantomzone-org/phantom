@@ -1,15 +1,11 @@
-use base2k::{Module, MODULETYPE};
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
     interpreter::Interpreter,
-    parameters::{LOGN_LWE, LOGN_PBS},
+    parameters::Parameters,
 };
 
 fn main() {
-    let n: usize = 1 << LOGN_LWE;
-    let n_acc = 1 << LOGN_PBS;
-    let module_lwe: Module = Module::new(n, MODULETYPE::FFT64);
-    let module_pbs: Module = Module::new(n_acc, MODULETYPE::FFT64);
+    let params: Parameters = Parameters::new();
 
     let instructions: Vec<u32> = vec![0b00000000000100010000000110110011];
 
@@ -21,14 +17,14 @@ fn main() {
     println!("{:?}", parser.imm);
     println!("{:?}", parser.get(0));
 
-    let mut interpreter: Interpreter = Interpreter::new(&module_pbs, &module_lwe);
+    let mut interpreter: Interpreter = Interpreter::new(&params);
 
-    interpreter.init_pc(&module_lwe);
+    interpreter.init_pc(&params);
     interpreter.init_instructions(parser);
-    interpreter.init_registers(&REGISTERS);
+    interpreter.init_registers(&REGISTERS.to_vec());
     interpreter.init_memory(&MEMORY.to_vec());
 
-    interpreter.step(&module_pbs, &module_lwe);
+    interpreter.step(&params);
 
     interpreter.registers.print();
     println!();

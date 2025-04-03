@@ -92,7 +92,7 @@ impl Memory {
             self.data[i].decode_vec_i64(self.log_base2k, self.log_k, &mut values);
             for j in 0..n {
                 print!("{:04}: {}\n", i * n + j, values[j]);
-                if i * n + j > self.max_size {
+                if i * n + j >= self.max_size {
                     break 'outer;
                 }
             }
@@ -148,7 +148,7 @@ impl Memory {
         let mut tmp_b_dft: base2k::VecZnxDft =
             VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
 
-        for i in 0..address.dims_n1() {
+        for i in 0..address.n1() {
             let coordinate: &Coordinate = address.at_lsh(i);
 
             let result_prev: &Vec<VecZnx>;
@@ -159,7 +159,7 @@ impl Memory {
                 result_prev = &results;
             }
 
-            if i < address.dims_n1() - 1 {
+            if i < address.n1() - 1 {
                 let mut result_next: Vec<VecZnx> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
@@ -220,6 +220,10 @@ impl Memory {
         address: &Address,
         tmp_bytes: &mut [u8],
     ) -> u32 {
+        assert!(
+            self.data.len() != 0,
+            "unitialized memory: self.data.len()=0"
+        );
         assert_eq!(self.state, false, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
         assert!(tmp_bytes.len() >= read_prepare_write_tmp_bytes(module, self.cols, address.rows(), address.cols()), "invalid tmp_bytes: must be of size greater or equal to self.read_prepare_write_tmp_bytes");
 
