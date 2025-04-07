@@ -7,8 +7,7 @@ use crate::decompose::{Decomposer, Precomp};
 use crate::instructions::memory::{
     extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store, store,
 };
-use crate::instructions::{
-    reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
+use crate::instructions::{reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
@@ -195,7 +194,7 @@ impl Interpreter {
 
         // 5) Updates memory from {RD|LOADED}[mem_w_u5]
         let now: Instant = Instant::now();
-        self.store_memory(module_lwe, &rd_lwe, &loaded, offset, mem_w_u5);
+        self.store_memory(module_lwe, &rs2_lwe, &loaded, offset, mem_w_u5);
         println!(
             "store_memory             : {} ms",
             now.elapsed().as_millis()
@@ -268,7 +267,7 @@ impl Interpreter {
     fn store_memory(
         &mut self,
         module_lwe: &Module,
-        rd_lwe: &[u8; 8],
+        rs2_lwe: &[u8; 8],
         loaded: &[u8; 8],
         offset: u8,
         mem_w_u5: u8,
@@ -278,11 +277,13 @@ impl Interpreter {
             "trying to store in memory but tmp_address_memory_state is false"
         );
 
+        println!("rd_lwe: {:?}", rs2_lwe);
+
         let mut mem_out: Vec<[u8; 8]> = vec![[0; 8]; STORE_OPS_LIST.len()];
 
         // Selects how to store the value
         STORE_OPS_LIST.iter().for_each(|op| {
-            let (idx, out) = op.apply(rd_lwe);
+            let (idx, out) = op.apply(rs2_lwe);
             mem_out[idx] = out
         });
 
@@ -398,7 +399,7 @@ impl Interpreter {
             module_pbs,
             &mut self.decomposer,
             &self.precomp_decompose_arithmetic,
-            pc_u32,
+            pc_u32<<2,
         )
     }
 
