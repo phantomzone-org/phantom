@@ -25,7 +25,7 @@ pub fn prepare_address(
     );
 }
 
-// Address = X^{((x_rs1 + imm) - (x_rs1+imm)%4)/4}
+// Address = X^{(x_rs1 + imm)>>2}
 // Offset = (x_rs1+imm)%4
 pub fn prepare_address_floor_byte_offset(
     module_pbs: &Module,
@@ -45,8 +45,7 @@ pub fn prepare_address_floor_byte_offset(
     let offset: u32 = decomposer.decompose(module_pbs, precomp_byte_offset, idx)[0] as u32;
     assert_eq!(idx & 3, offset);
     assert!(offset != 1, "invalid offset: 1");
-    idx -= offset;
-    idx>>=2;
+    idx >>= 2;
     circuit_btp.bootstrap_to_address(
         module_pbs,
         module_lwe,
@@ -135,13 +134,13 @@ mod tests {
     pub fn apply() {
         let log_n: usize = 6;
         let n: usize = 1 << log_n;
-        let n_acc = n << 2;
+        let n_acc: usize = n << 2;
         let log_q: usize = 54;
         let log_base2k: usize = 17;
 
         let cols: usize = (log_q + log_base2k - 1) / log_base2k;
         let rows: usize = cols;
-        let cols_gct = cols + 1;
+        let cols_gct: usize = cols + 1;
 
         let module_lwe: Module = Module::new(n, MODULETYPE::FFT64);
         let module_pbs: Module = Module::new(n_acc, MODULETYPE::FFT64);
@@ -211,14 +210,14 @@ mod tests {
 
             println!();
             assert_eq!(
-                data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] as u32,
+                data[(x_rs1.wrapping_add(imm) >> 2) as usize] as u32,
                 reconstruct(&value_full)
             );
 
             let loaded_offset: [u8; 8] = extract_from_byte_offset(&value_full, offset);
 
             assert_eq!(
-                (data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] >> (8 * offset)) as u32,
+                (data[(x_rs1.wrapping_add(imm) >> 2) as usize] >> (8 * offset)) as u32,
                 reconstruct(&loaded_offset)
             );
 
@@ -246,7 +245,7 @@ mod tests {
             let want: u32 = value_lh | value_rh;
 
             // Need to update local reference memory
-            data[(x_rs1.wrapping_add(imm) - offset as u32) as usize] = want as i64;
+            data[(x_rs1.wrapping_add(imm) >> 2) as usize] = want as i64;
 
             //println!("value_lh: {:08x}", value_lh);
             //println!("value_rh: {:08x}", value_rh);

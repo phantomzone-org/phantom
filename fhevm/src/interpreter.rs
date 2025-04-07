@@ -7,7 +7,8 @@ use crate::decompose::{Decomposer, Precomp};
 use crate::instructions::memory::{
     extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store, store,
 };
-use crate::instructions::{reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST
+use crate::instructions::{
+    reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
@@ -146,6 +147,8 @@ impl Interpreter {
     }
 
     pub fn step(&mut self, params: &Parameters) {
+        println!("pc_in: {}", self.pc.debug_as_u32(params.module_lwe()));
+
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
         // 0) Fetches instructions selectors
@@ -157,6 +160,13 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
+        println!("rd_w_u6: {}", rd_w_u6);
+        println!("mem_w_u5: {}", mem_w_u5);
+        println!("pc_w_u5: {}", pc_w_u5);
+        println!("rs1_u5: {}", rs1_u5);
+        println!("rs2_u5: {}", rs2_u5);
+        println!("rd_u5: {}", rd_u5);
+
         // 1) Retrieve 8xLWE(u4) inputs (imm, rs2, rs1, pc)
         let now: Instant = Instant::now();
         let (imm_lwe, rs2_lwe, rs1_lwe, pc_lwe) =
@@ -166,6 +176,8 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
+        println!("imm_lwe: {:?}", imm_lwe);
+
         // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         let now: Instant = Instant::now();
         let offset: u8 = self
@@ -174,6 +186,8 @@ impl Interpreter {
             "prepare_memory_address   : {} ms",
             now.elapsed().as_millis()
         );
+
+        println!("offset: {}", offset);
 
         // 3)  loads value from memory
         let now: Instant = Instant::now();
@@ -220,6 +234,9 @@ impl Interpreter {
 
         // Reinitialize checks
         self.tmp_address_memory_state = false;
+
+        println!("pc_out: {}", self.pc.debug_as_u32(params.module_lwe()));
+        println!();
     }
 
     fn evaluate_ops(
@@ -391,6 +408,7 @@ impl Interpreter {
         offset
     }
 
+    // Recompose PC ADDRESS to PC LWE and shifts by 2.
     fn get_pc_lwe(&mut self, module_pbs: &Module, module_lwe: &Module) -> [u8; 8] {
         let pc_u32: u32 = self
             .pc_recomposition
@@ -399,7 +417,7 @@ impl Interpreter {
             module_pbs,
             &mut self.decomposer,
             &self.precomp_decompose_arithmetic,
-            pc_u32<<2,
+            pc_u32 << 2,
         )
     }
 

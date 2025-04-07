@@ -10,7 +10,7 @@ fn main() {
     let instructions: Vec<u32> = vec![
         0b00000000000100010000000110110011, // rd[6] <- rs1[1] + rs2[2]
         0b00000000011000000010001000100011, // mem[4 + rs1[0]] <- rs2[6]
-        ];
+    ];
 
     let mut parser: InstructionsParser = InstructionsParser::new();
     instructions
@@ -34,10 +34,6 @@ fn main() {
     interpreter.registers.print();
     println!();
     interpreter.memory.print();
-
-    
-
-    
 }
 
 static REGISTERS: [u32; 32] = [
