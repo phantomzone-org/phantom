@@ -242,7 +242,7 @@ impl Memory {
         //let mut coordinate_buf: Coordinate =
         //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
 
-        for i in 0..address.dims_n1() {
+        for i in 0..address.n1() {
             let coordinate: &Coordinate = &address.at_lsh(i);
 
             let result_prev: &mut Vec<VecZnx>;
@@ -264,7 +264,7 @@ impl Memory {
                 );
             });
 
-            if i < address.dims_n1() - 1 {
+            if i < address.n1() - 1 {
                 let mut result_next: Vec<VecZnx> = Vec::new();
 
                 // Packs the first coefficient of each polynomial.
@@ -291,7 +291,7 @@ impl Memory {
 
         self.state = true;
 
-        if address.dims_n1() != 1 {
+        if address.n1() != 1 {
             return self.tree.last_mut().unwrap()[0].decode_coeff_i64(self.log_base2k, self.log_k, 0)
                 as u32;
         }
@@ -326,7 +326,7 @@ impl Memory {
         let mut tmp_a_dft: base2k::VecZnxDft =
             VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
 
-        if address.dims_n1() != 1 {
+        if address.n1() != 1 {
             let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
             result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
             result.normalize(self.log_base2k, tmp_bytes);
@@ -338,7 +338,7 @@ impl Memory {
         // Walk back the tree in reverse order, repacking the coefficients
         // where the read coefficient has been conditionally replaced by
         // the write value based on the write boolean.
-        for i in (0..address.dims_n1() - 1).rev() {
+        for i in (0..address.n1() - 1).rev() {
             // Index polynomial X^{-i}
             let coordinate: &Coordinate = &address.at_rsh(i + 1);
 

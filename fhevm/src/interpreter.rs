@@ -13,7 +13,7 @@ use crate::instructions::{
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     Parameters, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K,
-    LOGK, LOGN_LWE, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::{alloc_aligned, Module};
 use itertools::izip;
@@ -56,12 +56,7 @@ impl Interpreter {
         pc_recomposition.set(&data, log_k);
 
         Self {
-            pc: Address::new(
-                module_lwe,
-                params.pc_decomp.basis_2d(),
-                VMPPMAT_ROWS,
-                VMPPMAT_COLS,
-            ),
+            pc: Address::new(module_lwe, &params.pc_decomp, VMPPMAT_ROWS, VMPPMAT_COLS),
             imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, pc_max_adr),
             instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, pc_max_adr),
             registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.registers_max()),
@@ -110,20 +105,20 @@ impl Interpreter {
             tmp_bytes: alloc_aligned(next_tmp_bytes(module_pbs, module_lwe)),
             tmp_address_instructions: Address::new(
                 module_lwe,
-                params.pc_decomp.basis_2d(),
+                &params.pc_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             tmp_address_memory: Address::new(
                 module_lwe,
-                params.mem_decomp.basis_2d(),
+                &params.mem_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             tmp_address_memory_state: false,
             tmp_address_register: Address::new(
                 module_lwe,
-                params.registers_decomp.basis_2d(),
+                &params.registers_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),

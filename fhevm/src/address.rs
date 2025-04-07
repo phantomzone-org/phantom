@@ -4,7 +4,10 @@ use base2k::{
 };
 use itertools::izip;
 
-use crate::{decompose::Decomp, memory::{read_tmp_bytes, Memory}};
+use crate::{
+    decompose::Decomp,
+    memory::{read_tmp_bytes, Memory},
+};
 
 pub struct Address {
     pub rows: usize,
@@ -16,6 +19,14 @@ pub struct Address {
 
 impl Address {
     pub fn new(module: &Module, decomp: &Decomp, rows: usize, cols: usize) -> Self {
+        assert_eq!(
+            module.n(),
+            decomp.max_n1(),
+            "inner_decomp={} not equal to ring_degree={}",
+            decomp.max_n1(),
+            module.n()
+        );
+
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
         (0..decomp.n1()).for_each(|i| {
@@ -50,7 +61,7 @@ impl Address {
     pub fn set(&mut self, module: &Module, idx: u32) {
         debug_assert!(self.decomp.max() > idx as usize);
         let max_n1: usize = self.decomp.max_n1();
-        let mask_n1: usize = max_n1-1;
+        let mask_n1: usize = max_n1 - 1;
         let mut remain: usize = idx as _;
 
         izip!(
@@ -77,7 +88,7 @@ impl Address {
         self.decomp.max()
     }
 
-    pub fn evaluate_dummy(&self, module: &Module) -> u32 {
+    pub fn debug_as_u32(&self, module: &Module) -> u32 {
         let cols: usize = 3;
         let mut mem: Memory = Memory::new(module, 16, cols, self.max());
         let mut data: Vec<i64> = vec![0; self.max()];
@@ -89,17 +100,21 @@ impl Address {
     }
 }
 
-pub struct Coordinate{
-    value: Vec<VmpPMat>,
-    decomp: Vec<u8>,
-    gap: usize,
+pub struct Coordinate {
+    pub value: Vec<VmpPMat>,
+    pub decomp: Vec<u8>,
+    pub gap: usize,
 }
 
 impl Coordinate {
     pub fn new(module: &Module, rows: usize, cols: usize, decomp: &Decomp) -> Self {
         let mut coordinates: Vec<VmpPMat> = Vec::new();
         (0..decomp.n2()).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
-        Self{value: coordinates, decomp: decomp.base.clone(), gap: decomp.gap(module.log_n())}
+        Self {
+            value: coordinates,
+            decomp: decomp.base.clone(),
+            gap: decomp.gap(module.log_n()),
+        }
     }
 
     pub fn n2(&self) -> usize {
@@ -107,7 +122,6 @@ impl Coordinate {
     }
 
     pub fn encode(&mut self, module: &Module, value: i64) {
-
         let n: usize = module.n();
         let rows: usize = self.value[0].rows();
         let cols: usize = self.value[0].cols();
@@ -123,6 +137,11 @@ impl Coordinate {
             let mask: usize = (1 << base) - 1;
 
             let chunk: usize = ((remain & mask) << tot_base) * self.gap;
+
+            //println!(
+            //    "value: {}, remain: {} base: {} tot_base: {} chunk: {} mask: {} gap: {}",
+            //    value, remain, base, tot_base, chunk, mask, self.gap
+            //);
 
             (0..rows).for_each(|row_i| {
                 let offset: usize = n * row_i;

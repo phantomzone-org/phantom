@@ -124,6 +124,7 @@ mod tests {
     use super::*;
     use crate::address::Address;
     use crate::circuit_bootstrapping::circuit_bootstrap_tmp_bytes;
+    use crate::decompose::Decomp;
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
     use crate::parameters::DECOMPOSE_BYTEOFFSET;
@@ -153,9 +154,13 @@ mod tests {
         let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, size);
         memory.set(&data, 2 * log_base2k);
 
-        let address_decomp: Vec<Vec<u8>> = vec![vec![3, 3], vec![3, 3]];
+        let addr_decomp: Decomp = Decomp {
+            n1: 2,
+            n2: 2,
+            base: vec![3, 3],
+        };
 
-        let mut address: Address = Address::new(&module_lwe, address_decomp, rows, cols);
+        let mut address: Address = Address::new(&module_lwe, &addr_decomp, rows, cols);
 
         let mut tmp_bytes = alloc_aligned_u8(
             read_tmp_bytes(&module_lwe, cols, rows, cols)
@@ -175,12 +180,9 @@ mod tests {
             log_base2k,
             cols,
         );
-        let precomp_address: Precomp = Precomp::new(
-            module_pbs.n(),
-            &address.decomp_flattened(),
-            log_base2k,
-            cols,
-        );
+
+        let precomp_address: Precomp =
+            Precomp::new(module_pbs.n(), &address.decomp.basis_1d(), log_base2k, cols);
 
         for i in [0, 2, 3] {
             println!("i: {}", i);

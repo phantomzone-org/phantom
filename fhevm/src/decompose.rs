@@ -21,16 +21,16 @@ impl Decomp {
         self.n2
     }
 
-    pub fn max_n1(&self) -> usize{
+    pub fn max_n1(&self) -> usize {
         let mut max: usize = 1;
-        self.base.iter().for_each(|i| max<<=i);
+        self.base.iter().for_each(|i| max <<= i);
         max
     }
 
     pub fn max(&self) -> usize {
         let max_n1: usize = self.max_n1();
         let mut max: usize = 1;
-        for _ in 0..self.n2(){
+        for _ in 0..self.n2() {
             max *= max_n1
         }
         max
@@ -39,7 +39,7 @@ impl Decomp {
     pub fn gap(&self, log_n: usize) -> usize {
         let mut gap: usize = log_n;
         self.base.iter().for_each(|i| gap >>= i);
-        gap
+        1 << gap
     }
 
     pub fn basis_1d(&self) -> Vec<u8> {

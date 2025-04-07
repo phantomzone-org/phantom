@@ -74,7 +74,7 @@ impl CircuitBootstrapper {
         address: &mut Address,
         tmp_bytes: &mut [u8],
     ) {
-        debug_assert_eq!(precomp.log_bases, address.decomp_flattened());
+        debug_assert_eq!(precomp.log_bases, address.decomp.basis_1d());
 
         // 3) LWE -> [LWE, LWE, LWE, ...]
         let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, precomp, value);
@@ -93,12 +93,16 @@ impl CircuitBootstrapper {
 
         //println!();
 
+        println!("addr_decomp: {:?}", addr_decomp);
+        println!("n1: {:?}", address.n1());
+        println!("n2: {:?}", address.n2());
+
         let mut i: usize = 0;
-        (0..address.dims_n1()).for_each(|hi| {
+        (0..address.n1()).for_each(|hi| {
             let mut sum_base: u8 = 0;
 
-            (0..address.dims_n2()).for_each(|lo: usize| {
-                let base: u8 = address.decomp[hi][lo];
+            (0..address.n2()).for_each(|lo: usize| {
+                let base: u8 = address.decomp.base[lo];
 
                 //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
 
@@ -129,7 +133,7 @@ impl CircuitBootstrapper {
                 */
 
                 module_lwe.vmp_prepare_dblptr(
-                    &mut address.coordinates_rsh[hi].0[lo],
+                    &mut address.coordinates_rsh[hi].value[lo],
                     &buf_addr.dblptr(),
                     &mut buf,
                 );
@@ -139,7 +143,7 @@ impl CircuitBootstrapper {
                 });
 
                 module_lwe.vmp_prepare_dblptr(
-                    &mut address.coordinates_lsh[hi].0[lo],
+                    &mut address.coordinates_lsh[hi].value[lo],
                     &buf_addr.dblptr(),
                     &mut buf,
                 );

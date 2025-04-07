@@ -1,15 +1,20 @@
 use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 use fhevm::address::Address;
+use fhevm::decompose::Decomp;
 use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 
 #[test]
 fn memory() {
-    let log_n: usize = 5;
+    let log_n: usize = 6;
     let n: usize = 1 << log_n;
     let log_q: usize = 54;
     let log_base2k: usize = 15;
 
-    let addr_decomp: Vec<Vec<u8>> = vec![vec![4, 4, 4], vec![4, 4, 4]];
+    let addr_decomp: Decomp = Decomp {
+        n1: 2,
+        n2: 2,
+        base: vec![3, 3],
+    };
 
     let rows: usize = (log_q + log_base2k - 1) / log_base2k;
     let cols: usize = rows;
@@ -22,7 +27,7 @@ fn memory() {
 
     let mut memory: Memory = Memory::new(&module, log_base2k, cols, size);
     memory.set(&data, log_q);
-    let mut address: Address = Address::new(&module, addr_decomp, rows, cols);
+    let mut address: Address = Address::new(&module, &addr_decomp, rows, cols);
 
     let write_value: u32 = 255;
 
@@ -31,6 +36,8 @@ fn memory() {
             | read_prepare_write_tmp_bytes(&module, cols, rows, cols)
             | write_tmp_bytes(&module, cols, rows, cols),
     );
+
+    memory.print();
 
     (0..size).for_each(|i| {
         //println!("{:?}", i);
@@ -52,5 +59,8 @@ fn memory() {
         // Read only idx[i], checks it is equal to write_value.
         let value: u32 = memory.read(&module, &address, &mut tmp_bytes);
         assert_eq!(write_value, value);
+
+        //memory.print();
+        //println!();
     });
 }
