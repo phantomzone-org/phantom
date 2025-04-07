@@ -25,7 +25,7 @@ pub fn prepare_address(
     );
 }
 
-// Address = X^{(x_rs1 + imm) - (x_rs1+imm)%4}
+// Address = X^{((x_rs1 + imm) - (x_rs1+imm)%4)/4}
 // Offset = (x_rs1+imm)%4
 pub fn prepare_address_floor_byte_offset(
     module_pbs: &Module,
@@ -46,6 +46,7 @@ pub fn prepare_address_floor_byte_offset(
     assert_eq!(idx & 3, offset);
     assert!(offset != 1, "invalid offset: 1");
     idx -= offset;
+    idx>>=2;
     circuit_btp.bootstrap_to_address(
         module_pbs,
         module_lwe,
