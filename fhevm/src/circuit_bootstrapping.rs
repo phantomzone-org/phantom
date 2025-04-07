@@ -93,9 +93,9 @@ impl CircuitBootstrapper {
 
         //println!();
 
-        println!("addr_decomp: {:?}", addr_decomp);
-        println!("n1: {:?}", address.n1());
-        println!("n2: {:?}", address.n2());
+        //println!("addr_decomp: {:?}", addr_decomp);
+        //println!("n1: {:?}", address.n1());
+        //println!("n2: {:?}", address.n2());
 
         let mut i: usize = 0;
         (0..address.n1()).for_each(|hi| {

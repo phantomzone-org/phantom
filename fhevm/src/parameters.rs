@@ -22,7 +22,7 @@ pub const PC_N1_DECOMP: [u8; PC_N1] = [3, 3];
 
 // MEMORY
 pub const MEM_N1: usize = 2;
-pub const MEM_N2: usize = 2;
+pub const MEM_N2: usize = 1;
 pub const MEM_N1_DECOMP: [u8; MEM_N1] = [3, 3];
 
 // REGISTERS

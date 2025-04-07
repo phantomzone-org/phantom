@@ -47,7 +47,7 @@ impl Decomp {
         let n2: usize = self.n2();
         let mut decomp: Vec<u8> = vec![0u8; n1 * n2];
         for i in 0..n2 {
-            decomp[i * n2..(i + 1) * n2].copy_from_slice(&self.base);
+            decomp[i * n1..(i + 1) * n1].copy_from_slice(&self.base);
         }
         decomp
     }

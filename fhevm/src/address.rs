@@ -19,10 +19,10 @@ pub struct Address {
 
 impl Address {
     pub fn new(module: &Module, decomp: &Decomp, rows: usize, cols: usize) -> Self {
-        assert_eq!(
-            module.n(),
+        assert!(
+            module.n() >=
             decomp.max_n1(),
-            "inner_decomp={} not equal to ring_degree={}",
+            "inner_decomp={} is smaller than ring_degree={}",
             decomp.max_n1(),
             module.n()
         );
