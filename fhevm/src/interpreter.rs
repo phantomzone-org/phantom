@@ -17,7 +17,7 @@ use crate::parameters::{
     Parameters, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K,
     LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
-use base2k::{alloc_aligned, Encoding, Module, VecZnxOps};
+use base2k::{alloc_aligned, Encoding, Infos, Module, VecZnxOps};
 use itertools::izip;
 
 pub struct Interpreter {
@@ -376,6 +376,11 @@ impl Interpreter {
             vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(&list[i]) as i64, 32);
         });
 
+        println!("offset: {}", offset);
+        println!("mem_w_u5: {}", mem_w_u5);
+        println!("loaded: {:08x}", reconstruct(loaded));
+        println!("rs2_lwe: {:08x}", reconstruct(rs2_lwe));
+
         // Selects according to offset
         // TODO: BOOTSTRAP OFFSET TO RGSW
         module_lwe.vec_znx_rotate_inplace(-(offset as i64) << 2, &mut vec_znx);
@@ -385,6 +390,8 @@ impl Interpreter {
 
         // Sample extract
         let value: [u8; 8] = decompose(vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32);
+
+        println!("value: {:08x}", reconstruct(&value));
 
         store(
             module_lwe,

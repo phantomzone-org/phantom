@@ -14,8 +14,6 @@ fn setup(instruction: u32) -> (Parameters, Interpreter) {
         .iter()
         .for_each(|x| parser.add(Instruction(*x)));
 
-    println!("parser: {:032b}", parser.instructions[0]);
-
     let mut interpreter: Interpreter = Interpreter::new(&params);
 
     interpreter.init_pc(&params);
@@ -43,8 +41,6 @@ fn interpreter_arithmetic_ops() {
     instruction.set_rs2(rs2);
     instruction.set_rs1(rs1);
     instruction.set_rd(rd);
-
-    instruction.print();
 
     let (params, interpreter) = setup(instruction.get());
 

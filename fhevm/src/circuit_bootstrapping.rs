@@ -129,8 +129,8 @@ impl CircuitBootstrapper {
                     tmp_bytes,
                 );
 
-                /*
                 println!("log_gap_in: {}", log_gap_in);
+                println!("value: {}", addr_decomp[i]);
                 let mut values: Vec<i64> = vec![0; module_lwe.n()];
                 let mut j: usize = 0;
                 buf_addr.iter_mut().for_each(|buf_addr| {
@@ -138,7 +138,7 @@ impl CircuitBootstrapper {
                     println!("{}: {:?}", j, &values[..32]);
                     j += 1;
                 });
-                 */
+             
 
                 module_lwe.vmp_prepare_dblptr(
                     &mut address.coordinates_rsh[hi].value[lo],
@@ -249,7 +249,7 @@ impl CircuitBootstrapper {
         let n: usize = module.n();
         let cols: usize = a.cols();
 
-        let step_start: usize = module.log_n() - log_gap_in as usize;
+        let step_start: usize = module.log_n() - log_gap_in as usize + 1; 
         let step_end = module.log_n();
 
         let bytes_of_vec_znx = module.bytes_of_vec_znx(cols);
@@ -270,6 +270,8 @@ impl CircuitBootstrapper {
             a,
             trace_tmp_bytes,
         );
+
+
 
         // If gap_out < gap_in, then we need to repack, i.e. reduce the cap between
         // coefficients.
@@ -325,6 +327,10 @@ impl CircuitBootstrapper {
             // Cyclic shift the output back to its original position
             module.vec_znx_rotate_inplace((1 << log_gap_out) * (steps - 1) as i64, a);
         }
+
+        println!("a: {:?}", a.at(0));
+
+        panic!();
     }
 }
 
