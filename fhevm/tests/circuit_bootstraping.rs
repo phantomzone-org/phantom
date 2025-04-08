@@ -21,8 +21,7 @@ fn circuit_bootstrapping() {
     let gct_rows: usize = cols;
     let gct_cols: usize = cols + 1;
 
-    let acc: CircuitBootstrapper =
-        CircuitBootstrapper::new(log_base2k, gct_cols);
+    let acc: CircuitBootstrapper = CircuitBootstrapper::new(log_base2k, gct_cols);
 
     let mut vec_gadget: Vec<VecZnx> = Vec::new();
     (0..gct_cols).for_each(|_| {
@@ -31,7 +30,7 @@ fn circuit_bootstrapping() {
 
     let mut vmp_pmat: VmpPMat = module_lwe.new_vmp_pmat(gct_rows, gct_cols);
 
-    let max_value: usize = n-1;
+    let max_value: usize = n - 1;
 
     let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(
         circuit_bootstrap_tmp_bytes(&module_pbs, cols)
@@ -41,19 +40,16 @@ fn circuit_bootstrapping() {
 
     // value in [0, n_acc/2^{log_gap} - 1]
     (0..n_acc / (1 << log_gap)).for_each(|value| {
-        // value in [0, n_acc - 2^log_gap]
-        let value_scaled: i64 = (value << log_gap) as i64;
+        // Maps value in [0, 2^{log_n}] to X^{value * 2^{log_max_drift+1-(log_n_pbs-log_n_lwe)} +/- floor(drift/2^{log_max_drift})}
+        let log_gap_in = acc.circuit_bootstrap(
+            &module_pbs,
+            value as i64,
+            log_n,
+            &mut vec_gadget,
+            &mut tmp_bytes,
+        );
 
-        // Maps value in [0, n_acc - 2^log_gap] to X^{value * (2^log_gap*n/n_acc) +/- drift/2^{log_gap-1}}
-        let max_drift =acc.circuit_bootstrap(&module_pbs, value_scaled, log_n, &mut vec_gadget, &mut tmp_bytes);
-
-        println!("max_drift: {}", max_drift);
-
-        let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
         let log_gap_out: usize = log_gap_in;
-
-        //println!("log_gap_in: {}", log_gap_in);
-        //println!("log_gap_out: {}", log_gap_out);
 
         // Maps X^(i * 2^{log_gap_in}) to X^(i * 2^{log_gal_out})
         acc.post_process(
