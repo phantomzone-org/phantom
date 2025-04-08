@@ -61,7 +61,6 @@ fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
     let mut instruction: Instruction = Instruction::new(op_code as u32);
 
     instruction.set_immediate(imm);
-    instruction.print();
     instruction.set_funct3(funct3);
     instruction.set_rs2(rs2);
     instruction.set_rs1(rs1);

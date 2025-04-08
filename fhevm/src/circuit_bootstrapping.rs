@@ -1,47 +1,51 @@
 use crate::address::Address;
 use crate::decompose::{Decomposer, Precomp};
-use crate::instructions::r_type::add;
 use crate::trace::{trace, trace_inplace, trace_tmp_bytes};
 use base2k::{
-    alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxOps, VecZnxVec, VmpPMatOps,
+    alloc_aligned, switch_degree, Infos, Module, VecZnx, VecZnxOps, VecZnxVec, VmpPMatOps
 };
 use itertools::izip;
 use std::cmp::min;
 
 pub struct CircuitBootstrapper {
-    pub test_vectors: Vec<VecZnx>,
-    pub log_gap: usize,
     pub log_base2k: usize,
+    pub cols: usize,
 }
 
 impl CircuitBootstrapper {
-    pub fn new(module: &Module, log_n_lwe: usize, log_base2k: usize, cols: usize) -> Self {
-        let log_gap: usize = module.log_n() - log_n_lwe;
+    pub fn new(log_base2k: usize, cols: usize) -> Self {
+        Self {
+            cols: cols,
+            log_base2k: log_base2k,
+        }
+    }
 
+    fn gen_test_vector(&self, module: &Module, log_max_value: usize, cols: usize) -> (Vec<VecZnx>, usize) {
+
+        let log_n: usize = module.log_n();
+
+        assert!(log_max_value <= log_n-1, "invalid argument: log_max_value={} > log_n={}", log_max_value, log_n);
+        
+        let log_max_drift: usize = log_n - log_max_value - 1;
+        let max_drift: usize = 1 << log_max_drift;
+        let n: usize = 1<<log_n;
         let mut test_vectors: Vec<VecZnx> = Vec::new();
-
-        let drift: usize = 1 << (log_gap - 1);
-
-        let n: usize = module.n();
 
         let mut ones: Vec<i64> = alloc_aligned::<i64>(module.n());
         ones[0] = 1;
-        (1..drift).for_each(|i| {
+        (1..max_drift).for_each(|i| {
             ones[i] = 1;
             ones[n - i] = -1;
         });
 
         (0..cols).for_each(|i| {
-            let mut tv: VecZnx = module.new_vec_znx(cols * log_base2k);
+            let mut tv: VecZnx = module.new_vec_znx(self.cols);
             tv.at_mut(i).copy_from_slice(&ones);
             test_vectors.push(tv)
         });
 
-        Self {
-            test_vectors: test_vectors,
-            log_gap: log_gap,
-            log_base2k: log_base2k,
-        }
+        (test_vectors, log_max_drift)
+
     }
 
     /// bootstraps `value` to `Address`
@@ -79,23 +83,18 @@ impl CircuitBootstrapper {
         // 3) LWE -> [LWE, LWE, LWE, ...]
         let addr_decomp: Vec<i64> = decomposer.decompose(&module_pbs, precomp, value);
 
-        //println!("cols: {}", address.cols);
-
         // buf RGSW
         let mut buf_addr: Vec<VecZnx> = Vec::new();
         (0..address.rows).for_each(|_| buf_addr.push(module_lwe.new_vec_znx(address.cols)));
-
-        let log_gap: usize = 3;
-        let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
 
         let mut buf: Vec<u8> =
             alloc_aligned(module_lwe.vmp_prepare_tmp_bytes(address.rows(), address.cols()));
 
         //println!();
 
-        //println!("addr_decomp: {:?}", addr_decomp);
-        //println!("n1: {:?}", address.n1());
-        //println!("n2: {:?}", address.n2());
+        println!("addr_decomp: {:?}", addr_decomp);
+        println!("n1: {:?}", address.n1());
+        println!("n2: {:?}", address.n2());
 
         let mut i: usize = 0;
         (0..address.n1()).for_each(|hi| {
@@ -104,12 +103,11 @@ impl CircuitBootstrapper {
             (0..address.n2()).for_each(|lo: usize| {
                 let base: u8 = address.decomp.base[lo];
 
-                //println!(": {} log_gap_in: {} log_gap_out: {} value: {}", i, log_gap_in, base * (dims_n_decomp - lo-1), addr_decomp[i]);
-
                 // 4) LWE[i] -> RGSW
-                self.circuit_bootstrap(
+                let log_gap_in: usize= self.circuit_bootstrap(
                     module_pbs,
-                    addr_decomp[i] << log_gap,
+                    addr_decomp[i],
+                    base as usize,
                     &mut buf_addr,
                     tmp_bytes,
                 );
@@ -123,14 +121,17 @@ impl CircuitBootstrapper {
                     tmp_bytes,
                 );
 
+                
                 /*
+                let mut values: Vec<i64> = vec![0; module_lwe.n()];
                 let mut j: usize = 0;
                 buf_addr.iter_mut().for_each(|buf_addr| {
                     buf_addr.decode_vec_i64(self.log_base2k, self.log_base2k*(buf_addr.cols()-1), &mut values);
                     println!("{}: {:?}", j, &values[..85]);
                     j += 1;
                 });
-                */
+                 */
+        
 
                 module_lwe.vmp_prepare_dblptr(
                     &mut address.coordinates_rsh[hi].value[lo],
@@ -159,9 +160,10 @@ impl CircuitBootstrapper {
         &self,
         module: &Module,
         value: i64,
+        log_max_val:usize,
         a: &mut Vec<VecZnx>,
         tmp_bytes: &mut [u8],
-    ) {
+    ) -> usize{
         let n: usize = module.n();
         assert!(
             value < n as i64,
@@ -177,11 +179,13 @@ impl CircuitBootstrapper {
             -(n as i64)
         );
 
+        let (test_vectors, max_drift): (Vec<VecZnx>, usize) = self.gen_test_vector(module, log_max_val, a.len());
+
         assert!(
-            a.len() <= self.test_vectors.len(),
+            a.len() <= test_vectors.len(),
             "invalid argument a: a.len()={} > self.test_vectors.len()={}",
             a.len(),
-            self.test_vectors.len()
+            test_vectors.len()
         );
 
         let cols: usize = a[0].cols();
@@ -195,10 +199,13 @@ impl CircuitBootstrapper {
 
         let mut buf_pbs: VecZnx = VecZnx::from_bytes_borrow(n, cols, tmp_bytes);
 
-        izip!(a.iter_mut(), self.test_vectors.iter()).for_each(|(ai, ti)| {
+        izip!(a.iter_mut(), test_vectors.iter()).for_each(|(ai, ti)| {
+            println!("value: {}", value);
             module.vec_znx_rotate(value, &mut buf_pbs, ti);
             switch_degree(ai, &buf_pbs);
         });
+
+        max_drift
     }
 
     pub fn post_process(

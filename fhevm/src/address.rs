@@ -28,7 +28,7 @@ impl Address {
 
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
-        (0..decomp.n1()).for_each(|i| {
+        (0..decomp.n1()).for_each(|_| {
             coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp));
             coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp));
         });

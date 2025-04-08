@@ -97,7 +97,6 @@ impl Precomp {
             let f_quo = Box::new(move |x: i64| {
                 let mut y: i64 = x;
                 if y < 0 {
-                    let n_i64: i64 = (1 << log_n) as i64;
                     y = n_i64 + y;
                 }
                 (y >> (log_n as u8 - log_base - shift + 1)) << (log_n as u8 - log_base - shift + 1)

@@ -85,18 +85,22 @@ impl Memory {
         }
     }
 
-    pub fn print(&self) {
+    pub fn debug_as_u32(&self) -> Vec<u32> {
         let n: usize = self.data[0].n();
-        let mut values: Vec<i64> = vec![0i64; n];
-        'outer: for i in 0..self.data.len() {
-            self.data[i].decode_vec_i64(self.log_base2k, self.log_k, &mut values);
-            for j in 0..n {
-                print!("{:04}: {}\n", i * n + j, values[j]);
-                if i * n + j >= self.max_size {
-                    break 'outer;
-                }
-            }
+        let mut values: Vec<u32> = vec![0u32; self.max_size];
+        let mut buf: Vec<i64> = vec![0i64; n];
+        for i in 0..self.data.len() {
+            let start: usize = i * n;
+            let end: usize = std::cmp::min(start + n, self.max_size);
+            self.data[i].decode_vec_i64(self.log_base2k, self.log_k, &mut buf);
+            values[start..end]
+                .iter_mut()
+                .enumerate()
+                .for_each(|(j, x)| {
+                    *x = buf[j] as u32;
+                });
         }
+        values
     }
 
     pub fn set(&mut self, data: &[i64], log_k: usize) {

@@ -37,8 +37,6 @@ fn memory() {
             | write_tmp_bytes(&module, cols, rows, cols),
     );
 
-    memory.print();
-
     (0..size).for_each(|i| {
         //println!("{:?}", i);
 

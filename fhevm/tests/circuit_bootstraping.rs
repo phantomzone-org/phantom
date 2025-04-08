@@ -7,7 +7,8 @@ use itertools::izip;
 
 #[test]
 fn circuit_bootstrapping() {
-    let n: usize = 1 << 5;
+    let log_n = 5;
+    let n: usize = 1 << log_n;
     let n_acc = n << 2;
     let log_base2k: usize = 17;
     let cols: usize = 4;
@@ -21,7 +22,7 @@ fn circuit_bootstrapping() {
     let gct_cols: usize = cols + 1;
 
     let acc: CircuitBootstrapper =
-        CircuitBootstrapper::new(&module_pbs, module_lwe.log_n(), log_base2k, gct_cols);
+        CircuitBootstrapper::new(log_base2k, gct_cols);
 
     let mut vec_gadget: Vec<VecZnx> = Vec::new();
     (0..gct_cols).for_each(|_| {
@@ -30,7 +31,7 @@ fn circuit_bootstrapping() {
 
     let mut vmp_pmat: VmpPMat = module_lwe.new_vmp_pmat(gct_rows, gct_cols);
 
-    let max_value: usize = n;
+    let max_value: usize = n-1;
 
     let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(
         circuit_bootstrap_tmp_bytes(&module_pbs, cols)
@@ -44,7 +45,9 @@ fn circuit_bootstrapping() {
         let value_scaled: i64 = (value << log_gap) as i64;
 
         // Maps value in [0, n_acc - 2^log_gap] to X^{value * (2^log_gap*n/n_acc) +/- drift/2^{log_gap-1}}
-        acc.circuit_bootstrap(&module_pbs, value_scaled, &mut vec_gadget, &mut tmp_bytes);
+        let max_drift =acc.circuit_bootstrap(&module_pbs, value_scaled, log_n, &mut vec_gadget, &mut tmp_bytes);
+
+        println!("max_drift: {}", max_drift);
 
         let log_gap_in: usize = log_gap - (module_pbs.log_n() - module_lwe.log_n());
         let log_gap_out: usize = log_gap_in;
