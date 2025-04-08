@@ -145,7 +145,7 @@ impl Decomposer {
 
         let cols = self.cols();
 
-        let verbose: bool = true;
+        let verbose: bool = false;
 
         if verbose {
             println!("value: {:032b}", value);
@@ -166,13 +166,15 @@ impl Decomposer {
 
             sum_bases += *base;
 
-            println!("{} {}", sum_bases, base);
+            if verbose {
+                println!("{} {}", sum_bases, base);
 
-            println!(
-                "before         : {:032b} {:032b}",
-                value_u64 >> 32,
-                value_u64 & 0xffffffff
-            );
+                println!(
+                    "before         : {:032b} {:032b}",
+                    value_u64 >> 32,
+                    value_u64 & 0xffffffff
+                );
+            }
 
             // 1) From mod Q to mod 2N, with scaling by drift = N/Base
             // Example:
