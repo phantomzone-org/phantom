@@ -5,17 +5,19 @@ use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::{Decomposer, Precomp};
 use crate::instructions::memory::{
-    extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store, store,
+    extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store_from_offset,
+    store,
 };
 use crate::instructions::{
-    reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST, STORE_OPS_LIST,
+    decompose, reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST,
+    STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     Parameters, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K,
     LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
-use base2k::{alloc_aligned, Module};
+use base2k::{alloc_aligned, Encoding, Module, VecZnxOps};
 use itertools::izip;
 
 pub struct Interpreter {
@@ -64,7 +66,7 @@ impl Interpreter {
             ret: false,
             ram_offset: 0,
             pc_recomposition: pc_recomposition,
-            circuit_btp: CircuitBootstrapper::new(module_pbs, log_n, LOGBASE2K, VMPPMAT_COLS),
+            circuit_btp: CircuitBootstrapper::new(LOGBASE2K, VMPPMAT_COLS),
             decomposer: Decomposer::new(params.module_pbs(), RLWE_COLS),
             precomp_decompose_pc: Precomp::new(
                 module_pbs.n(),
@@ -147,8 +149,6 @@ impl Interpreter {
     }
 
     pub fn step(&mut self, params: &Parameters) {
-        println!("pc_in: {}", self.pc.debug_as_u32(params.module_lwe()));
-
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
         // 0) Fetches instructions selectors
@@ -160,12 +160,12 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        println!("rd_w_u6: {}", rd_w_u6);
-        println!("mem_w_u5: {}", mem_w_u5);
-        println!("pc_w_u5: {}", pc_w_u5);
-        println!("rs1_u5: {}", rs1_u5);
-        println!("rs2_u5: {}", rs2_u5);
-        println!("rd_u5: {}", rd_u5);
+        //println!("rd_w_u6: {}", rd_w_u6);
+        //println!("mem_w_u5: {}", mem_w_u5);
+        //println!("pc_w_u5: {}", pc_w_u5);
+        //println!("rs1_u5: {}", rs1_u5);
+        //println!("rs2_u5: {}", rs2_u5);
+        //println!("rd_u5: {}", rd_u5);
 
         // 1) Retrieve 8xLWE(u4) inputs (imm, rs2, rs1, pc)
         let now: Instant = Instant::now();
@@ -176,7 +176,7 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        println!("imm_lwe: {:?}", imm_lwe);
+        //println!("imm_lwe: {:?}", imm_lwe);
 
         // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         let now: Instant = Instant::now();
@@ -187,20 +187,32 @@ impl Interpreter {
             now.elapsed().as_millis()
         );
 
-        println!("offset: {}", offset);
+        //println!("offset: {}", offset);
 
         // 3)  loads value from memory
         let now: Instant = Instant::now();
-        let loaded: [u8; 8] = self.read_memory(module_lwe, offset);
+        let loaded: [u8; 8] = self.read_memory(module_lwe);
         println!(
             "read_memory              : {} ms",
             now.elapsed().as_millis()
         );
 
+        //println!("loaded_full: {:08x}", reconstruct(&loaded));
+
+        // Selects [4, 2, 1] bytes from loaded value
+        // according to offset.
+        let loaded_offset: [u8; 8] = extract_from_byte_offset(&loaded, offset);
+
         // 4) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
         let now: Instant = Instant::now();
-        let rd_lwe: [u8; 8] =
-            self.evaluate_ops(&imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, &loaded, rd_w_u6);
+        let rd_lwe: [u8; 8] = self.evaluate_ops(
+            &imm_lwe,
+            &rs1_lwe,
+            &rs2_lwe,
+            &pc_lwe,
+            &loaded_offset,
+            rd_w_u6,
+        );
         println!(
             "evaluate_ops             : {} ms",
             now.elapsed().as_millis()
@@ -235,7 +247,7 @@ impl Interpreter {
         // Reinitialize checks
         self.tmp_address_memory_state = false;
 
-        println!("pc_out: {}", self.pc.debug_as_u32(params.module_lwe()));
+        //println!("pc_out: {}", self.pc.debug_as_u32(params.module_lwe()));
         println!();
     }
 
@@ -265,20 +277,17 @@ impl Interpreter {
         rd_out[rd_w_u6 as usize]
     }
 
-    fn read_memory(&mut self, module_lwe: &Module, offset: u8) -> [u8; 8] {
+    fn read_memory(&mut self, module_lwe: &Module) -> [u8; 8] {
         assert_eq!(
             self.tmp_address_memory_state, true,
             "trying to read memory but memory address hasn't been prepared"
         );
-        let value: [u8; 8] = load(
+        load(
             module_lwe,
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
-        );
-        // Selects [4, 2, 1] bytes from loaded value
-        // according to offset.
-        extract_from_byte_offset(&value, offset)
+        )
     }
 
     fn store_memory(
@@ -294,27 +303,92 @@ impl Interpreter {
             "trying to store in memory but tmp_address_memory_state is false"
         );
 
-        println!("rd_lwe: {:?}", rs2_lwe);
+        // Creates a list with all possible values to store.
+        // rs2 = [a, b, c, d]
+        // loaded = [e, f, g, h]
 
-        let mut mem_out: Vec<[u8; 8]> = vec![[0; 8]; STORE_OPS_LIST.len()];
+        // offset = 0
+        // NONE: [e, f, g, h]
+        // SW:   [a, b, c, d]
+        // SH:   [a, b, g, h]
+        // SB:   [a, f, g, h]
+        //
+        // offset = 1
+        // NONE: [e, f, g, h]
+        // SW:   [ INVALID  ]
+        // SH:   [e, a, b, h]
+        // SB:   [e, a, g, h]
+        //
+        // offset = 2
+        // NONE: [e, f, g, h]
+        // SW:   [ INVALID  ]
+        // SH:   [e, f, a, b]
+        // SB:   [e, f, g, a]
+        //
+        // offset = 3
+        // NONE: [e, f, g, h]
+        // SW:   [ INVALID  ]
+        // SH:   [ INVALID  ]
+        // SB:   [e, f, g, a]
+        let list: [[u8; 8]; 16] = [
+            *loaded,
+            *rs2_lwe,
+            [
+                rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[4], loaded[5], loaded[6],
+                loaded[7],
+            ],
+            [
+                rs2_lwe[0], rs2_lwe[1], loaded[2], loaded[3], loaded[4], loaded[5], loaded[6],
+                loaded[7],
+            ],
+            *loaded,
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [
+                loaded[0], loaded[1], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[6],
+                loaded[7],
+            ],
+            [
+                loaded[0], loaded[1], rs2_lwe[0], rs2_lwe[1], loaded[4], loaded[5], loaded[6],
+                loaded[7],
+            ],
+            *loaded,
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [
+                loaded[0], loaded[1], loaded[2], loaded[3], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2],
+                rs2_lwe[3],
+            ],
+            [
+                loaded[0], loaded[1], loaded[2], loaded[3], rs2_lwe[0], rs2_lwe[1], loaded[6],
+                loaded[7],
+            ],
+            *loaded,
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [
+                loaded[0], loaded[1], loaded[2], loaded[3], loaded[4], loaded[5], rs2_lwe[0],
+                rs2_lwe[1],
+            ],
+        ];
 
-        // Selects how to store the value
-        STORE_OPS_LIST.iter().for_each(|op| {
-            let (idx, out) = op.apply(rs2_lwe);
-            mem_out[idx] = out
+        // Creates a vector of VecZnx storing list.
+        let mut vec_znx: base2k::VecZnx = module_lwe.new_vec_znx(RLWE_COLS);
+        list.iter().enumerate().for_each(|(i, x)| {
+            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(&list[i]) as i64, 32);
         });
 
-        mem_out[0] = *loaded; // if store op is identity
+        // Selects according to offset
+        // TODO: BOOTSTRAP OFFSET TO RGSW
+        module_lwe.vec_znx_rotate_inplace(-(offset as i64) << 2, &mut vec_znx);
+        // Selects according to mem_w_u5
+        // TODO: BOOTSTRAP mem_w_u5 TO RGSW
+        module_lwe.vec_znx_rotate_inplace(-(mem_w_u5 as i64), &mut vec_znx);
 
-        let to_store: [u8; 8] = mem_out[mem_w_u5 as usize];
-
-        // Selects 4, 2, 1 bytes from to_store and combines with 0, 2, 3 bytes
-        // of loaded, according to offset = [0, 2, 3].
-        let value_store: [u8; 8] = select_store(&to_store, loaded, offset);
+        // Sample extract
+        let value: [u8; 8] = decompose(vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32);
 
         store(
             module_lwe,
-            &value_store,
+            &value,
             &mut self.memory,
             &mut self.tmp_address_memory,
             &mut self.tmp_bytes,
@@ -464,15 +538,15 @@ impl Interpreter {
         let selector: Vec<i64> = self.decomposer.decompose(
             module_pbs,
             &self.precomp_decompose_instructions,
-            instructions,
+            instructions as u32,
         );
         (
-            selector[5] as u8,
-            selector[4] as u8,
-            selector[3] as u8,
-            selector[2] as u8,
-            selector[1] as u8,
-            selector[0] as u8,
+            selector[5] as u8, // rs2_u5
+            selector[4] as u8, // rs1_u5
+            selector[3] as u8, // rd_u5
+            selector[2] as u8, // rd_w_u6
+            selector[1] as u8, // mem_w_u5
+            selector[0] as u8, // pc_w_u5
         )
     }
 

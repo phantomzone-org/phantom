@@ -11,7 +11,7 @@ pub const VMPPMAT_COLS: usize = RLWE_COLS + 1;
 pub const WORD_BITS: usize = u32::BITS as _;
 pub const WORD_SPLIT: usize = 1;
 pub const LOGK: usize = WORD_BITS / WORD_SPLIT;
-pub const DECOMPOSE_INSTRUCTIONS: [u8; 6] = [5, 5, 5, 6, 5, 5];
+pub const DECOMPOSE_INSTRUCTIONS: [u8; 6] = [5, 5, 6, 5, 5, 5];
 pub const DECOMPOSE_ARITHMETIC: [u8; 8] = [4, 4, 4, 4, 4, 4, 4, 4];
 pub const DECOMPOSE_BYTEOFFSET: [u8; 1] = [2];
 

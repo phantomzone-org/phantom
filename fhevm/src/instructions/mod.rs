@@ -833,7 +833,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get(&self) -> u32{
+    pub fn get(&self) -> u32 {
         self.0
     }
 
