@@ -16,7 +16,6 @@ fn circuit_bootstrapping() {
     let module_lwe: Module = Module::new(n, MODULETYPE::FFT64);
 
     let module_pbs: Module = Module::new(n_acc, MODULETYPE::FFT64);
-    let log_gap: usize = 3;
 
     let gct_rows: usize = cols;
     let gct_cols: usize = cols + 1;
@@ -39,7 +38,7 @@ fn circuit_bootstrapping() {
     );
 
     // value in [0, n_acc/2^{log_gap} - 1]
-    (0..n_acc / (1 << log_gap)).for_each(|value| {
+    (0..max_value + 1).for_each(|value| {
         // Maps value in [0, 2^{log_n}] to X^{value * 2^{log_max_drift+1-(log_n_pbs-log_n_lwe)} +/- floor(drift/2^{log_max_drift})}
         let log_gap_in = acc.circuit_bootstrap(
             &module_pbs,

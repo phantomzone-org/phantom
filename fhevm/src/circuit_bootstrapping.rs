@@ -134,11 +134,14 @@ impl CircuitBootstrapper {
                 let mut values: Vec<i64> = vec![0; module_lwe.n()];
                 let mut j: usize = 0;
                 buf_addr.iter_mut().for_each(|buf_addr| {
-                    buf_addr.decode_vec_i64(self.log_base2k, self.log_base2k*(buf_addr.cols()-1), &mut values);
+                    buf_addr.decode_vec_i64(
+                        self.log_base2k,
+                        self.log_base2k * (buf_addr.cols() - 1),
+                        &mut values,
+                    );
                     println!("{}: {:?}", j, &values[..32]);
                     j += 1;
                 });
-             
 
                 module_lwe.vmp_prepare_dblptr(
                     &mut address.coordinates_rsh[hi].value[lo],
@@ -249,7 +252,10 @@ impl CircuitBootstrapper {
         let n: usize = module.n();
         let cols: usize = a.cols();
 
-        let step_start: usize = module.log_n() - log_gap_in as usize + 1; 
+        println!("log_gap_in: {}", log_gap_in);
+        println!("log_gap_out: {}", log_gap_out);
+
+        let step_start: usize = module.log_n() - log_gap_in as usize + 1;
         let step_end = module.log_n();
 
         let bytes_of_vec_znx = module.bytes_of_vec_znx(cols);
@@ -259,6 +265,8 @@ impl CircuitBootstrapper {
 
         let mut buf0: VecZnx = VecZnx::from_bytes_borrow(n, cols, tmp_bytes_buf2);
         let mut buf1: VecZnx = VecZnx::from_bytes_borrow(n, cols, tmp_bytes_buf3);
+
+        println!("a: {:?}", &a.at(0)[n - (1 << log_gap_in)..]);
 
         // First partial trace, vanishes all coefficients which are not multiples of gap_in
         // [1, 1, 1, 1, 0, 0, 0, ..., 0, 0, -1, -1, -1, -1] -> [1, 0, 0, 0, 0, 0, 0, ..., 0, 0, 0, 0, 0, 0]
@@ -271,14 +279,21 @@ impl CircuitBootstrapper {
             trace_tmp_bytes,
         );
 
+        println!("log_gap_in: {}", log_gap_in);
+        println!("log_gap_out: {}", log_gap_out);
 
+        println!("a: {:?}", a.at(0));
 
         // If gap_out < gap_in, then we need to repack, i.e. reduce the cap between
         // coefficients.
         if log_gap_in != log_gap_out {
             let step_end: usize = step_start;
-            let step_start: usize = 0;
-            let steps: usize = min(max_value, 1 << (module.log_n() - log_gap_in as usize));
+            let step_start: usize = 0 as usize;
+            let steps: usize = min(max_value + 1, 1 << (module.log_n() - log_gap_in as usize));
+
+            //println!("steps: {}", steps);
+            //println!("step_start: {}", step_start);
+            //println!("step_end: {}", step_end);
 
             // For each coefficients that can be packed, i.e. n / gap_in
             (0..steps).for_each(|i: usize| {
@@ -295,6 +310,8 @@ impl CircuitBootstrapper {
                     module.vec_znx_rotate_inplace(-(1 << log_gap_out), &mut buf0);
                 }
 
+                //println!("{:2}: {} {:?}", i, -(1 << log_gap_in), &a.at(0)[..(1<<log_gap_in)+1]);
+
                 // Trace(x * X^{-gap_in}): extracts the X^{gap_in}th coefficient
                 if i == 0 {
                     trace(
@@ -306,6 +323,7 @@ impl CircuitBootstrapper {
                         a,
                         trace_tmp_bytes,
                     );
+                    //println!("{:2}: {} {:?}", i, -(1 << log_gap_in), &buf0.at(0)[..(1<<log_gap_in)+1]);
                 } else {
                     trace(
                         module,
@@ -316,8 +334,10 @@ impl CircuitBootstrapper {
                         a,
                         trace_tmp_bytes,
                     );
+                    //println!("{:2}: {} {:?}", i, -(1 << log_gap_in), &buf1.at(0)[..(1<<log_gap_in)+1]);
                     module.vec_znx_add_inplace(&mut buf0, &mut buf1);
                 }
+                //println!();
             });
 
             a.copy_from(&buf0);
@@ -328,9 +348,9 @@ impl CircuitBootstrapper {
             module.vec_znx_rotate_inplace((1 << log_gap_out) * (steps - 1) as i64, a);
         }
 
-        println!("a: {:?}", a.at(0));
-
-        panic!();
+        //println!("a: {:?}", &a.at(0)[..(1<<log_gap_in)]);
+        //println!();
+        //panic!()
     }
 }
 

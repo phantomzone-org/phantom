@@ -383,10 +383,8 @@ impl Interpreter {
 
         // Selects according to offset
         // TODO: BOOTSTRAP OFFSET TO RGSW
-        module_lwe.vec_znx_rotate_inplace(-(offset as i64) << 2, &mut vec_znx);
-        // Selects according to mem_w_u5
-        // TODO: BOOTSTRAP mem_w_u5 TO RGSW
-        module_lwe.vec_znx_rotate_inplace(-(mem_w_u5 as i64), &mut vec_znx);
+        module_lwe
+            .vec_znx_rotate_inplace(-(((offset as i64) << 2) + mem_w_u5 as i64), &mut vec_znx);
 
         // Sample extract
         let value: [u8; 8] = decompose(vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32);
