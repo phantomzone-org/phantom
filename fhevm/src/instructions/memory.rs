@@ -190,12 +190,12 @@ mod tests {
 
             println!();
 
-            let data_want: u32 = data[(x_rs1.wrapping_add(imm) >> 2) as usize] as u32;
+            let _data_want: u32 = data[(x_rs1.wrapping_add(imm) >> 2) as usize] as u32;
             let shift: u32 = (offset << 3) as u32;
 
             //assert_eq!(data_want, reconstruct(&value_full));
 
-            let loaded_offset: [u8; 8] = extract_from_byte_offset(&value_full, offset);
+            let _loaded_offset: [u8; 8] = extract_from_byte_offset(&value_full, offset);
             //assert_eq!((data_want << shift) >> shift, reconstruct(&loaded_offset));
 
             let value: u32 = 0xAABB_CCDD >> shift;
@@ -212,7 +212,7 @@ mod tests {
                 &mut tmp_bytes,
             );
 
-            let have: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
+            let _have: u32 = memory.read(&module_lwe, &address, &mut tmp_bytes);
             let value_rh: u32 = value << shift;
             let value_lh: u32 = (reconstruct(&value_full) >> shift) << shift;
             let want: u32 = value_lh | value_rh;

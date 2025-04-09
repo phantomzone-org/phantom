@@ -28,7 +28,7 @@ impl Address {
 
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
-        (0..decomp.n1()).for_each(|_| {
+        (0..decomp.n2()).for_each(|_| {
             coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp));
             coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp));
         });
@@ -49,11 +49,11 @@ impl Address {
         self.coordinates_rsh[0].value[0].cols()
     }
 
-    pub fn n1(&self) -> usize {
+    pub fn n2(&self) -> usize {
         self.coordinates_rsh.len()
     }
 
-    pub fn n2(&self) -> usize {
+    pub fn n1(&self) -> usize {
         self.coordinates_rsh[0].value.len()
     }
 
@@ -108,7 +108,7 @@ pub struct Coordinate {
 impl Coordinate {
     pub fn new(module: &Module, rows: usize, cols: usize, decomp: &Decomp) -> Self {
         let mut coordinates: Vec<VmpPMat> = Vec::new();
-        (0..decomp.n2()).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
+        (0..decomp.n1()).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
         Self {
             value: coordinates,
             decomp: decomp.base.clone(),
@@ -116,7 +116,7 @@ impl Coordinate {
         }
     }
 
-    pub fn n2(&self) -> usize {
+    pub fn n1(&self) -> usize {
         self.value.len()
     }
 
@@ -136,11 +136,6 @@ impl Coordinate {
             let mask: usize = (1 << base) - 1;
 
             let chunk: usize = ((remain & mask) << tot_base) * self.gap;
-
-            //println!(
-            //    "value: {}, remain: {} base: {} tot_base: {} chunk: {} mask: {} gap: {}",
-            //    value, remain, base, tot_base, chunk, mask, self.gap
-            //);
 
             (0..rows).for_each(|row_i| {
                 let offset: usize = n * row_i;

@@ -29,7 +29,7 @@ fn circuit_bootstrapping() {
 
     let mut vmp_pmat: VmpPMat = module_lwe.new_vmp_pmat(gct_rows, gct_cols);
 
-    let max_value: usize = n - 1;
+    let max_value: usize = std::cmp::min(u8::MAX as usize, n - 1);
 
     let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(
         circuit_bootstrap_tmp_bytes(&module_pbs, cols)
@@ -42,7 +42,7 @@ fn circuit_bootstrapping() {
         // Maps value in [0, 2^{log_n}] to X^{value * 2^{log_max_drift+1-(log_n_pbs-log_n_lwe)} +/- floor(drift/2^{log_max_drift})}
         let log_gap_in = acc.circuit_bootstrap(
             &module_pbs,
-            value as i64,
+            value as u8,
             log_n,
             &mut vec_gadget,
             &mut tmp_bytes,

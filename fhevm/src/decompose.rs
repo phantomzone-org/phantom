@@ -59,6 +59,26 @@ impl Decomp {
         }
         decomp
     }
+
+    pub fn decomp(&self, value: u32) -> Vec<u8> {
+        let mut decomp: Vec<u8> = vec![0u8; self.n1 * self.n2];
+        let mut sum_bases: u8 = 0;
+        self.basis_1d().iter().enumerate().for_each(|(i, base)| {
+            decomp[i] = ((value >> sum_bases) & (1 << base) - 1) as u8;
+            sum_bases += base;
+        });
+        decomp
+    }
+
+    pub fn recomp(&self, decomp: &Vec<u8>) -> u32 {
+        let mut value: u32 = 0;
+        let mut sum_bases: u8 = 0;
+        self.basis_1d().iter().enumerate().for_each(|(i, base)| {
+            value |= (decomp[i] << sum_bases) as u32;
+            sum_bases += base;
+        });
+        value
+    }
 }
 
 pub struct Precomp {
@@ -111,6 +131,27 @@ impl Precomp {
             log_bases: log_bases.clone(),
         }
     }
+
+    pub fn decomp(&self, value: u32) -> Vec<u8> {
+        let mut decomp: Vec<u8> = vec![0u8; self.log_bases.len()];
+        let mut sum_bases: u8 = 0;
+        self.log_bases.iter().enumerate().for_each(|(i, base)| {
+            decomp[i] = ((value >> sum_bases) & (1 << base) - 1) as u8;
+            sum_bases += base;
+        });
+        decomp
+    }
+
+    pub fn recomp(&self, decomp: &Vec<u8>) -> u32 {
+        debug_assert_eq!(decomp.len(), self.log_bases.len());
+        let mut value: u32 = 0;
+        let mut sum_bases: u8 = 0;
+        self.log_bases.iter().enumerate().for_each(|(i, base)| {
+            value |= (decomp[i] as u32) << sum_bases;
+            sum_bases += base;
+        });
+        value
+    }
 }
 
 impl Decomposer {
@@ -124,7 +165,7 @@ impl Decomposer {
         self.buf.cols()
     }
 
-    pub fn decompose(&mut self, module_pbs: &Module, precomp: &Precomp, value: u32) -> Vec<i64> {
+    pub fn decompose(&mut self, module_pbs: &Module, precomp: &Precomp, value: u32) -> Vec<u8> {
         let n: usize = module_pbs.n();
 
         assert!(
@@ -137,7 +178,7 @@ impl Decomposer {
         let log_n: usize = module_pbs.log_n();
         let log_2n: usize = log_n + 1;
 
-        let mut vec: Vec<i64> = Vec::new();
+        let mut vec: Vec<u8> = Vec::new();
 
         let mut value_u64: u64 = (value as u64) << 32;
 
@@ -246,17 +287,13 @@ impl Decomposer {
 
             // Stores i-th diit
             if last {
-                vec.push((digits >> (log_2n as u8 - base)) as i64);
+                vec.push((digits >> (log_2n as u8 - base)) as u8);
             } else {
-                vec.push((digits >> (log_2n as u8 - base - 1)) as i64);
+                vec.push((digits >> (log_2n as u8 - base - 1)) as u8);
             }
 
             if verbose {
-                println!(
-                    "out            : {:032b} {:032b}",
-                    vec[i] >> 32,
-                    vec[i] & 0xffffffff
-                );
+                println!("out            : {:08b}", vec[i]);
                 println!(
                     "value_u64      : {:032b} {:032b}",
                     value_u64 >> 32,
@@ -295,6 +332,8 @@ impl Decomposer {
                 println!();
             }
         });
+
+        debug_assert_eq!(precomp.decomp(value), vec);
 
         vec
     }

@@ -15,7 +15,7 @@ fn decompose_u32() {
 
     let value: u32 = 0xf0f0f0ff;
 
-    let result: Vec<i64> = decomposer.decompose(&module_pbs, &precomp, value);
+    let result: Vec<u8> = decomposer.decompose(&module_pbs, &precomp, value);
 
     let mut have: u32 = 0;
 

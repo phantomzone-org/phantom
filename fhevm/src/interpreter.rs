@@ -5,19 +5,17 @@ use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
 use crate::decompose::{Decomposer, Precomp};
 use crate::instructions::memory::{
-    extract_from_byte_offset, load, prepare_address_floor_byte_offset, select_store_from_offset,
-    store,
+    extract_from_byte_offset, load, prepare_address_floor_byte_offset, store,
 };
 use crate::instructions::{
     decompose, reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST,
-    STORE_OPS_LIST,
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     Parameters, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K,
     LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
-use base2k::{alloc_aligned, Encoding, Infos, Module, VecZnxOps};
+use base2k::{alloc_aligned, Encoding, Module, VecZnxOps};
 use itertools::izip;
 
 pub struct Interpreter {
@@ -48,7 +46,6 @@ impl Interpreter {
     pub fn new(params: &Parameters) -> Self {
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
-        let log_n: usize = params.module_lwe().log_n();
         let pc_max_adr: usize = params.pc_max();
         let log_k: usize = LOGBASE2K * (VMPPMAT_COLS - 1) - 5;
         let cols: usize = (log_k + LOGBASE2K - 1) / LOGBASE2K;
@@ -373,7 +370,7 @@ impl Interpreter {
         // Creates a vector of VecZnx storing list.
         let mut vec_znx: base2k::VecZnx = module_lwe.new_vec_znx(RLWE_COLS);
         list.iter().enumerate().for_each(|(i, x)| {
-            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(&list[i]) as i64, 32);
+            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(x) as i64, 32);
         });
 
         println!("offset: {}", offset);
@@ -540,18 +537,18 @@ impl Interpreter {
             VMPPMAT_COLS,
         ));
         let instructions: u32 = self.instructions.read(module_lwe, &self.pc, tmp_bytes_read);
-        let selector: Vec<i64> = self.decomposer.decompose(
+        let selector: Vec<u8> = self.decomposer.decompose(
             module_pbs,
             &self.precomp_decompose_instructions,
             instructions as u32,
         );
         (
-            selector[5] as u8, // rs2_u5
-            selector[4] as u8, // rs1_u5
-            selector[3] as u8, // rd_u5
-            selector[2] as u8, // rd_w_u6
-            selector[1] as u8, // mem_w_u5
-            selector[0] as u8, // pc_w_u5
+            selector[5], // rs2_u5
+            selector[4], // rs1_u5
+            selector[3], // rd_u5
+            selector[2], // rd_w_u6
+            selector[1], // mem_w_u5
+            selector[0], // pc_w_u5
         )
     }
 
@@ -581,15 +578,15 @@ pub fn decompose_1xu32_to_8xu4(
     precomp: &Precomp,
     value: u32,
 ) -> [u8; 8] {
-    let value_u8: Vec<i64> = decomposer.decompose(module_pbs, precomp, value);
+    let value_u8: Vec<u8> = decomposer.decompose(module_pbs, precomp, value);
     [
-        value_u8[0] as u8,
-        value_u8[1] as u8,
-        value_u8[2] as u8,
-        value_u8[3] as u8,
-        value_u8[4] as u8,
-        value_u8[5] as u8,
-        value_u8[6] as u8,
-        value_u8[7] as u8,
+        value_u8[0],
+        value_u8[1],
+        value_u8[2],
+        value_u8[3],
+        value_u8[4],
+        value_u8[5],
+        value_u8[6],
+        value_u8[7],
     ]
 }

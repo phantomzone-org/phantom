@@ -16,14 +16,14 @@ pub const DECOMPOSE_ARITHMETIC: [u8; 8] = [4, 4, 4, 4, 4, 4, 4, 4];
 pub const DECOMPOSE_BYTEOFFSET: [u8; 1] = [2];
 
 // PROGRAM COUNTER
-pub const PC_N1: usize = 2;
-pub const PC_N2: usize = 2;
-pub const PC_N1_DECOMP: [u8; PC_N1] = [3, 3];
+pub const PC_N1: usize = 4;
+pub const PC_N2: usize = 1;
+pub const PC_N1_DECOMP: [u8; PC_N1] = [3, 3, 3, 2];
 
 // MEMORY
-pub const MEM_N1: usize = 2;
+pub const MEM_N1: usize = 4;
 pub const MEM_N2: usize = 1;
-pub const MEM_N1_DECOMP: [u8; MEM_N1] = [3, 3];
+pub const MEM_N1_DECOMP: [u8; MEM_N1] = [3, 3, 3, 2];
 
 // REGISTERS
 pub const REGISTERS_N1: usize = 1;

@@ -110,7 +110,7 @@ pub enum StoreOps {
 }
 
 impl StoreOps {
-    pub fn apply(&self, value: &[u8; 8], loaded: &[u8; 8]) -> (usize, [u8; 8]) {
+    pub fn apply(&self, value: &[u8; 8]) -> (usize, [u8; 8]) {
         match self {
             StoreOps::None => (0, *value),
             StoreOps::Sb => (OpID::SB.1 as usize, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
