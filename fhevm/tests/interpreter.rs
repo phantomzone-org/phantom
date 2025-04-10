@@ -96,11 +96,6 @@ fn interpreter_store_op() {
     let mut registers_want: [u32; REGISTERS_SIZE] = [0; REGISTERS_SIZE];
     registers_want.copy_from_slice(&REGISTERS);
 
-    println!(
-        "memory: {:?}",
-        &interpreter.memory.debug_as_u32()[..MEMORY_SIZE]
-    );
-
     assert_eq!(interpreter.pc.debug_as_u32(params.module_lwe()), pc_want);
     assert_eq!(
         interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
@@ -156,7 +151,46 @@ fn interpreter_load_op() {
     );
 }
 
-// 256 bytes
+#[test]
+fn interpreter_pc_ops() {
+    // JALR
+    let funct3: u8 = 0b000;
+    let op_code: u8 = 0b1100111;
+    let imm: u32 = 0x007;
+    let rs1: u8 = 0b00001;
+    let rd: u8 = 0b00110;
+    let mut instruction: Instruction = Instruction::new(op_code as u32);
+    instruction.set_funct3(funct3);
+    instruction.set_immediate(imm);
+    instruction.set_rs1(rs1);
+    instruction.set_rd(rd);
+
+    let (params, interpreter) = setup(instruction.get());
+
+    let pc_want: u32 = REGISTERS[rs1 as usize].wrapping_add(sext(imm, 12)) & !1;
+
+    let mut memory_want: [u32; MEMORY_SIZE] = [0; MEMORY_SIZE];
+    memory_want.copy_from_slice(&MEMORY);
+
+    let mut registers_want: [u32; REGISTERS_SIZE] = [0; REGISTERS_SIZE];
+    registers_want.copy_from_slice(&REGISTERS);
+    registers_want[rd as usize] = 4;
+
+    assert_eq!(
+        interpreter.pc.debug_as_u32(params.module_lwe()) << 2,
+        pc_want
+    );
+    assert_eq!(
+        interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
+        memory_want
+    );
+    assert_eq!(
+        interpreter.registers.debug_as_u32()[..REGISTERS_SIZE],
+        registers_want
+    );
+}
+
+// 128 bytes
 static REGISTERS: [u32; REGISTERS_SIZE] = [
     0x00000000, 0x00000001, 0x00000002, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
@@ -164,7 +198,7 @@ static REGISTERS: [u32; REGISTERS_SIZE] = [
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0xAABBCCDD,
 ];
 
-// 512 bytes
+// 256 bytes
 static MEMORY: [u32; MEMORY_SIZE] = [
     0x00ABCDEF, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,
     0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000, 0x00000000,

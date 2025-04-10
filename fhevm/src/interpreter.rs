@@ -373,11 +373,6 @@ impl Interpreter {
             vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(x) as i64, 32);
         });
 
-        println!("offset: {}", offset);
-        println!("mem_w_u5: {}", mem_w_u5);
-        println!("loaded: {:08x}", reconstruct(loaded));
-        println!("rs2_lwe: {:08x}", reconstruct(rs2_lwe));
-
         // Selects according to offset
         // TODO: BOOTSTRAP OFFSET TO RGSW
         module_lwe
@@ -385,8 +380,6 @@ impl Interpreter {
 
         // Sample extract
         let value: [u8; 8] = decompose(vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32);
-
-        println!("value: {:08x}", reconstruct(&value));
 
         store(
             module_lwe,
@@ -429,6 +422,8 @@ impl Interpreter {
         });
 
         let pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
+
+        println!("pc_lwe: {:?}", pc_lwe);
 
         self.circuit_btp.bootstrap_to_address(
             module_pbs,

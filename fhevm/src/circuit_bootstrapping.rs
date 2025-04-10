@@ -88,9 +88,6 @@ impl CircuitBootstrapper {
     ) {
         debug_assert_eq!(precomp.log_bases, address.decomp.basis_1d());
 
-        println!("value: {}", value);
-        println!("precomp: {:?}", precomp.log_bases);
-
         // 3) LWE -> [LWE, LWE, LWE, ...]
         let addr_decomp: Vec<u8> = decomposer.decompose(&module_pbs, precomp, value);
 
