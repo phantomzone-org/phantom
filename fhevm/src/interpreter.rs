@@ -145,9 +145,11 @@ impl Interpreter {
         self.memory.set(&memory_i64[..], LOGK);
     }
 
-    pub fn step(&mut self, params: &Parameters) {
+    pub fn cycle(&mut self, params: &Parameters) {
+
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
+        
         // 0) Fetches instructions selectors
         let now: Instant = Instant::now();
         let (rs2_u5, rs1_u5, rd_u5, rd_w_u6, mem_w_u5, pc_w_u5) =
@@ -422,8 +424,6 @@ impl Interpreter {
         });
 
         let pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
-
-        println!("pc_lwe: {:?}", pc_lwe);
 
         self.circuit_btp.bootstrap_to_address(
             module_pbs,

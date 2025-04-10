@@ -25,7 +25,7 @@ fn setup(instruction: u32) -> (Parameters, Interpreter) {
     interpreter.init_registers(&REGISTERS.to_vec());
     interpreter.init_memory(&MEMORY.to_vec());
 
-    interpreter.step(&params);
+    interpreter.cycle(&params);
 
     (params, interpreter)
 }
