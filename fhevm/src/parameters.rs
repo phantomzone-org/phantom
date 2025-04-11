@@ -24,6 +24,8 @@ pub const PC_N1_DECOMP: [u8; PC_N1] = [3, 3, 3, 2];
 pub const MEM_N1: usize = 4;
 pub const MEM_N2: usize = 1;
 pub const MEM_N1_DECOMP: [u8; MEM_N1] = [3, 3, 3, 2];
+pub const MEM_SIZE_U8: u32 = 1024;
+//pub const MEM_SIZE_u32: u32 = MEM_SIZE_U8 >>2;
 
 // REGISTERS
 pub const REGISTERS_N1: usize = 1;

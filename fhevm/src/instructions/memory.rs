@@ -25,13 +25,14 @@ pub fn prepare_address(
     );
 }
 
-// Address = X^{(x_rs1 + imm)>>2}
-// Offset = (x_rs1+imm)%4
+// Address = X^{(x_rs1 + imm)>>2 % max_size}
+// Offset = (x_rs1+imm % max_size)%4
 pub fn prepare_address_floor_byte_offset(
     module_pbs: &Module,
     module_lwe: &Module,
     imm: &[u8; 8],
     x_rs1: &[u8; 8],
+    max_size: u32,
     circuit_btp: &CircuitBootstrapper,
     decomposer: &mut Decomposer,
     precomp_byte_offset: &Precomp,
@@ -41,7 +42,7 @@ pub fn prepare_address_floor_byte_offset(
 ) -> u8 {
     let imm_u32: u32 = reconstruct(imm);
     let x_rs1_u32: u32 = reconstruct(x_rs1);
-    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32);
+    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32) % max_size;
     let offset: u32 = decomposer.decompose(module_pbs, precomp_byte_offset, idx)[0] as u32;
     assert_eq!(idx & 3, offset);
     idx >>= 2;
@@ -176,6 +177,7 @@ mod tests {
                 &module_lwe,
                 &decompose(imm),
                 &decompose(x_rs1),
+                size as u32,
                 &circuit_btp,
                 &mut decomposer,
                 &precomp_byte_offset,
