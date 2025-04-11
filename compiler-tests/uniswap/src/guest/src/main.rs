@@ -71,4 +71,6 @@ fn main() {
             core::mem::size_of::<Output>(),
         )
     };
+
+    loop {}
 }

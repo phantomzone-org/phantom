@@ -1,8 +1,13 @@
 use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
+    parse,
     segment::ProgramHeader,
 };
-use fhevm::instructions::Instruction;
+use fhevm::{
+    instructions::{Instruction, InstructionsParser},
+    interpreter::Interpreter,
+    parameters::Parameters,
+};
 use itertools::Itertools;
 use testvm::TestVM;
 
@@ -41,6 +46,27 @@ pub struct Phantom {
     _elf_bytes: Vec<u8>,
 }
 
+pub struct EncryptedVM {
+    params: Parameters,
+    interpreter: Interpreter,
+    output_info: OutputInfo,
+    max_cycles: usize,
+}
+
+impl EncryptedVM {
+    pub fn execute(&mut self) {
+        let mut curr_cycles = 0;
+        while curr_cycles < self.max_cycles {
+            self.interpreter.cycle(&self.params);
+            curr_cycles += 1;
+        }
+    }
+
+    pub fn output_tape(&self) -> Vec<u8> {
+        todo!()
+    }
+}
+
 impl Phantom {
     pub fn init(elf_bytes: Vec<u8>) -> Self {
         let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&elf_bytes).unwrap();
@@ -71,6 +97,8 @@ impl Phantom {
             elf_bytes[txthdr.p_offset as usize..(txthdr.p_offset + txthdr.p_memsz) as usize]
                 .to_vec(),
         );
+
+        println!("ROM SIZE: {}", txthdr.p_memsz);
 
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
@@ -146,12 +174,12 @@ impl Phantom {
         }
     }
 
-    pub fn encrypted_interpreter(&self, input_tape: &[u8]) {
+    pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
-        let _instructions = self
-            .boot_rom
+        let mut parser = InstructionsParser::new();
+        self.boot_rom
             .data
             .chunks_exact(4)
             .map(|four_bytes| {
@@ -161,9 +189,9 @@ impl Phantom {
                 }
                 Instruction::new(inst)
             })
-            .collect_vec();
+            .for_each(|i| parser.add(i));
 
-        // RAM
+        // setup RAM
         let ram_offset = self.boot_ram.offset;
         assert!(self.boot_ram.size % 4 == 0);
         let mut ram_with_input = self.boot_ram.data.clone();
@@ -173,7 +201,7 @@ impl Phantom {
             ..(self.input_info.start_addr + self.input_info.size - ram_offset)]
             .copy_from_slice(input_tape);
         // RAM: byte vector -> u32 vec
-        let _ram_data_u32 = ram_with_input
+        let ram_data_u32 = ram_with_input
             .chunks_exact(4)
             .map(|four_bytes| {
                 let mut date_u32 = 0u32;
@@ -184,7 +212,24 @@ impl Phantom {
             })
             .collect_vec();
 
+        // Initialize interpreter
+        let params = Parameters::new();
+        let mut interpreter = Interpreter::new(&params);
+        interpreter.init_pc(&params);
+        interpreter.init_instructions(parser);
+        interpreter.init_registers(&vec![0u32; 32]);
+        interpreter.init_memory(&ram_data_u32);
+
+        // interpreter.cycle(&params);
+
         // println!("Instructions: {:?}", _instructions);
+
+        EncryptedVM {
+            params: params,
+            interpreter,
+            output_info: self.output_info.clone(),
+            max_cycles,
+        }
     }
 
     pub fn test_vm(&self) -> TestVM {

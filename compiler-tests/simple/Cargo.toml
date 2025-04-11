@@ -1,12 +1,10 @@
 [package]
-name = "sybil-resistant-id"
+name = "simple"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 compiler = {path = "./../../compiler", features=["verbose"]}
-rand = "0.8.0"
-k256 = {version = "0.13.4", default-features = false,features = ["ecdsa", "alloc"]}
 
 [workspace]
 members = [ 
