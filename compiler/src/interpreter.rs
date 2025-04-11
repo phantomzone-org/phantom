@@ -62,8 +62,16 @@ impl EncryptedVM {
         }
     }
 
-    pub fn output_tape(&self) -> Vec<u8> {
-        todo!()
+    pub fn print_debug(&self) {
+        println!(
+            "PC: {}",
+            self.interpreter.pc.debug_as_u32(self.params.module_lwe())
+        );
+        println!("Registers: {:?}", self.interpreter.registers.debug_as_u32());
+    }
+
+    pub fn output_tape(&self) -> Vec<u32> {
+        self.interpreter.memory.debug_as_u32()
     }
 }
 
@@ -106,7 +114,7 @@ impl Phantom {
             .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
             .collect();
         let mut ram_offset = 0;
-        let mut boot_ram_data = vec![0u8; 1 << 18];
+        let mut boot_ram_data = vec![0u8; 1 << 13];
         if hdrs.len() > 0 {
             ram_offset = hdrs[0].p_vaddr as usize;
             // load ram with .inpdata,.rodata,.data.,etc.
@@ -125,7 +133,7 @@ impl Phantom {
                 }
             });
         }
-        let boot_ram = BootMemory::new(ram_offset, 1 << 18, boot_ram_data);
+        let boot_ram = BootMemory::new(ram_offset, 1 << 13, boot_ram_data);
 
         // gather input information
         let inpdata_sec = elf
