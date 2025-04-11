@@ -58,8 +58,14 @@ fn interpreter_arithmetic_ops() {
     registers_want[rd as usize] = REGISTERS[rs1 as usize].wrapping_add(REGISTERS[rs2 as usize]);
 
     assert_eq!(interpreter.pc.debug_as_u32(params.module_lwe()), pc_want);
-    assert_eq!(interpreter.memory.debug_as_u32(), memory_want);
-    assert_eq!(interpreter.registers.debug_as_u32(), registers_want);
+    assert_eq!(
+        interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
+        memory_want
+    );
+    assert_eq!(
+        interpreter.registers.debug_as_u32()[..REGISTERS_SIZE],
+        registers_want
+    );
 }
 
 #[test]

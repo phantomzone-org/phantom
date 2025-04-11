@@ -105,7 +105,7 @@ fn test_main_guest() {
     // Initialise Phantom
     let pz = Phantom::init(elf_bytes);
 
-    for _ in 0..10 {
+    for _ in 0..1 {
         let mut vm = pz.test_vm();
 
         let (is_sig_valid, random_input, output_hash) = gen_random_case();

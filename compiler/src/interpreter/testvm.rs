@@ -1,4 +1,5 @@
 use super::{BootMemory, InputInfo, OutputInfo};
+use std::fmt;
 use utils::{extract_bits, sign_extend};
 
 macro_rules! verbose_println {
@@ -134,12 +135,11 @@ enum Inst {
     SB(RegisterIndex, RegisterIndex, u32),
     SH(RegisterIndex, RegisterIndex, u32),
     SW(RegisterIndex, RegisterIndex, u32),
-
     // ECALL
     // ECALL,
 
     // UNIMP
-    UNIMP,
+    // UNIMP,
 }
 
 #[derive(PartialEq, Debug)]
@@ -155,6 +155,12 @@ impl RegisterIndex {
     fn from(v: u32) -> Self {
         assert!(v < 32);
         RegisterIndex(v)
+    }
+}
+
+impl fmt::Display for RegisterIndex {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "r{}", self.0)
     }
 }
 
@@ -383,9 +389,9 @@ impl TestVM {
         //  else if opcode == 0b1110011 && ((inst >> 20) == 0) {
         //     return Inst::ECALL;
         // }
-        else if inst == 3221229683 {
-            return Inst::UNIMP;
-        }
+        // else if inst == 3221229683 {
+        //     return Inst::UNIMP;
+        // }
 
         panic!("Instruction={} cannot be decoded", inst);
     }
@@ -1118,26 +1124,24 @@ impl TestVM {
                 *self.register_mut(rd) = self.register(rs1) % self.register(rs2);
 
                 self.pc += 4;
-            }
-            // Inst::ECALL => {
-            //     // a0 stores v_addrs, a1 stores v_len
-            //     let addr = self.register(RegisterIndex::from(10));
-            //     let len = self.register(RegisterIndex::from(11)) as usize;
-            //     let mut out_bytes = Vec::with_capacity(len);
-            //     for i in 0..len {
-            //         out_bytes.push(self.ram.read_byte((addr as usize) + i));
-            //     }
-            //     let s = std::str::from_utf8(&out_bytes).unwrap();
-            //     println!("[TestVM log] {s}");
+            } // Inst::ECALL => {
+              //     // a0 stores v_addrs, a1 stores v_len
+              //     let addr = self.register(RegisterIndex::from(10));
+              //     let len = self.register(RegisterIndex::from(11)) as usize;
+              //     let mut out_bytes = Vec::with_capacity(len);
+              //     for i in 0..len {
+              //         out_bytes.push(self.ram.read_byte((addr as usize) + i));
+              //     }
+              //     let s = std::str::from_utf8(&out_bytes).unwrap();
+              //     println!("[TestVM log] {s}");
 
-            //     self.pc += 4;
-            // }
-            Inst::UNIMP => {
-                verbose_println!("UNIMP");
-
-                // halt vm
-                self.state = VMState::HALT
-            } // _ => {}
+              //     self.pc += 4;
+              // }
+              // Inst::UNIMP => {
+              //     verbose_println!("UNIMP");
+              //     // halt vm
+              //     self.state = VMState::HALT
+              // } // _ => {}
         }
 
         *self.register_mut(RegisterIndex(0)) = 0;

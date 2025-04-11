@@ -88,15 +88,17 @@ impl CircuitBootstrapper {
     ) {
         debug_assert_eq!(precomp.log_bases, address.decomp.basis_1d());
 
+        let value_wrap: u32 = value % address.max() as u32;
+
         // 3) LWE -> [LWE, LWE, LWE, ...]
-        let addr_decomp: Vec<u8> = decomposer.decompose(&module_pbs, precomp, value);
+        let addr_decomp: Vec<u8> = decomposer.decompose(&module_pbs, precomp, value_wrap);
 
         debug_assert_eq!(
             precomp.recomp(&addr_decomp),
-            value,
+            value_wrap,
             "{} != {}",
             precomp.recomp(&addr_decomp),
-            value
+            value_wrap
         );
 
         // buf RGSW
@@ -171,10 +173,10 @@ impl CircuitBootstrapper {
 
         debug_assert_eq!(
             address.debug_as_u32(module_lwe),
-            value,
-            "address: {} != value: {}",
+            value_wrap,
+            "address: {} != value_wrap: {}",
             address.debug_as_u32(module_lwe),
-            value
+            value_wrap
         );
     }
 

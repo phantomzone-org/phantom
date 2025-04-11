@@ -11,7 +11,7 @@ impl Bgeu {
         if x_rs1_u32 >= x_rs2_u32 {
             decompose(reconstruct(pc).wrapping_add(reconstruct(imm)))
         } else {
-            *pc
+            decompose(reconstruct(pc).wrapping_add(4))
         }
     }
 }
@@ -35,7 +35,7 @@ mod tests {
             &decompose(pc),
         );
         let pc_w: u32 = reconstruct(&pc_w_decomp);
-        assert_eq!(pc_w, pc_w);
+        assert_eq!(pc_w, pc + 4);
 
         let x_rs2: u32 = x_rs1;
         let pc_w_decomp = Bgeu::apply(
@@ -55,6 +55,6 @@ mod tests {
             &decompose(pc),
         );
         let pc_w: u32 = reconstruct(&pc_w_decomp);
-        assert_eq!(pc_w, pc);
+        assert_eq!(pc_w, pc + 4);
     }
 }

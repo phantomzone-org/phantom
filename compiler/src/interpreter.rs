@@ -1,8 +1,13 @@
 use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
+    parse,
     segment::ProgramHeader,
 };
-use fhevm::instructions::Instruction;
+use fhevm::{
+    instructions::{Instruction, InstructionsParser},
+    interpreter::Interpreter,
+    parameters::Parameters,
+};
 use itertools::Itertools;
 use testvm::TestVM;
 
@@ -41,6 +46,35 @@ pub struct Phantom {
     _elf_bytes: Vec<u8>,
 }
 
+pub struct EncryptedVM {
+    params: Parameters,
+    interpreter: Interpreter,
+    output_info: OutputInfo,
+    max_cycles: usize,
+}
+
+impl EncryptedVM {
+    pub fn execute(&mut self) {
+        let mut curr_cycles = 0;
+        while curr_cycles < self.max_cycles {
+            self.interpreter.cycle(&self.params);
+            curr_cycles += 1;
+        }
+    }
+
+    pub fn print_debug(&self) {
+        println!(
+            "PC: {}",
+            self.interpreter.pc.debug_as_u32(self.params.module_lwe())
+        );
+        println!("Registers: {:?}", self.interpreter.registers.debug_as_u32());
+    }
+
+    pub fn output_tape(&self) -> Vec<u32> {
+        self.interpreter.memory.debug_as_u32()
+    }
+}
+
 impl Phantom {
     pub fn init(elf_bytes: Vec<u8>) -> Self {
         let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&elf_bytes).unwrap();
@@ -72,13 +106,15 @@ impl Phantom {
                 .to_vec(),
         );
 
+        println!("ROM SIZE: {}", txthdr.p_memsz);
+
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
             .iter()
             .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
             .collect();
         let mut ram_offset = 0;
-        let mut boot_ram_data = vec![0u8; 1 << 18];
+        let mut boot_ram_data = vec![0u8; 1 << 13];
         if hdrs.len() > 0 {
             ram_offset = hdrs[0].p_vaddr as usize;
             // load ram with .inpdata,.rodata,.data.,etc.
@@ -97,7 +133,7 @@ impl Phantom {
                 }
             });
         }
-        let boot_ram = BootMemory::new(ram_offset, 1 << 18, boot_ram_data);
+        let boot_ram = BootMemory::new(ram_offset, 1 << 13, boot_ram_data);
 
         // gather input information
         let inpdata_sec = elf
@@ -146,12 +182,12 @@ impl Phantom {
         }
     }
 
-    pub fn encrypted_interpreter(&self, input_tape: &[u8]) {
+    pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
-        let _instructions = self
-            .boot_rom
+        let mut parser = InstructionsParser::new();
+        self.boot_rom
             .data
             .chunks_exact(4)
             .map(|four_bytes| {
@@ -161,9 +197,9 @@ impl Phantom {
                 }
                 Instruction::new(inst)
             })
-            .collect_vec();
+            .for_each(|i| parser.add(i));
 
-        // RAM
+        // setup RAM
         let ram_offset = self.boot_ram.offset;
         assert!(self.boot_ram.size % 4 == 0);
         let mut ram_with_input = self.boot_ram.data.clone();
@@ -173,7 +209,7 @@ impl Phantom {
             ..(self.input_info.start_addr + self.input_info.size - ram_offset)]
             .copy_from_slice(input_tape);
         // RAM: byte vector -> u32 vec
-        let _ram_data_u32 = ram_with_input
+        let ram_data_u32 = ram_with_input
             .chunks_exact(4)
             .map(|four_bytes| {
                 let mut date_u32 = 0u32;
@@ -184,7 +220,24 @@ impl Phantom {
             })
             .collect_vec();
 
+        // Initialize interpreter
+        let params = Parameters::new();
+        let mut interpreter = Interpreter::new(&params);
+        interpreter.init_pc(&params);
+        interpreter.init_instructions(parser);
+        interpreter.init_registers(&vec![0u32; 32]);
+        interpreter.init_memory(&ram_data_u32);
+
+        // interpreter.cycle(&params);
+
         // println!("Instructions: {:?}", _instructions);
+
+        EncryptedVM {
+            params: params,
+            interpreter,
+            output_info: self.output_info.clone(),
+            max_cycles,
+        }
     }
 
     pub fn test_vm(&self) -> TestVM {

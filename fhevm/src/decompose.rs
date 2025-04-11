@@ -33,7 +33,7 @@ impl Decomp {
         for _ in 0..self.n2() {
             max *= max_n1
         }
-        max
+        max as _
     }
 
     pub fn gap(&self, log_n: usize) -> usize {

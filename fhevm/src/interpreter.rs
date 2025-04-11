@@ -1,4 +1,4 @@
-use std::time::Instant;
+//use std::time::Instant;
 
 //use crate::gadget::Gadget;
 use crate::address::Address;
@@ -13,7 +13,7 @@ use crate::instructions::{
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     Parameters, DECOMPOSE_ARITHMETIC, DECOMPOSE_BYTEOFFSET, DECOMPOSE_INSTRUCTIONS, LOGBASE2K,
-    LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    LOGK, MEM_SIZE_U8, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use base2k::{alloc_aligned, Encoding, Module, VecZnxOps};
 use itertools::izip;
@@ -146,17 +146,20 @@ impl Interpreter {
     }
 
     pub fn cycle(&mut self, params: &Parameters) {
+        //println!("pc: {}", self.pc.debug_as_u32(params.module_lwe())<<2);
+        //println!("REGS: {:?}", &self.registers.debug_as_u32());
+
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
 
         // 0) Fetches instructions selectors
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         let (rs2_u5, rs1_u5, rd_u5, rd_w_u6, mem_w_u5, pc_w_u5) =
             self.get_instruction_selectors(module_pbs, module_lwe);
-        println!(
-            "get_instruction_selectors: {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "get_instruction_selectors: {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         //println!("rd_w_u6: {}", rd_w_u6);
         //println!("mem_w_u5: {}", mem_w_u5);
@@ -166,34 +169,41 @@ impl Interpreter {
         //println!("rd_u5: {}", rd_u5);
 
         // 1) Retrieve 8xLWE(u4) inputs (imm, rs2, rs1, pc)
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         let (imm_lwe, rs2_lwe, rs1_lwe, pc_lwe) =
             self.get_lwe_inputs(module_pbs, module_lwe, rs2_u5, rs1_u5);
-        println!(
-            "get_lwe_inputs           : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "get_lwe_inputs           : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
-        //println!("imm_lwe: {:?}", imm_lwe);
+        //println!("rs2_lwe: {}", reconstruct(&rs2_lwe));
+        //println!("rs1_lwe: {}", reconstruct(&rs1_lwe));
+        //println!("imm_lwe: {}", reconstruct(&imm_lwe));
 
         // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
-        let now: Instant = Instant::now();
-        let offset: u8 = self
-            .prepare_memory_address_floor_byte_offset(module_pbs, module_lwe, &imm_lwe, &rs1_lwe);
-        println!(
-            "prepare_memory_address   : {} ms",
-            now.elapsed().as_millis()
+        //let now: Instant = Instant::now();
+        let offset: u8 = self.prepare_memory_address_floor_byte_offset(
+            module_pbs,
+            module_lwe,
+            &imm_lwe,
+            &rs1_lwe,
+            MEM_SIZE_U8,
         );
+        //println!(
+        //    "prepare_memory_address   : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         //println!("offset: {}", offset);
 
         // 3)  loads value from memory
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         let loaded: [u8; 8] = self.read_memory(module_lwe);
-        println!(
-            "read_memory              : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "read_memory              : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         //println!("loaded_full: {:08x}", reconstruct(&loaded));
 
@@ -202,7 +212,7 @@ impl Interpreter {
         let loaded_offset: [u8; 8] = extract_from_byte_offset(&loaded, offset);
 
         // 4) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         let rd_lwe: [u8; 8] = self.evaluate_ops(
             &imm_lwe,
             &rs1_lwe,
@@ -211,42 +221,42 @@ impl Interpreter {
             &loaded_offset,
             rd_w_u6,
         );
-        println!(
-            "evaluate_ops             : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "evaluate_ops             : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         // 5) Updates memory from {RD|LOADED}[mem_w_u5]
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         self.store_memory(module_lwe, &rs2_lwe, &loaded, offset, mem_w_u5);
-        println!(
-            "store_memory             : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "store_memory             : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         // 6) Updates registers from RD
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         self.store_registers(module_lwe, &rd_lwe, rd_u5);
-        println!(
-            "store_registers          : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "store_registers          : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         // 7) Update PC from OPS(imm, rs1, rs2, pc)[pc_w_u5]
-        let now: Instant = Instant::now();
+        //let now: Instant = Instant::now();
         self.update_pc(
             module_pbs, module_lwe, &imm_lwe, &rs1_lwe, &rs2_lwe, &pc_lwe, pc_w_u5,
         );
-        println!(
-            "update_pc                : {} ms",
-            now.elapsed().as_millis()
-        );
+        //println!(
+        //    "update_pc                : {} ms",
+        //    now.elapsed().as_millis()
+        //);
 
         // Reinitialize checks
         self.tmp_address_memory_state = false;
 
         //println!("pc_out: {}", self.pc.debug_as_u32(params.module_lwe()));
-        println!();
+        //println!();
     }
 
     fn evaluate_ops(
@@ -280,6 +290,7 @@ impl Interpreter {
             self.tmp_address_memory_state, true,
             "trying to read memory but memory address hasn't been prepared"
         );
+        //println!("address: {}", self.tmp_address_memory.debug_as_u32(module_lwe));
         load(
             module_lwe,
             &mut self.memory,
@@ -307,65 +318,66 @@ impl Interpreter {
 
         // offset = 0
         // NONE: [e, f, g, h]
-        // SW:   [a, b, c, d]
-        // SH:   [a, b, g, h]
         // SB:   [a, f, g, h]
+        // SH:   [a, b, g, h]
+        // SW:   [a, b, c, d]
         //
         // offset = 1
         // NONE: [e, f, g, h]
-        // SW:   [ INVALID  ]
-        // SH:   [e, a, b, h]
         // SB:   [e, a, g, h]
+        // SH:   [e, a, b, h]
+        // SW:   [ INVALID  ]
         //
         // offset = 2
         // NONE: [e, f, g, h]
-        // SW:   [ INVALID  ]
-        // SH:   [e, f, a, b]
         // SB:   [e, f, g, a]
+        // SH:   [e, f, a, b]
+        // SW:   [ INVALID  ]
         //
         // offset = 3
         // NONE: [e, f, g, h]
-        // SW:   [ INVALID  ]
-        // SH:   [ INVALID  ]
         // SB:   [e, f, g, a]
+        // SH:   [ INVALID  ]
+        // SW:   [ INVALID  ]
+
         let list: [[u8; 8]; 16] = [
             *loaded,
-            *rs2_lwe,
-            [
-                rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[4], loaded[5], loaded[6],
-                loaded[7],
-            ],
             [
                 rs2_lwe[0], rs2_lwe[1], loaded[2], loaded[3], loaded[4], loaded[5], loaded[6],
                 loaded[7],
             ],
-            *loaded,
-            [0, 0, 0, 0, 0, 0, 0, 0],
             [
-                loaded[0], loaded[1], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[6],
+                rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[4], loaded[5], loaded[6],
                 loaded[7],
             ],
+            *rs2_lwe,
+            *loaded,
             [
                 loaded[0], loaded[1], rs2_lwe[0], rs2_lwe[1], loaded[4], loaded[5], loaded[6],
                 loaded[7],
             ],
-            *loaded,
-            [0, 0, 0, 0, 0, 0, 0, 0],
             [
-                loaded[0], loaded[1], loaded[2], loaded[3], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2],
-                rs2_lwe[3],
+                loaded[0], loaded[1], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2], rs2_lwe[3], loaded[6],
+                loaded[7],
             ],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            *loaded,
             [
                 loaded[0], loaded[1], loaded[2], loaded[3], rs2_lwe[0], rs2_lwe[1], loaded[6],
                 loaded[7],
             ],
+            [
+                loaded[0], loaded[1], loaded[2], loaded[3], rs2_lwe[0], rs2_lwe[1], rs2_lwe[2],
+                rs2_lwe[3],
+            ],
+            [0, 0, 0, 0, 0, 0, 0, 0],
             *loaded,
-            [0, 0, 0, 0, 0, 0, 0, 0],
-            [0, 0, 0, 0, 0, 0, 0, 0],
             [
                 loaded[0], loaded[1], loaded[2], loaded[3], loaded[4], loaded[5], rs2_lwe[0],
                 rs2_lwe[1],
             ],
+            [0, 0, 0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0],
         ];
 
         // Creates a vector of VecZnx storing list.
@@ -457,6 +469,7 @@ impl Interpreter {
         module_lwe: &Module,
         imm_lwe: &[u8; 8],
         rs1_lwe: &[u8; 8],
+        max_size: u32,
     ) -> u8 {
         assert_eq!(
             self.tmp_address_memory_state, false,
@@ -467,6 +480,7 @@ impl Interpreter {
             module_lwe,
             imm_lwe,
             rs1_lwe,
+            max_size,
             &self.circuit_btp,
             &mut self.decomposer,
             &self.precomp_decompose_byte_offset,
