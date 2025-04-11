@@ -21,7 +21,7 @@ fn decompose_u32() {
 
     let mut sum_bases: u8 = 0;
     log_bases.iter().enumerate().for_each(|(i, base)| {
-        have |= (result[i] << sum_bases) as u32;
+        have |= (result[i] as u32) << sum_bases;
         sum_bases += base;
     });
     assert_eq!(value, have);

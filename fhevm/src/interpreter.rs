@@ -146,10 +146,9 @@ impl Interpreter {
     }
 
     pub fn cycle(&mut self, params: &Parameters) {
-
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
-        
+
         // 0) Fetches instructions selectors
         let now: Instant = Instant::now();
         let (rs2_u5, rs1_u5, rd_u5, rd_w_u6, mem_w_u5, pc_w_u5) =

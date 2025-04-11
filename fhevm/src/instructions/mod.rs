@@ -451,6 +451,7 @@ impl LoadOps {
 pub struct OpID;
 
 impl OpID {
+    pub const NONE: (u8, u8, u8) = (0, 0, 0);
     pub const LUI: (u8, u8, u8) = (1, 0, 0);
     pub const AUIPC: (u8, u8, u8) = (2, 0, 0);
     pub const ADDI: (u8, u8, u8) = (3, 0, 0);
@@ -514,7 +515,6 @@ impl InstructionsParser {
     pub fn add(&mut self, instruction: Instruction) {
         let (rs2, rs1, rd) = instruction.get_registers();
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
-        println!("{} {} {}", rd_w, mem_w, pc_w);
         self.imm.push(instruction.get_immediate() as i64);
         self.instructions.push(
             (rs2 as i64) << 26
@@ -618,6 +618,7 @@ pub const RDSHIFT: u32 = 7;
 pub const OPCODESHIFT: u32 = 0;
 
 pub enum Type {
+    NONE,
     R,
     I,
     S,
@@ -646,6 +647,7 @@ impl Instruction {
             0b0100011 => Type::S,
             0b1101111 => Type::J,
             0b1100011 => Type::B,
+            0b1110011 => Type::NONE,
             _ => panic!("unrecognized opcode: {:07b}", opcode),
         }
     }
@@ -860,6 +862,9 @@ impl Instruction {
             Type::B => b_type::set_immediate(&mut self.0, immediate),
             Type::U => u_type::set_immediate(&mut self.0, immediate),
             Type::J => j_type::set_immediate(&mut self.0, immediate),
+            Type::NONE => {
+                panic!("cannot encode immediate on type NONE instruction")
+            }
         }
     }
 
@@ -875,6 +880,7 @@ impl Instruction {
             Type::B => b_type::get_immediate(&self.0),
             Type::U => u_type::get_immediate(&self.0),
             Type::J => j_type::get_immediate(&self.0),
+            Type::NONE => 0,
         }
     }
 
@@ -885,6 +891,7 @@ impl Instruction {
             Type::I => (0, self.get_rs1(), self.get_rd()),
             Type::S | Type::B => (self.get_rs2(), self.get_rs1(), 0),
             Type::U | Type::J => (0, 0, self.get_rd()),
+            Type::NONE => (0, 0, 0),
         }
     }
 
@@ -969,6 +976,7 @@ impl Instruction {
                 _ => panic!("invalid instruction: {:032b}", self.0),
             },
             Type::J => OpID::JAL,
+            Type::NONE => OpID::NONE,
         }
     }
 }
