@@ -15,7 +15,7 @@ use crate::parameters::{
     Parameters, ADDR_MEM_SIZE_U8, DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
     RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
-use base2k::{alloc_aligned, Encoding, Module, VecZnxDft, VecZnxDftOps, VecZnxOps};
+use base2k::{alloc_aligned, Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps};
 use itertools::izip;
 
 pub struct Interpreter {
@@ -148,7 +148,7 @@ impl Interpreter {
             ),
             addr_u6: Address::new(
                 module_lwe,
-                &params.addr_u5_decomp,
+                &params.addr_u6_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
@@ -182,8 +182,12 @@ impl Interpreter {
     }
 
     pub fn cycle(&mut self, params: &Parameters) {
-        println!("pc: {}", self.addr_pc.debug_as_u32(params.module_lwe())<<2);
+        println!(
+            "pc: {}",
+            self.addr_pc.debug_as_u32(params.module_lwe()) << 2
+        );
         println!("REGS: {:?}", &self.registers.debug_as_u32());
+        println!("MEM: {:?}", &self.memory.debug_as_u32()[..32]);
 
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
@@ -251,6 +255,8 @@ impl Interpreter {
         // 4) Retrieves RD value from OPS(imm, rs1, rs2, pc, loaded)[rd_w_u6]
         //let now: Instant = Instant::now();
         let rd_lwe: [u8; 8] = self.evaluate_ops(
+            module_pbs,
+            module_lwe,
             &imm_lwe,
             &rs1_lwe,
             &rs2_lwe,
@@ -273,7 +279,7 @@ impl Interpreter {
 
         // 6) Updates registers from RD
         //let now: Instant = Instant::now();
-        self.store_registers(module_lwe, &rd_lwe, rd_u5);
+        self.store_registers(module_pbs, module_lwe, &rd_lwe, rd_u5);
         //println!(
         //    "store_registers          : {} ms",
         //    now.elapsed().as_millis()
@@ -298,6 +304,8 @@ impl Interpreter {
 
     fn evaluate_ops(
         &mut self,
+        module_pbs: &Module,
+        module_lwe: &Module,
         imm_lwe: &[u8; 8],
         rs1_lwe: &[u8; 8],
         rs2_lwe: &[u8; 8],
@@ -305,21 +313,21 @@ impl Interpreter {
         loaded: &[u8; 8],
         rd_w_u6: u8,
     ) -> [u8; 8] {
-        let mut rd_out: Vec<[u8; 8]> = vec![[0; 8]; RD_OPS_LIST.len() + LOAD_OPS_LIST.len()];
+        let mut vec_znx: base2k::VecZnx = module_lwe.new_vec_znx(RLWE_COLS);
 
         // Evaluates all arithmetic operations
         RD_OPS_LIST.iter().for_each(|op| {
             let (idx, out) = op.apply(imm_lwe, rs1_lwe, rs2_lwe, pc_lwe);
-            rd_out[idx] = out
+            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, idx, reconstruct(&out) as i64, 32);
         });
 
         // Selects correct loading mode
         LOAD_OPS_LIST.iter().for_each(|op| {
             let (idx, out) = op.apply(loaded);
-            rd_out[idx] = out
+            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, idx, reconstruct(&out) as i64, 32);
         });
 
-        rd_out[rd_w_u6 as usize]
+        decompose(self.select_op::<6>(module_pbs, module_lwe, rd_w_u6 as u32, &mut vec_znx))
     }
 
     fn read_memory(&mut self, module_lwe: &Module) -> [u8; 8] {
@@ -327,7 +335,6 @@ impl Interpreter {
             self.addr_mem_state, true,
             "trying to read memory but memory address hasn't been prepared"
         );
-        //println!("address: {}", self.addr_mem.debug_as_u32(module_lwe));
         load(
             module_lwe,
             &mut self.memory,
@@ -424,35 +431,13 @@ impl Interpreter {
             vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, i, reconstruct(x) as i64, 32);
         });
 
-        // Bootstraps u4 address to X^{i}
-        self.circuit_btp.bootstrap_to_address(
+        // Sample extract
+        let value: [u8; 8] = decompose(self.select_op::<4>(
             module_pbs,
             module_lwe,
-            &mut self.decomposer,
-            &self.addr_u4_precomp,
             ((offset as u32) << 2) + mem_w_u5 as u32,
-            &mut self.addr_u4,
-            &mut self.tmp_bytes,
-        );
-
-        let (vec_znx_dft_tmp_bytes, tmp_bytes) = self
-            .tmp_bytes
-            .split_at_mut(module_lwe.bytes_of_vec_znx_dft(VMPPMAT_COLS));
-
-        let mut tmp_b_dft: VecZnxDft =
-            VecZnxDft::from_bytes_borrow(module_lwe, VMPPMAT_COLS, vec_znx_dft_tmp_bytes);
-
-        // Selects according to offset
-        self.addr_u4.at_lsh(0).product_inplace(
-            module_lwe,
-            LOGBASE2K,
             &mut vec_znx,
-            &mut tmp_b_dft,
-            tmp_bytes,
-        );
-
-        // Sample extract
-        let value: [u8; 8] = decompose(vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32);
+        ));
 
         store(
             module_lwe,
@@ -487,28 +472,43 @@ impl Interpreter {
         pc_lwe: &[u8; 8],
         pc_w_u5: u8,
     ) {
-        let mut pc_out: Vec<[u8; 8]> = vec![[0; 8]; PC_OPS_LIST.len()];
+        let mut vec_znx: base2k::VecZnx = module_lwe.new_vec_znx(RLWE_COLS);
 
         PC_OPS_LIST.iter().for_each(|op| {
             let (idx, out) = op.apply(imm_lwe, rs1_lwe, rs2_lwe, pc_lwe);
-            pc_out[idx] = out
+            vec_znx.encode_coeff_i64(LOGBASE2K, LOGK, idx, reconstruct(&out) as i64, 32);
         });
 
-        let pc_lwe: [u8; 8] = pc_out[pc_w_u5 as usize]; // Select new PC
+        let pc_u32: u32 = self.select_op::<5>(module_pbs, module_lwe, pc_w_u5 as u32, &mut vec_znx);
 
         self.circuit_btp.bootstrap_to_address(
             module_pbs,
             module_lwe,
             &mut self.decomposer,
             &self.addr_pc_precomp,
-            reconstruct(&pc_lwe) >> 2, // TODO: HE DIV by 4
+            pc_u32 >> 2, // TODO: HE DIV by 4
             &mut self.addr_pc,
             &mut self.tmp_bytes,
         );
     }
 
-    fn store_registers(&mut self, module_lwe: &Module, rd_lwe: &[u8; 8], rd_u5: u8) {
-        self.addr_u5.set(module_lwe, rd_u5 as u32); // TODO: bootstrap address
+    fn store_registers(
+        &mut self,
+        module_pbs: &Module,
+        module_lwe: &Module,
+        rd_lwe: &[u8; 8],
+        rd_u5: u8,
+    ) {
+        self.circuit_btp.bootstrap_to_address(
+            module_pbs,
+            module_lwe,
+            &mut self.decomposer,
+            &self.addr_u5_precomp,
+            rd_u5 as u32,
+            &mut self.addr_u5,
+            &mut self.tmp_bytes,
+        );
+
         self.registers
             .read_prepare_write(module_lwe, &self.addr_u5, &mut self.tmp_bytes);
         store(
@@ -631,6 +631,67 @@ impl Interpreter {
             &self.precomp_decompose_arithmetic,
             imm_u32,
         )
+    }
+
+    fn select_op<const SIZE: u8>(
+        &mut self,
+        module_pbs: &Module,
+        module_lwe: &Module,
+        value: u32,
+        vec_znx: &mut VecZnx,
+    ) -> u32 {
+        let precomp: &Precomp;
+        let addr: &mut Address;
+
+        match SIZE {
+            4 => {
+                precomp = &self.addr_u4_precomp;
+                addr = &mut self.addr_u4
+            }
+            5 => {
+                precomp = &self.addr_u5_precomp;
+                addr = &mut self.addr_u5
+            }
+            6 => {
+                precomp = &self.addr_u6_precomp;
+                addr = &mut self.addr_u6
+            }
+            _ => panic!("invalid operation selector size"),
+        }
+
+        #[cfg(debug_assertions)]
+        {
+            match SIZE {
+                4 => assert!(value < 1 << 4, "4 bits selector out of range"),
+                5 => assert!(value < 1 << 5, "5 bits selector out of range"),
+                6 => assert!(value < 1 << 6, "6 bits selector out of range"),
+                _ => panic!("invalid operation selector size"),
+            }
+        }
+
+        // Bootstraps u4 address to X^{i}
+        self.circuit_btp.bootstrap_to_address(
+            module_pbs,
+            module_lwe,
+            &mut self.decomposer,
+            precomp,
+            value,
+            addr,
+            &mut self.tmp_bytes,
+        );
+
+        let (vec_znx_dft_tmp_bytes, tmp_bytes) = self
+            .tmp_bytes
+            .split_at_mut(module_lwe.bytes_of_vec_znx_dft(VMPPMAT_COLS));
+
+        let mut tmp_b_dft: VecZnxDft =
+            VecZnxDft::from_bytes_borrow(module_lwe, VMPPMAT_COLS, vec_znx_dft_tmp_bytes);
+
+        // Selects according to offset
+        addr.at_lsh(0)
+            .product_inplace(module_lwe, LOGBASE2K, vec_znx, &mut tmp_b_dft, tmp_bytes);
+
+        vec_znx.decode_coeff_i64(LOGBASE2K, LOGK, 0) as u32
     }
 }
 

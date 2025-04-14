@@ -67,7 +67,9 @@ impl EncryptedVM {
     pub fn print_debug(&self) {
         println!(
             "PC: {}",
-            self.interpreter.addr_pc.debug_as_u32(self.params.module_lwe())
+            self.interpreter
+                .addr_pc
+                .debug_as_u32(self.params.module_lwe())
         );
         println!("Registers: {:?}", self.interpreter.registers.debug_as_u32());
     }
