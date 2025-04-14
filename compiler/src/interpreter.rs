@@ -1,6 +1,5 @@
 use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
-    parse,
     segment::ProgramHeader,
 };
 use fhevm::{
@@ -12,6 +11,8 @@ use itertools::Itertools;
 use testvm::TestVM;
 
 mod testvm;
+
+const RAM_SIZE: usize = 1 << 13;
 
 struct BootMemory {
     data: Vec<u8>,
@@ -50,6 +51,7 @@ pub struct EncryptedVM {
     params: Parameters,
     interpreter: Interpreter,
     output_info: OutputInfo,
+    ram_offset: usize,
     max_cycles: usize,
 }
 
@@ -70,8 +72,15 @@ impl EncryptedVM {
         println!("Registers: {:?}", self.interpreter.registers.debug_as_u32());
     }
 
-    pub fn output_tape(&self) -> Vec<u32> {
-        self.interpreter.memory.debug_as_u32()
+    pub fn output_tape(&self) -> Vec<u8> {
+        let mem_bytes: Vec<u8> = (&self.interpreter.memory).into();
+        assert!(mem_bytes.len() == RAM_SIZE);
+
+        let mut output = Vec::with_capacity(self.output_info.size);
+        for i in 0..self.output_info.size {
+            output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
+        }
+        output
     }
 }
 
@@ -114,7 +123,7 @@ impl Phantom {
             .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
             .collect();
         let mut ram_offset = 0;
-        let mut boot_ram_data = vec![0u8; 1 << 13];
+        let mut boot_ram_data = vec![0u8; RAM_SIZE];
         if hdrs.len() > 0 {
             ram_offset = hdrs[0].p_vaddr as usize;
             // load ram with .inpdata,.rodata,.data.,etc.
@@ -133,7 +142,8 @@ impl Phantom {
                 }
             });
         }
-        let boot_ram = BootMemory::new(ram_offset, 1 << 13, boot_ram_data);
+        let boot_ram = BootMemory::new(ram_offset, RAM_SIZE, boot_ram_data);
+        // println!("RAM OFFSET: {}", ram_offset);
 
         // gather input information
         let inpdata_sec = elf
@@ -236,6 +246,7 @@ impl Phantom {
             params: params,
             interpreter,
             output_info: self.output_info.clone(),
+            ram_offset: self.boot_ram.offset,
             max_cycles,
         }
     }
