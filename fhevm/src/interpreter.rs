@@ -13,7 +13,7 @@ use crate::instructions::{
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
     Parameters, ADDR_MEM_SIZE_U8, DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
-    RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    RLWE_COLS, MEM_SIZE_U32, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
 use crate::trace::{trace_inplace_inv, trace_inv};
 use base2k::{alloc_aligned, Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps};
