@@ -109,10 +109,10 @@ mod tests {
     use super::*;
     use crate::address::Address;
     use crate::circuit_bootstrapping::circuit_bootstrap_tmp_bytes;
-    use crate::decompose::Decomp;
+    use crate::decompose::{Base1D, Base2D};
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
-    use crate::parameters::ADDR_U2_N1_DECOMP;
+    use crate::parameters::DECOMP_U2;
     use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 
     #[test]
@@ -139,11 +139,7 @@ mod tests {
         let mut memory: Memory = Memory::new(&module_lwe, log_base2k, cols, size);
         memory.set(&data, 2 * log_base2k);
 
-        let addr_decomp: Decomp = Decomp {
-            n1: 2,
-            n2: 2,
-            base: vec![3, 3],
-        };
+        let addr_decomp: Base2D = Base2D(vec![Base1D(vec![3, 3]), Base1D(vec![3, 3])]);
 
         let mut address: Address = Address::new(&module_lwe, &addr_decomp, rows, cols);
 
@@ -160,13 +156,13 @@ mod tests {
 
         let precomp_byte_offset: Precomp = Precomp::new(
             module_pbs.n(),
-            &ADDR_U2_N1_DECOMP.to_vec(),
+            &Base1D(DECOMP_U2.to_vec()),
             log_base2k,
             cols,
         );
 
         let precomp_address: Precomp =
-            Precomp::new(module_pbs.n(), &address.decomp.basis_1d(), log_base2k, cols);
+            Precomp::new(module_pbs.n(), &address.base_2d.as_1d(), log_base2k, cols);
 
         let ram_offset: u32 = 0x0000_0000;
 

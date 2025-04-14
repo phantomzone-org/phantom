@@ -5,66 +5,27 @@ pub struct Decomposer {
     pub buf: VecZnx,
 }
 
-#[derive(Clone, Debug)]
-pub struct Decomp {
-    pub n1: usize,
-    pub n2: usize,
-    pub base: Vec<u8>,
-}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Base1D(pub Vec<u8>);
 
-impl Decomp {
-    pub fn n1(&self) -> usize {
-        self.n1
-    }
-
-    pub fn n2(&self) -> usize {
-        self.n2
-    }
-
-    pub fn max_n1(&self) -> usize {
-        let mut max: usize = 1;
-        self.base.iter().for_each(|i| max <<= i);
-        max
-    }
-
+impl Base1D {
     pub fn max(&self) -> usize {
-        let max_n1: usize = self.max_n1();
         let mut max: usize = 1;
-        for _ in 0..self.n2() {
-            max *= max_n1
-        }
-        max as _
+        self.0.iter().for_each(|i| max <<= i);
+        max
     }
 
     pub fn gap(&self, log_n: usize) -> usize {
         let mut gap: usize = log_n;
-        self.base.iter().for_each(|i| gap >>= i);
+        self.0.iter().for_each(|i| gap >>= i);
         1 << gap
     }
 
-    pub fn basis_1d(&self) -> Vec<u8> {
-        let n1: usize = self.n1();
-        let n2: usize = self.n2();
-        let mut decomp: Vec<u8> = vec![0u8; n1 * n2];
-        for i in 0..n2 {
-            decomp[i * n1..(i + 1) * n1].copy_from_slice(&self.base);
-        }
-        decomp
-    }
-
-    pub fn basis_2d(&self) -> Vec<Vec<u8>> {
-        let mut decomp: Vec<Vec<u8>> = Vec::new();
-        for _ in 0..self.n1() {
-            decomp.push(self.base.clone());
-        }
-        decomp
-    }
-
     pub fn decomp(&self, value: u32) -> Vec<u8> {
-        let mut decomp: Vec<u8> = vec![0u8; self.n1 * self.n2];
+        let mut decomp: Vec<u8> = Vec::new();
         let mut sum_bases: u8 = 0;
-        self.basis_1d().iter().enumerate().for_each(|(i, base)| {
-            decomp[i] = ((value >> sum_bases) & (1 << base) - 1) as u8;
+        self.0.iter().enumerate().for_each(|(i, base)| {
+            decomp.push(((value >> sum_bases) & (1 << base) - 1) as u8);
             sum_bases += base;
         });
         decomp
@@ -73,7 +34,7 @@ impl Decomp {
     pub fn recomp(&self, decomp: &Vec<u8>) -> u32 {
         let mut value: u32 = 0;
         let mut sum_bases: u8 = 0;
-        self.basis_1d().iter().enumerate().for_each(|(i, base)| {
+        self.0.iter().enumerate().for_each(|(i, base)| {
             value |= (decomp[i] << sum_bases) as u32;
             sum_bases += base;
         });
@@ -81,15 +42,41 @@ impl Decomp {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Base2D(pub Vec<Base1D>);
+
+impl Base2D {
+    pub fn max(&self) -> usize {
+        self.as_1d().max()
+    }
+
+    pub fn as_1d(&self) -> Base1D {
+        Base1D(
+            self.0
+                .iter()
+                .flat_map(|array| array.0.iter().map(|&x| x))
+                .collect(),
+        )
+    }
+
+    pub fn decomp(&self, value: u32) -> Vec<u8> {
+        self.as_1d().decomp(value)
+    }
+
+    pub fn recomp(&self, decomp: &Vec<u8>) -> u32 {
+        self.as_1d().recomp(decomp)
+    }
+}
+
 pub struct Precomp {
     pub log_base2k: usize,
     pub test_vector_msb: TestVector,
     pub test_vector_quo: Vec<TestVector>,
-    pub log_bases: Vec<u8>,
+    pub base_1d: Base1D,
 }
 
 impl Precomp {
-    pub fn new(n: usize, log_bases: &Vec<u8>, log_base2k: usize, cols: usize) -> Self {
+    pub fn new(n: usize, base_1d: &Base1D, log_base2k: usize, cols: usize) -> Self {
         let log_n: usize = (usize::BITS - (n - 1).leading_zeros()) as _;
         let f_sign = Box::new(move |x: i64| {
             if x == 0 {
@@ -106,10 +93,10 @@ impl Precomp {
 
         let mut test_vector_quo: Vec<TestVector> = Vec::new();
 
-        log_bases.iter().enumerate().for_each(|(i, log_base)| {
+        base_1d.0.iter().enumerate().for_each(|(i, log_base)| {
             let log_base: u8 = *log_base;
             let mut shift: u8 = 1;
-            if i == log_bases.len() - 1 {
+            if i == base_1d.0.len() - 1 {
                 shift = 0
             }
 
@@ -128,14 +115,14 @@ impl Precomp {
             log_base2k,
             test_vector_msb,
             test_vector_quo,
-            log_bases: log_bases.clone(),
+            base_1d: base_1d.clone(),
         }
     }
 
     pub fn decomp(&self, value: u32) -> Vec<u8> {
-        let mut decomp: Vec<u8> = vec![0u8; self.log_bases.len()];
+        let mut decomp: Vec<u8> = vec![0u8; self.base_1d.0.len()];
         let mut sum_bases: u8 = 0;
-        self.log_bases.iter().enumerate().for_each(|(i, base)| {
+        self.base_1d.0.iter().enumerate().for_each(|(i, base)| {
             decomp[i] = ((value >> sum_bases) & (1 << base) - 1) as u8;
             sum_bases += base;
         });
@@ -143,10 +130,10 @@ impl Precomp {
     }
 
     pub fn recomp(&self, decomp: &Vec<u8>) -> u32 {
-        debug_assert_eq!(decomp.len(), self.log_bases.len());
+        debug_assert_eq!(decomp.len(), self.base_1d.0.len());
         let mut value: u32 = 0;
         let mut sum_bases: u8 = 0;
-        self.log_bases.iter().enumerate().for_each(|(i, base)| {
+        self.base_1d.0.iter().enumerate().for_each(|(i, base)| {
             value |= (decomp[i] as u32) << sum_bases;
             sum_bases += base;
         });
@@ -193,7 +180,7 @@ impl Decomposer {
             println!("log_2n: {}", log_2n);
         }
 
-        precomp.log_bases.iter().enumerate().for_each(|(i, base)| {
+        precomp.base_1d.0.iter().enumerate().for_each(|(i, base)| {
             let buf: &mut VecZnx = &mut self.buf;
 
             //assert!(
@@ -203,7 +190,7 @@ impl Decomposer {
             //    base + 2
             //);
 
-            let last: bool = i == precomp.log_bases.len() - 1;
+            let last: bool = i == precomp.base_1d.0.len() - 1;
 
             sum_bases += *base;
 

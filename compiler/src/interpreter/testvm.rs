@@ -418,6 +418,9 @@ impl TestVM {
         let inst_u32 = self.rom.read_word(self.pc as usize);
         // println!("Inst raw = {:?} at pc={}", inst_u32, self.pc);
         let inst = self.decode_inst(inst_u32);
+        println!("XXXXXXXXXX");
+        println!("PC = {}", self.pc);
+        println!("REGs = {:?}", self.registers);
         // println!("Inst = {:?} at pc={}", inst, self.pc);
         match inst {
             Inst::ADDI(rs1, rd, imm) => {

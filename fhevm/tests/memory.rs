@@ -1,6 +1,6 @@
 use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 use fhevm::address::Address;
-use fhevm::decompose::Decomp;
+use fhevm::decompose::{Base1D, Base2D};
 use fhevm::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
 
 #[test]
@@ -10,11 +10,7 @@ fn memory() {
     let log_q: usize = 54;
     let log_base2k: usize = 15;
 
-    let addr_decomp: Decomp = Decomp {
-        n1: 2,
-        n2: 2,
-        base: vec![3, 3],
-    };
+    let addr_decomp: Base2D = Base2D(vec![Base1D(vec![2, 2]), Base1D(vec![2, 2])]);
 
     let rows: usize = (log_q + log_base2k - 1) / log_base2k;
     let cols: usize = rows;

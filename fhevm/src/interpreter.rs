@@ -3,7 +3,7 @@
 //use crate::gadget::Gadget;
 use crate::address::Address;
 use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
-use crate::decompose::{Decomposer, Precomp};
+use crate::decompose::{Base1D, Base2D, Decomposer, Precomp};
 use crate::instructions::memory::{
     extract_from_byte_offset, load, prepare_address_floor_byte_offset, store,
 };
@@ -12,9 +12,9 @@ use crate::instructions::{
 };
 use crate::memory::{read_tmp_bytes, Memory};
 use crate::parameters::{
-    Parameters, ADDR_MEM_SIZE_U8, DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
-    RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
+    Parameters, DECOMP_U32, LOGBASE2K, LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
+use crate::trace::trace_inplace_inv;
 use base2k::{alloc_aligned, Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps};
 use itertools::izip;
 
@@ -22,7 +22,7 @@ pub struct Interpreter {
     pub imm: Memory,
     pub instructions: Memory,
     pub registers: Memory,
-    pub memory: Memory,
+    pub ram: Memory,
     pub ret: bool,
     pub ram_offset: u32,
     pub pc_recomposition: Memory,
@@ -34,8 +34,8 @@ pub struct Interpreter {
     pub addr_pc_precomp: Precomp,
     pub addr_pc: Address,
     pub addr_instr: Address,
-    pub addr_mem_precomp: Precomp,
-    pub addr_mem: Address,
+    pub addr_ram_precomp: Precomp,
+    pub addr_ram: Address,
     pub addr_u2_precomp: Precomp,
     pub addr_u4: Address,
     pub addr_u4_precomp: Precomp,
@@ -43,25 +43,25 @@ pub struct Interpreter {
     pub addr_u5_precomp: Precomp,
     pub addr_u6: Address,
     pub addr_u6_precomp: Precomp,
-    pub addr_mem_state: bool,
+    pub addr_ram_state: bool,
 }
 
 impl Interpreter {
     pub fn new(params: &Parameters) -> Self {
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
-        let pc_max_adr: usize = params.addr_pc_max();
         let log_k: usize = LOGBASE2K * (VMPPMAT_COLS - 1) - 5;
         let cols: usize = (log_k + LOGBASE2K - 1) / LOGBASE2K;
-        let mut pc_recomposition: Memory = Memory::new(module_lwe, LOGBASE2K, cols, pc_max_adr);
-        let mut data: Vec<i64> = vec![i64::default(); pc_max_adr];
+        let mut pc_recomposition: Memory =
+            Memory::new(module_lwe, LOGBASE2K, cols, params.rom_size);
+        let mut data: Vec<i64> = vec![i64::default(); params.rom_size];
         data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
         pc_recomposition.set(&data, log_k);
         Self {
-            imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, pc_max_adr),
-            instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, pc_max_adr),
-            registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.addr_u5_max()),
-            memory: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.addr_mem_max()),
+            imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.rom_size),
+            instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.rom_size),
+            registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.u5_max()),
+            ram: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.ram_size),
             ret: false,
             ram_offset: 0,
             pc_recomposition: pc_recomposition,
@@ -69,90 +69,70 @@ impl Interpreter {
             decomposer: Decomposer::new(params.module_pbs(), RLWE_COLS),
             addr_pc_precomp: Precomp::new(
                 module_pbs.n(),
-                &params.addr_pc_decomp.basis_1d(),
+                &params.addr_rom_decomp.as_1d(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
             addr_pc: Address::new(
                 module_lwe,
-                &params.addr_pc_decomp,
+                &params.addr_rom_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             precomp_decompose_instructions: Precomp::new(
                 module_pbs.n(),
-                &DECOMPOSE_INSTRUCTIONS.to_vec(),
+                &params.instr_decomp,
                 LOGBASE2K,
                 RLWE_COLS,
             ),
             precomp_decompose_arithmetic: Precomp::new(
                 module_pbs.n(),
-                &DECOMPOSE_ARITHMETIC.to_vec(),
+                &Base1D(DECOMP_U32.to_vec()),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
-            addr_mem_precomp: Precomp::new(
+            addr_ram_precomp: Precomp::new(
                 module_pbs.n(),
-                &params.addr_mem_decomp.basis_1d(),
+                &params.addr_ram_decomp.as_1d(),
                 LOGBASE2K,
                 RLWE_COLS,
             ),
-            addr_u2_precomp: Precomp::new(
-                module_pbs.n(),
-                &params.addr_u2_decomp.basis_1d(),
-                LOGBASE2K,
-                RLWE_COLS,
-            ),
-            addr_u4_precomp: Precomp::new(
-                module_pbs.n(),
-                &params.addr_u4_decomp.basis_1d(),
-                LOGBASE2K,
-                RLWE_COLS,
-            ),
-            addr_u5_precomp: Precomp::new(
-                module_pbs.n(),
-                &params.addr_u5_decomp.basis_1d(),
-                LOGBASE2K,
-                RLWE_COLS,
-            ),
-            addr_u6_precomp: Precomp::new(
-                module_pbs.n(),
-                &params.addr_u6_decomp.basis_1d(),
-                LOGBASE2K,
-                RLWE_COLS,
-            ),
+            addr_u2_precomp: Precomp::new(module_pbs.n(), &params.u2_decomp, LOGBASE2K, RLWE_COLS),
+            addr_u4_precomp: Precomp::new(module_pbs.n(), &params.u4_decomp, LOGBASE2K, RLWE_COLS),
+            addr_u5_precomp: Precomp::new(module_pbs.n(), &params.u5_decomp, LOGBASE2K, RLWE_COLS),
+            addr_u6_precomp: Precomp::new(module_pbs.n(), &params.u6_decomp, LOGBASE2K, RLWE_COLS),
             tmp_bytes: alloc_aligned(next_tmp_bytes(module_pbs, module_lwe)),
             addr_instr: Address::new(
                 module_lwe,
-                &params.addr_pc_decomp,
+                &params.addr_rom_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
-            addr_mem: Address::new(
+            addr_ram: Address::new(
                 module_lwe,
-                &params.addr_mem_decomp,
+                &params.addr_ram_decomp,
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             addr_u4: Address::new(
                 module_lwe,
-                &params.addr_u4_decomp,
+                &Base2D(vec![params.u4_decomp.clone()]),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             addr_u5: Address::new(
                 module_lwe,
-                &params.addr_u5_decomp,
+                &Base2D(vec![params.u5_decomp.clone()]),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
             addr_u6: Address::new(
                 module_lwe,
-                &params.addr_u6_decomp,
+                &Base2D(vec![params.u6_decomp.clone()]),
                 VMPPMAT_ROWS,
                 VMPPMAT_COLS,
             ),
-            addr_mem_state: false,
+            addr_ram_state: false,
         }
     }
 
@@ -161,6 +141,7 @@ impl Interpreter {
     }
 
     pub fn init_instructions(&mut self, instructions: InstructionsParser) {
+        assert_eq!(instructions.instructions.len(), self.instructions.max_size);
         self.imm.set(&instructions.imm, LOGK);
         self.instructions.set(&instructions.instructions, LOGK);
     }
@@ -175,10 +156,11 @@ impl Interpreter {
         self.registers.set(&registers_i64, LOGK);
     }
 
-    pub fn init_memory(&mut self, memory: &Vec<u32>) {
-        let mut memory_i64: Vec<i64> = vec![i64::default(); memory.len()];
-        izip!(memory_i64.iter_mut(), memory.iter()).for_each(|(a, b)| *a = *b as i64);
-        self.memory.set(&memory_i64[..], LOGK);
+    pub fn init_ram(&mut self, ram: &Vec<u32>) {
+        assert_eq!(ram.len(), self.ram.max_size);
+        let mut ram_i64: Vec<i64> = vec![i64::default(); ram.len()];
+        izip!(ram_i64.iter_mut(), ram.iter()).for_each(|(a, b)| *a = *b as i64);
+        self.ram.set(&ram_i64[..], LOGK);
     }
 
     pub fn cycle(&mut self, params: &Parameters) {
@@ -187,7 +169,7 @@ impl Interpreter {
             self.addr_pc.debug_as_u32(params.module_lwe()) << 2
         );
         println!("REGS: {:?}", &self.registers.debug_as_u32());
-        println!("MEM: {:?}", &self.memory.debug_as_u32()[..32]);
+        println!("MEM: {:?}", &self.ram.debug_as_u32()[..32]);
 
         let module_lwe: &Module = params.module_lwe();
         let module_pbs: &Module = params.module_pbs();
@@ -221,32 +203,32 @@ impl Interpreter {
         //println!("rs1_lwe: {}", reconstruct(&rs1_lwe));
         //println!("imm_lwe: {}", reconstruct(&imm_lwe));
 
-        // 2) Prepares memory address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
+        // 2) Prepares ram address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         //let now: Instant = Instant::now();
-        let offset: u8 = self.prepare_memory_address_floor_byte_offset(
+        let offset: u8 = self.prepare_ram_address_floor_byte_offset(
             module_pbs,
             module_lwe,
             &imm_lwe,
             &rs1_lwe,
             self.ram_offset,
-            ADDR_MEM_SIZE_U8,
+            self.ram.max_size as u32,
         );
         //println!(
-        //    "prepare_memory_address   : {} ms",
+        //    "prepare_ram_address   : {} ms",
+        //    now.elapsed().as_millis()
+        //);
+
+        // 3)  loads value from ram
+        //let now: Instant = Instant::now();
+        let loaded: [u8; 8] = self.read_ram(module_lwe);
+        //println!(
+        //    "read_ram              : {} ms",
         //    now.elapsed().as_millis()
         //);
 
         //println!("offset: {}", offset);
-
-        // 3)  loads value from memory
-        //let now: Instant = Instant::now();
-        let loaded: [u8; 8] = self.read_memory(module_lwe);
-        //println!(
-        //    "read_memory              : {} ms",
-        //    now.elapsed().as_millis()
-        //);
-
-        //println!("loaded_full: {:08x}", reconstruct(&loaded));
+        //println!("ram_address: {}", self.addr_ram.debug_as_u32(module_lwe));
+        //println!("loaded: {:08x}", reconstruct(&loaded));
 
         // Selects [4, 2, 1] bytes from loaded value
         // according to offset.
@@ -269,11 +251,11 @@ impl Interpreter {
         //    now.elapsed().as_millis()
         //);
 
-        // 5) Updates memory from {RD|LOADED}[mem_w_u5]
+        // 5) Updates ram from {RD|LOADED}[mem_w_u5]
         //let now: Instant = Instant::now();
-        self.store_memory(module_pbs, module_lwe, &rs2_lwe, &loaded, offset, mem_w_u5);
+        self.store_ram(module_pbs, module_lwe, &rs2_lwe, &loaded, offset, mem_w_u5);
         //println!(
-        //    "store_memory             : {} ms",
+        //    "store_ram             : {} ms",
         //    now.elapsed().as_millis()
         //);
 
@@ -296,7 +278,7 @@ impl Interpreter {
         //);
 
         // Reinitialize checks
-        self.addr_mem_state = false;
+        self.addr_ram_state = false;
 
         //println!("pc_out: {}", self.addr_pc.debug_as_u32(params.module_lwe()));
         //println!();
@@ -330,20 +312,20 @@ impl Interpreter {
         decompose(self.select_op::<6>(module_pbs, module_lwe, rd_w_u6 as u32, &mut vec_znx))
     }
 
-    fn read_memory(&mut self, module_lwe: &Module) -> [u8; 8] {
+    fn read_ram(&mut self, module_lwe: &Module) -> [u8; 8] {
         assert_eq!(
-            self.addr_mem_state, true,
-            "trying to read memory but memory address hasn't been prepared"
+            self.addr_ram_state, true,
+            "trying to read ram but ram address hasn't been prepared"
         );
         load(
             module_lwe,
-            &mut self.memory,
-            &mut self.addr_mem,
+            &mut self.ram,
+            &mut self.addr_ram,
             &mut self.tmp_bytes,
         )
     }
 
-    fn store_memory(
+    fn store_ram(
         &mut self,
         module_pbs: &Module,
         module_lwe: &Module,
@@ -353,8 +335,8 @@ impl Interpreter {
         mem_w_u5: u8,
     ) {
         assert_eq!(
-            self.addr_mem_state, true,
-            "trying to store in memory but addr_mem_state is false"
+            self.addr_ram_state, true,
+            "trying to store in ram but addr_ram_state is false"
         );
 
         // Creates a list with all possible values to store.
@@ -442,8 +424,8 @@ impl Interpreter {
         store(
             module_lwe,
             &value,
-            &mut self.memory,
-            &mut self.addr_mem,
+            &mut self.ram,
+            &mut self.addr_ram,
             &mut self.tmp_bytes,
         );
     }
@@ -518,9 +500,18 @@ impl Interpreter {
             &mut self.addr_u5,
             &mut self.tmp_bytes,
         );
+
+        trace_inplace_inv(
+            module_lwe,
+            LOGBASE2K,
+            0,
+            module_lwe.log_n(),
+            &mut self.registers.data[0],
+            &mut self.tmp_bytes,
+        );
     }
 
-    fn prepare_memory_address_floor_byte_offset(
+    fn prepare_ram_address_floor_byte_offset(
         &mut self,
         module_pbs: &Module,
         module_lwe: &Module,
@@ -530,7 +521,7 @@ impl Interpreter {
         max_size: u32,
     ) -> u8 {
         assert_eq!(
-            self.addr_mem_state, false,
+            self.addr_ram_state, false,
             "trying to prepare address rs1 + imm - ram_offset but state indicates it has already been done"
         );
         let offset: u8 = prepare_address_floor_byte_offset(
@@ -543,11 +534,11 @@ impl Interpreter {
             &self.circuit_btp,
             &mut self.decomposer,
             &self.addr_u2_precomp,
-            &self.addr_mem_precomp,
-            &mut self.addr_mem,
+            &self.addr_ram_precomp,
+            &mut self.addr_ram,
             &mut self.tmp_bytes,
         );
-        self.addr_mem_state = true;
+        self.addr_ram_state = true;
         offset
     }
 

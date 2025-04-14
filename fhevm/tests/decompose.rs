@@ -1,5 +1,5 @@
 use base2k::{Module, MODULETYPE};
-use fhevm::decompose::{Decomposer, Precomp};
+use fhevm::decompose::{Base1D, Decomposer, Precomp};
 
 #[test]
 fn decompose_u32() {
@@ -8,21 +8,14 @@ fn decompose_u32() {
     let cols: usize = 4;
     let module_pbs: Module = Module::new(n, MODULETYPE::FFT64);
 
-    let log_bases: Vec<u8> = [6, 6, 6, 6, 6, 2].to_vec();
+    let base_1d: Base1D = Base1D(vec![6, 6, 6, 6, 6, 2]);
 
     let mut decomposer: Decomposer = Decomposer::new(&module_pbs, cols);
-    let precomp: Precomp = Precomp::new(n, &log_bases, log_base2k, cols);
+    let precomp: Precomp = Precomp::new(n, &base_1d, log_base2k, cols);
 
     let value: u32 = 0xf0f0f0ff;
 
     let result: Vec<u8> = decomposer.decompose(&module_pbs, &precomp, value);
 
-    let mut have: u32 = 0;
-
-    let mut sum_bases: u8 = 0;
-    log_bases.iter().enumerate().for_each(|(i, base)| {
-        have |= (result[i] as u32) << sum_bases;
-        sum_bases += base;
-    });
-    assert_eq!(value, have);
+    assert_eq!(value, base_1d.recomp(&result));
 }
