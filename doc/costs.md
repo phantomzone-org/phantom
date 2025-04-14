@@ -1,7 +1,7 @@
 ```mermaid
 graph TD
 
-    ROM["<b>ROM read (size = 8KB):</b>\n - cost: 5ms"]
+    ROM["<b>ROM read (size = 8KB):</b><br> - cost: 5ms"]
 
     DCP["<b>DCP[4xu5,1xu6]:</b>\n - decomposes 31 bits into: 4xu5, 1xu6\n - which requires 6 sequential DCP operations\n - each DCP operation requires 2 BRs\n - total 12 BRs required\n - Cost: 12 x 20ms = 240ms"]
 
