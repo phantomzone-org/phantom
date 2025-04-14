@@ -5,7 +5,7 @@ use base2k::{
 use itertools::izip;
 
 use crate::{
-    decompose::Decomp,
+    decompose::{Base1D, Base2D},
     memory::{read_tmp_bytes, Memory},
 };
 
@@ -14,30 +14,23 @@ pub struct Address {
     pub cols: usize,
     pub coordinates_lsh: Vec<Coordinate>,
     pub coordinates_rsh: Vec<Coordinate>,
-    pub decomp: Decomp,
+    pub base_2d: Base2D,
 }
 
 impl Address {
-    pub fn new(module: &Module, decomp: &Decomp, rows: usize, cols: usize) -> Self {
-        assert!(
-            module.n() >= decomp.max_n1(),
-            "inner_decomp={} is smaller than ring_degree={}",
-            decomp.max_n1(),
-            module.n()
-        );
-
+    pub fn new(module: &Module, base_2d: &Base2D, rows: usize, cols: usize) -> Self {
         let mut coordinates_lsh: Vec<Coordinate> = Vec::new();
         let mut coordinates_rsh: Vec<Coordinate> = Vec::new();
-        (0..decomp.n2()).for_each(|_| {
-            coordinates_lsh.push(Coordinate::new(module, rows, cols, decomp));
-            coordinates_rsh.push(Coordinate::new(module, rows, cols, decomp));
+        base_2d.0.iter().for_each(|base_1d| {
+            coordinates_lsh.push(Coordinate::new(module, rows, cols, base_1d));
+            coordinates_rsh.push(Coordinate::new(module, rows, cols, base_1d));
         });
         Self {
             rows: rows,
             cols: cols,
             coordinates_lsh: coordinates_lsh,
             coordinates_rsh: coordinates_rsh,
-            decomp: decomp.clone(),
+            base_2d: base_2d.clone(),
         }
     }
 
@@ -53,25 +46,27 @@ impl Address {
         self.coordinates_rsh.len()
     }
 
-    pub fn n1(&self) -> usize {
-        self.coordinates_rsh[0].value.len()
+    pub fn n1(&self, idx: usize) -> usize {
+        assert!(idx < self.coordinates_lsh.len());
+        self.coordinates_rsh[idx].value.len()
     }
 
     pub fn set(&mut self, module: &Module, idx: u32) {
-        debug_assert!(self.decomp.max() > idx as usize);
-        let max_n1: usize = self.decomp.max_n1();
-        let mask_n1: usize = max_n1 - 1;
+        debug_assert!(self.base_2d.max() > idx as usize);
+
         let mut remain: usize = idx as _;
 
         izip!(
             self.coordinates_lsh.iter_mut(),
             self.coordinates_rsh.iter_mut(),
+            self.base_2d.0.iter(),
         )
-        .for_each(|(coordinate_lsh, coordinate_rsh)| {
-            let k: usize = remain & mask_n1;
+        .for_each(|(coordinate_lsh, coordinate_rsh, base_1d)| {
+            let max: usize = base_1d.max();
+            let k: usize = remain & (max - 1);
             coordinate_lsh.encode(module, -(k as i64));
             coordinate_rsh.encode(module, k as i64);
-            remain /= max_n1;
+            remain /= max;
         })
     }
 
@@ -84,7 +79,7 @@ impl Address {
     }
 
     pub fn max(&self) -> usize {
-        self.decomp.max()
+        self.base_2d.max()
     }
 
     pub fn debug_as_u32(&self, module: &Module) -> u32 {
@@ -101,18 +96,19 @@ impl Address {
 
 pub struct Coordinate {
     pub value: Vec<VmpPMat>,
-    pub decomp: Vec<u8>,
-    pub gap: usize,
+    pub base_1d: Base1D,
 }
 
 impl Coordinate {
-    pub fn new(module: &Module, rows: usize, cols: usize, decomp: &Decomp) -> Self {
+    pub fn new(module: &Module, rows: usize, cols: usize, base_1d: &Base1D) -> Self {
         let mut coordinates: Vec<VmpPMat> = Vec::new();
-        (0..decomp.n1()).for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
+        base_1d
+            .0
+            .iter()
+            .for_each(|_| coordinates.push(module.new_vmp_pmat(rows, cols)));
         Self {
             value: coordinates,
-            decomp: decomp.base.clone(),
-            gap: decomp.gap(module.log_n()),
+            base_1d: base_1d.clone(),
         }
     }
 
@@ -130,12 +126,13 @@ impl Coordinate {
 
         let mut tmp_bytes: Vec<u8> = alloc_aligned_u8(module.vmp_prepare_tmp_bytes(rows, cols));
         let mut buf_i64: Vec<i64> = alloc_aligned::<i64>(n * cols);
+        let gap: usize = self.base_1d.gap(module.log_n());
 
         let mut tot_base: u8 = 0;
-        izip!(self.value.iter_mut(), self.decomp.iter()).for_each(|(vmp_pmat, base)| {
+        izip!(self.value.iter_mut(), self.base_1d.0.iter()).for_each(|(vmp_pmat, base)| {
             let mask: usize = (1 << base) - 1;
 
-            let chunk: usize = ((remain & mask) << tot_base) * self.gap;
+            let chunk: usize = ((remain & mask) << tot_base) * gap;
 
             (0..rows).for_each(|row_i| {
                 let offset: usize = n * row_i;

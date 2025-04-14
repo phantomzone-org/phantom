@@ -86,7 +86,7 @@ impl CircuitBootstrapper {
         address: &mut Address,
         tmp_bytes: &mut [u8],
     ) {
-        debug_assert_eq!(precomp.log_bases, address.decomp.basis_1d());
+        debug_assert_eq!(precomp.base_1d, address.base_2d.as_1d());
 
         let value_wrap: u32 = value % address.max() as u32;
 
@@ -113,8 +113,8 @@ impl CircuitBootstrapper {
         (0..address.n2()).for_each(|hi| {
             let mut sum_base: u8 = 0;
 
-            (0..address.n1()).for_each(|lo: usize| {
-                let base: u8 = address.decomp.base[lo];
+            (0..address.n1(hi)).for_each(|lo: usize| {
+                let base: u8 = address.base_2d.0[hi].0[lo];
 
                 // 4) LWE[i] -> RGSW
                 let log_gap_in: usize = self.circuit_bootstrap(

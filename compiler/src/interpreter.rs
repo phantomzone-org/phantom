@@ -12,7 +12,7 @@ use testvm::TestVM;
 
 mod testvm;
 
-const RAM_SIZE: usize = 1 << 13;
+const RAM_SIZE: usize = 1 << 14;
 
 struct BootMemory {
     data: Vec<u8>,
@@ -75,7 +75,7 @@ impl EncryptedVM {
     }
 
     pub fn output_tape(&self) -> Vec<u8> {
-        let mem_bytes: Vec<u8> = (&self.interpreter.memory).into();
+        let mem_bytes: Vec<u8> = (&self.interpreter.ram).into();
         assert!(mem_bytes.len() == RAM_SIZE);
 
         let mut output = Vec::with_capacity(self.output_info.size);
@@ -233,12 +233,13 @@ impl Phantom {
             .collect_vec();
 
         // Initialize interpreter
-        let params = Parameters::new();
+        let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
         let mut interpreter = Interpreter::new(&params);
         interpreter.init_pc(&params);
         interpreter.init_instructions(parser);
         interpreter.init_registers(&vec![0u32; 32]);
-        interpreter.init_memory(&ram_data_u32);
+        interpreter.init_ram(&ram_data_u32);
+        interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
         // interpreter.cycle(&params);
 
