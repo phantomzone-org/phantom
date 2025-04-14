@@ -32,6 +32,7 @@ pub fn prepare_address_floor_byte_offset(
     module_lwe: &Module,
     imm: &[u8; 8],
     x_rs1: &[u8; 8],
+    ram_offset: u32,
     max_size: u32,
     circuit_btp: &CircuitBootstrapper,
     decomposer: &mut Decomposer,
@@ -42,7 +43,7 @@ pub fn prepare_address_floor_byte_offset(
 ) -> u8 {
     let imm_u32: u32 = reconstruct(imm);
     let x_rs1_u32: u32 = reconstruct(x_rs1);
-    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32) % max_size;
+    let mut idx: u32 = x_rs1_u32.wrapping_add(imm_u32).wrapping_sub(ram_offset) % max_size;
     let offset: u32 = decomposer.decompose(module_pbs, precomp_byte_offset, idx)[0] as u32;
     assert_eq!(idx & 3, offset);
     idx >>= 2;
@@ -111,7 +112,7 @@ mod tests {
     use crate::decompose::Decomp;
     use crate::instructions::{decompose, reconstruct, sext};
     use crate::memory::{read_prepare_write_tmp_bytes, read_tmp_bytes, write_tmp_bytes, Memory};
-    use crate::parameters::DECOMPOSE_BYTEOFFSET;
+    use crate::parameters::ADDR_U2_N1_DECOMP;
     use base2k::{alloc_aligned_u8, Module, MODULETYPE};
 
     #[test]
@@ -159,13 +160,15 @@ mod tests {
 
         let precomp_byte_offset: Precomp = Precomp::new(
             module_pbs.n(),
-            &DECOMPOSE_BYTEOFFSET.to_vec(),
+            &ADDR_U2_N1_DECOMP.to_vec(),
             log_base2k,
             cols,
         );
 
         let precomp_address: Precomp =
             Precomp::new(module_pbs.n(), &address.decomp.basis_1d(), log_base2k, cols);
+
+        let ram_offset: u32 = 0x0000_0000;
 
         for i in [0, 2, 3] {
             println!("i: {}", i);
@@ -177,6 +180,7 @@ mod tests {
                 &module_lwe,
                 &decompose(imm),
                 &decompose(x_rs1),
+                ram_offset,
                 size as u32,
                 &circuit_btp,
                 &mut decomposer,

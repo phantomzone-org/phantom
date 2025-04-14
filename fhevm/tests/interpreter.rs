@@ -57,7 +57,10 @@ fn interpreter_arithmetic_ops() {
     registers_want.copy_from_slice(&REGISTERS);
     registers_want[rd as usize] = REGISTERS[rs1 as usize].wrapping_add(REGISTERS[rs2 as usize]);
 
-    assert_eq!(interpreter.pc.debug_as_u32(params.module_lwe()), pc_want);
+    assert_eq!(
+        interpreter.addr_pc.debug_as_u32(params.module_lwe()),
+        pc_want
+    );
     assert_eq!(
         interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
         memory_want
@@ -102,7 +105,10 @@ fn interpreter_store_op() {
     let mut registers_want: [u32; REGISTERS_SIZE] = [0; REGISTERS_SIZE];
     registers_want.copy_from_slice(&REGISTERS);
 
-    assert_eq!(interpreter.pc.debug_as_u32(params.module_lwe()), pc_want);
+    assert_eq!(
+        interpreter.addr_pc.debug_as_u32(params.module_lwe()),
+        pc_want
+    );
     assert_eq!(
         interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
         memory_want
@@ -146,7 +152,10 @@ fn interpreter_load_op() {
     let loaded: u32 = sext(memory_want[address_aligned] >> (address_offset << 3), 15);
     registers_want[rd as usize] = loaded;
 
-    assert_eq!(interpreter.pc.debug_as_u32(params.module_lwe()), pc_want);
+    assert_eq!(
+        interpreter.addr_pc.debug_as_u32(params.module_lwe()),
+        pc_want
+    );
     assert_eq!(
         interpreter.memory.debug_as_u32()[..MEMORY_SIZE],
         memory_want
@@ -183,7 +192,7 @@ fn interpreter_pc_ops() {
     registers_want[rd as usize] = 4;
 
     assert_eq!(
-        interpreter.pc.debug_as_u32(params.module_lwe()) << 2,
+        interpreter.addr_pc.debug_as_u32(params.module_lwe()) << 2,
         pc_want
     );
     assert_eq!(
