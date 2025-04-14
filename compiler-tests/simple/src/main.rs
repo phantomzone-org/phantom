@@ -27,24 +27,23 @@ fn main() {
     let pz = Phantom::init(elf_bytes);
 
     let input = Input { value: 2 };
+
+    // Encrypted VM
     let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), 200);
     enc_vm.execute();
-    println!("{:?}", enc_vm.output_tape());
-    enc_vm.print_debug();
-    // let output_tape =
 
-    // let mut test_vm = pz.test_vm();
+    // Test VM
+    let mut test_vm = pz.test_vm();
+    test_vm.read_input_tape(to_u8_slice(&input));
+    let mut count = 0;
+    while test_vm.is_exec() && count < 200 {
+        test_vm.run();
+        count += 1;
+    }
 
-    // let input = Input { value: 2 };
-    // test_vm.read_input_tape(to_u8_slice(&input));
-
-    // let mut count = 0;
-    // while test_vm.is_exec() && count < 200 {
-    //     test_vm.run();
-    //     count += 1;
-    // }
-    // dbg!(count);
-    // let output_tape = test_vm.output_tape();
+    // Check equivalance
+    let output_tape = enc_vm.output_tape();
+    let test_output_tape = test_vm.output_tape();
+    assert_eq!(output_tape, test_output_tape);
     // let output = from_u8_slice::<Output>(&output_tape);
-    // dbg!(output.value);
 }

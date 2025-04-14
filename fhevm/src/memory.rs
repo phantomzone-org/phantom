@@ -3,7 +3,7 @@ use crate::packing::StreamRepacker;
 use crate::reverse_bits_msb;
 use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
 use base2k::{Encoding, Infos, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps, VmpPMatOps};
-use itertools::izip;
+use itertools::{izip, Itertools};
 
 pub struct Memory {
     pub data: Vec<VecZnx>,
@@ -418,5 +418,22 @@ impl Memory {
         });
 
         self.state = false;
+    }
+}
+
+impl Into<Vec<u8>> for &Memory {
+    fn into(self) -> Vec<u8> {
+        let vec_u32s = self.debug_as_u32();
+        vec_u32s
+            .iter()
+            .map(|v| {
+                let mut buf = [0u8; 4];
+                for i in 0..4 {
+                    buf[i] = (v >> (i * 8)) as u8;
+                }
+                buf
+            })
+            .flatten()
+            .collect_vec()
     }
 }

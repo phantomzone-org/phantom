@@ -145,7 +145,7 @@ enum Inst {
 #[derive(PartialEq, Debug)]
 enum VMState {
     EXEC,
-    HALT,
+    // HALT, // Program is expected to into infinite loop until it exhausts max. no. of cycles
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
