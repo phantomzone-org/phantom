@@ -18,6 +18,7 @@ pub const DECOMPOSE_ARITHMETIC: [u8; 8] = [4, 4, 4, 4, 4, 4, 4, 4];
 pub const ADDR_PC_N1: usize = 4;
 pub const ADDR_PC_N2: usize = 1;
 pub const ADDR_PC_N1_DECOMP: [u8; ADDR_PC_N1] = [3, 3, 3, 2];
+// TODO: add more granularity to the program counter decomposition
 
 // MEMORY
 pub const ADDR_MEM_N1: usize = 4;
@@ -25,6 +26,7 @@ pub const ADDR_MEM_N2: usize = 1;
 pub const ADDR_MEM_N1_DECOMP: [u8; ADDR_MEM_N1] = [3, 3, 3, 2];
 pub const ADDR_MEM_SIZE_U8: u32 = 1024;
 pub const MEM_SIZE_U32: u32 = ADDR_MEM_SIZE_U8 >>2;
+// TODO: add more granularity to the memory decomposition
 
 // U2
 pub const ADDR_U2_N1: usize = 1;
