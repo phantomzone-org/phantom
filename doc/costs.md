@@ -3,19 +3,19 @@ graph TD
 
     ROM["<b>ROM read (size = 8KB):</b><br> - cost: 5ms"]
 
-    DCP["<b>DCP[4xu5,1xu6]:</b>\n - decomposes 31 bits into: 4xu5, 1xu6\n - which requires 6 sequential DCP operations\n - each DCP operation requires 2 BRs\n - total 12 BRs required\n - Cost: 12 x 20ms = 240ms"]
+    DCP["<b>DCP[4xu5,1xu6]:</b><br> - decomposes 31 bits into: 4xu5, 1xu6<br> - which requires 6 sequential DCP operations<br> - each DCP operation requires 2 BRs<br> - total 12 BRs required<br> - Cost: 12 x 20ms = 240ms"]
 
-    CBT1["<b>CBT[u5]:</b>\n - CBT with 5 bit value\n - multiple CBTs in parallel with depth of 1 CBT\n - Cost: 20ms"]
+    CBT1["<b>CBT[u5]:</b><br> - CBT with 5 bit value<br> - multiple CBTs in parallel with depth of 1 CBT<br> - Cost: 20ms"]
 
-    ExternalLWERead["<b>Read 8xu4 LWEs with external product:</b>\n - Read multiple (in parallel) 8xu4 LWEs, rs1, rs2, etc. from register poly, imm poly\n - plaintext is stored as 8 limbs each consisting 4 bits\n - hence, reading single 8xu8 requires 8 external products (in parallel)\n - Cost: 1 external product = 5ms"]
+    ExternalLWERead["<b>Read 8xu4 LWEs with external product:</b><br> - Read multiple (in parallel) 8xu4 LWEs, rs1, rs2, etc. from register poly, imm poly<br> - plaintext is stored as 8 limbs each consisting 4 bits<br> - hence, reading single 8xu8 requires 8 external products (in parallel)<br> - Cost: 1 external product = 5ms"]
 
-    ArithmeticRoutine["<b>Arithmetic routine:</b>\n - Perform all arithmetic operations in parallel\n - cost equals of the most expensive operation\n - Add/Sub: 100ms\n - Mul: 200ms\n -Div/Rem: 3.5s\n - Cost (rvi32): 100ms\n Cost (rvi32m): 3.5s"]
+    ArithmeticRoutine["<b>Arithmetic routine:</b><br> - Perform all arithmetic operations in parallel<br> - cost equals of the most expensive operation<br> - Add/Sub: 100ms<br> - Mul: 200ms<br> -Div/Rem: 3.5s<br> - Cost (rvi32): 100ms<br>- Cost (rvi32m): 3.5s"]
 
-    UpdateRD["<b>Update RD:</b>\n - update register RD\n - recall: registers fit into single polynomial \n - Cost: 10ms"]
+    UpdateRD["<b>Update RD:</b><br> - update register RD<br> - recall: registers fit into single polynomial <br> - Cost: 10ms"]
 
-    RamReadWrite["<b>RAM (size = 8KB) read, write:</b>\n - Computer address ADD, read ADD, then write to ADD\n - requires 1xu13 addition to compute ADD (32ms) - requires 4 serial DCP to extract 3x3 bits, 1x2 bits\n - each DCP requires 2 BRs\n - requires 4 CBTs in parallel, hence depth of 1 CBT\n - each CBT requires 1BR\n - RAM fits in single polynomial, \hence read = 1 external product (5ms) and write = 1 external product (5ms) + 11 K.S. (5ms)\n  - Cost: 32ms + 8x20 ms + 20ms + 5ms + 10ms = 227ms"]
+    RamReadWrite["<b>RAM (size = 8KB) read, write:</b><br> - Computer address ADD, read ADD, then write to ADD<br> - requires 1xu13 addition to compute ADD (32ms) - requires 4 serial DCP to extract 3x3 bits, 1x2 bits<br> - each DCP requires 2 BRs<br> - requires 4 CBTs in parallel, hence depth of 1 CBT<br> - each CBT requires 1BR<br> - RAM fits in single polynomial, \hence read = 1 external product (5ms) and write = 1 external product (5ms) + 11 K.S. (5ms)<br>  - Cost: 32ms + 8x20 ms + 20ms + 5ms + 10ms = 227ms"]
 
-    BrancOpsPCUpdate["<b>Execute branching operations and PC update:</b>\n - Exectue all branching operations (in parallel) and update PC\n - Then CBT PC to select next instruction from ROM\n - Branching operation requires u32 conditional following by selection, thus takes 80ms\n - CBT PC requires 4 serial DCPs and 4 (in parallel) CBTs - Cost: 80ms + 8x20ms + 20ms = 260ms"]
+    BrancOpsPCUpdate["<b>Execute branching operations and PC update:</b><br> - Exectue all branching operations (in parallel) and update PC<br> - Then CBT PC to select next instruction from ROM<br> - Branching operation requires u32 conditional following by selection, thus takes 80ms<br> - CBT PC requires 4 serial DCPs and 4 (in parallel) CBTs - Cost: 80ms + 8x20ms + 20ms = 260ms"]
 
 
     ROM --> DCP
