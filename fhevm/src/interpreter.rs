@@ -15,6 +15,7 @@ use crate::parameters::{
     Parameters, ADDR_MEM_SIZE_U8, DECOMPOSE_ARITHMETIC, DECOMPOSE_INSTRUCTIONS, LOGBASE2K, LOGK,
     RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
 };
+use crate::trace::{trace_inplace_inv, trace_inv};
 use base2k::{alloc_aligned, Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps};
 use itertools::izip;
 
@@ -516,6 +517,15 @@ impl Interpreter {
             rd_lwe,
             &mut self.registers,
             &mut self.addr_u5,
+            &mut self.tmp_bytes,
+        );
+
+        trace_inplace_inv(
+            module_lwe,
+            LOGBASE2K,
+            0,
+            module_lwe.log_n(),
+            &mut self.registers.data[0],
             &mut self.tmp_bytes,
         );
     }
