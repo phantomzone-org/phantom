@@ -177,7 +177,7 @@ impl Interpreter {
     }
 
     pub fn init_memory(&mut self, memory: &Vec<u32>) {
-        assert_eq!(memory.len() as u32, ADDR_MEM_SIZE_U8);
+        assert_eq!(memory.len() as u32, MEM_SIZE_U32);
         let mut memory_i64: Vec<i64> = vec![i64::default(); memory.len()];
         izip!(memory_i64.iter_mut(), memory.iter()).for_each(|(a, b)| *a = *b as i64);
         self.memory.set(&memory_i64[..], LOGK);

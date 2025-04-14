@@ -24,7 +24,7 @@ pub const ADDR_MEM_N1: usize = 4;
 pub const ADDR_MEM_N2: usize = 1;
 pub const ADDR_MEM_N1_DECOMP: [u8; ADDR_MEM_N1] = [3, 3, 3, 2];
 pub const ADDR_MEM_SIZE_U8: u32 = 1024;
-//pub const MEM_SIZE_u32: u32 = MEM_SIZE_U8 >>2;
+pub const MEM_SIZE_U32: u32 = ADDR_MEM_SIZE_U8 >>2;
 
 // U2
 pub const ADDR_U2_N1: usize = 1;
