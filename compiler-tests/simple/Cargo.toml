@@ -5,6 +5,8 @@ edition = "2021"
 
 [dependencies]
 compiler = {path = "./../../compiler", features=["verbose"]}
+sha2 = "0.10.8"
+rand = "0.8.0"
 
 [workspace]
 members = [ 
