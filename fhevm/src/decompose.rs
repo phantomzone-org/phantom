@@ -24,7 +24,7 @@ impl Base1D {
     pub fn decomp(&self, value: u32) -> Vec<u8> {
         let mut decomp: Vec<u8> = Vec::new();
         let mut sum_bases: u8 = 0;
-        self.0.iter().enumerate().for_each(|(i, base)| {
+        self.0.iter().enumerate().for_each(|(_i, base)| {
             decomp.push(((value >> sum_bases) & (1 << base) - 1) as u8);
             sum_bases += base;
         });

@@ -106,19 +106,23 @@ fn test_main_guest() {
     let pz = Phantom::init(elf_bytes);
 
     for _ in 0..1 {
-        let mut vm = pz.test_vm();
-
         let (is_sig_valid, random_input, output_hash) = gen_random_case();
 
+        let max_cycles = 25_900_000;
+
+        // Encrypted VM is too slow, at the moment, to run a program with 25.9M cycles in reasonable time
+        // let mut enc_vm = pz.encrypted_vm(to_u8_slice(&random_input), max_cycles);
+        // enc_vm.execute();
+
+        let mut vm = pz.test_vm();
         // Load inputs to the VM
         let input_tape = to_u8_slice(&random_input);
         vm.read_input_tape(input_tape);
         let mut count = 0usize;
-        while vm.is_exec() && count < 20_000_000 {
+        while vm.is_exec() && count < max_cycles {
             vm.run();
             count += 1;
         }
-        // println!("Total instructions: {}", count);
 
         // read outputs of the VM
         let output_tape = vm.output_tape();

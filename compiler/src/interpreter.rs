@@ -14,6 +14,17 @@ mod testvm;
 
 const RAM_SIZE: usize = 1 << 14;
 
+mod macros {
+    macro_rules! verbose_println {
+    ($($arg:tt)*) => {
+        #[cfg(feature = "verbose")]
+        println!($($arg)*);
+    };
+    }
+
+    pub(crate) use verbose_println;
+}
+
 struct BootMemory {
     data: Vec<u8>,
     offset: usize,
@@ -59,19 +70,11 @@ impl EncryptedVM {
     pub fn execute(&mut self) {
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
+            // let time = std::time::Instant::now();
             self.interpreter.cycle(&self.params);
+            // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
-    }
-
-    pub fn print_debug(&self) {
-        println!(
-            "PC: {}",
-            self.interpreter
-                .addr_pc
-                .debug_as_u32(self.params.module_lwe())
-        );
-        println!("Registers: {:?}", self.interpreter.registers.debug_as_u32());
     }
 
     pub fn output_tape(&self) -> Vec<u8> {
@@ -117,7 +120,7 @@ impl Phantom {
                 .to_vec(),
         );
 
-        println!("ROM SIZE: {}", txthdr.p_memsz);
+        macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
 
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs

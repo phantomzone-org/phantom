@@ -1,5 +1,5 @@
 use compiler::{CompileOpts, Phantom};
-use rand::{rng, Rng, SeedableRng};
+use rand::{rng, Rng};
 use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
@@ -38,7 +38,7 @@ fn main() {
     let elf_bytes = compiler.build();
     let pz = Phantom::init(elf_bytes);
 
-    let mut rng = rand_chacha::ChaCha8Rng::from_seed(Default::default());
+    let mut rng = rng();
     let mut pool = Pool {
         t0: rng.random(),
         t1: rng.random(),
@@ -50,14 +50,14 @@ fn main() {
             inp1: rng.random(),
         };
 
-        let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), 60);
+        let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), 100);
         enc_vm.execute();
 
         // Init -> read input tape -> run -> read output tape
         let mut vm = pz.test_vm();
         vm.read_input_tape(to_u8_slice(&input));
         let mut count = 0;
-        while vm.is_exec() && count < 60 {
+        while vm.is_exec() && count < 100 {
             vm.run();
             count += 1;
         }

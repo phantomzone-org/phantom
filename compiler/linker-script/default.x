@@ -3,8 +3,8 @@ ENTRY(_start)
 MEMORY
 {
     /* Define different memory regions for code and data memory */
-    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 1K  /* Code memory */
-    RAM   (rwx) : ORIGIN = 0x3E800, LENGTH = 32K /* Data memory */
+    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 20K  /* Code memory */
+    RAM   (rwx) : ORIGIN = 0x3E800, LENGTH = 16K /* Data memory */
 }
 
 SECTIONS
