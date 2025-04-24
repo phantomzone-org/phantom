@@ -9,6 +9,8 @@ cd ..
 echo "Cloning the poulpy repository..."
 git clone "$REPO_URL" "$CLONE_DIR"
 cd "$CLONE_DIR"
+git checkout phantom-dev
+git pull
 
 echo "Initializing submodule: base2k/spqlios-arithmetic..."
 git submodule update --init base2k/spqlios-arithmetic
@@ -42,4 +44,4 @@ case "$OS" in
 esac
 
 echo "Installation complete."
-cd ../../../phantom
+# cd ../../../phantom
