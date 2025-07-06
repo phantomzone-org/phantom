@@ -5,9 +5,11 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
-base2k = { path = "../../poulpy/base2k"}
 sampling = { path = "../../poulpy/sampling"}
-rand_core = "0.6.4"
+fhe-ram = {path = "../../fhe-ram"}
+rand_core = "0.9.3"
+core = {path = "../../poulpy/core"}
+num-bigfloat = "1.7.2"
 
 [profile.release]
 debug = true

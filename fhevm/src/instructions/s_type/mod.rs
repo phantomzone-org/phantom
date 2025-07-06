@@ -50,9 +50,9 @@ mod tests {
     }
 }
 
-use crate::instructions::{sext, Instruction, InstructionsParser};
+use crate::instructions::{sext, Instruction, InstructionsParser, OpID};
 #[allow(dead_code)]
-fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
+fn test_instruction(funct3: u8, op_code: u8, op_id: OpID) {
     // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011
     let imm: u32 = 0xABC;
     let rs2: u8 = 0b11011;
@@ -67,14 +67,5 @@ fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
-    m.assert_instruction(
-        0,
-        sext(imm, 11) as i64,
-        rs2 as i64,
-        rs1 as i64,
-        rd as i64,
-        op_id.0 as i64,
-        op_id.1 as i64,
-        op_id.2 as i64,
-    );
+    m.assert_instruction(0, sext(imm, 11), rs2, rs1, rd, op_id.0, op_id.1, op_id.2);
 }

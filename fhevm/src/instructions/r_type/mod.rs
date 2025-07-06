@@ -113,9 +113,9 @@ mod tests {
     }
 }
 
-use crate::instructions::{Instruction, InstructionsParser};
+use crate::instructions::{Instruction, InstructionsParser, OpID};
 #[allow(dead_code)]
-fn test_instruction(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
+fn test_instruction(funct7: u8, funct3: u8, op_code: u8, opid: OpID) {
     // 00000 | 00 | rs2[24:20] | rs1[19:15] | funct3 | rd[11:7] |
     let imm: u32 = 0;
     let rs2: u8 = 0b11011;
@@ -131,14 +131,5 @@ fn test_instruction(funct7: u8, funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
     m.add(instruction);
     println!("{:30b}", m.instructions[0]);
     m.assert_size(1);
-    m.assert_instruction(
-        0,
-        imm as i64,
-        rs2 as i64,
-        rs1 as i64,
-        rd as i64,
-        opid.0 as i64,
-        opid.1 as i64,
-        opid.2 as i64,
-    );
+    m.assert_instruction(0, imm, rs2, rs1, rd, opid.0, opid.1, opid.2);
 }

@@ -10,9 +10,9 @@
 //!  6 |xori  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] ^ sext(imm[11:0])
 //!  7 |ori   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] | sext(imm[11:0])
 //!  8 |andi  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] & sext(imm[11:0])
-//!  9 |slli  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] << rs2
-//! 10 |srli  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] >> rs2 (logical)
-//! 11 |srai  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] >> rs2 (arithmetic)
+//!  9 |slli  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] << imm[4:0]
+//! 10 |srli  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] >> imm[4:0] (logical)
+//! 11 |srai  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] >> imm[4:0] (arithmetic)
 //!
 //! 12 |add   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] + x[rs2]
 //! 13 |sub   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] - x[rs2]
@@ -25,8 +25,8 @@
 //! 20 |or    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] | x[rs2]  
 //! 21 |and   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = x[rs1] & x[rs2]
 //!
-//! 22 |lb    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(lbu)
-//! 23 |lh    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(lhu)
+//! 22 |lb    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][7:0])
+//! 23 |lh    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = sext(M[x[rs1] + sext(imm[11:0])][15:0])
 //! 24 |lw    | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][31:0]
 //! 25 |lbu   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][7:0]
 //! 26 |lhu   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | x[rd] = M[x[rs1] + sext(imm[11:0])][15:0]
@@ -54,7 +54,7 @@
 //! # PC UPDATE
 //! ID |  OP  |     4      |      4     |     4     |     4    |     4    |  5  |  5  |  5 |
 //!    |------|------------|------------|-----------|----------|----------|-----|-----|----|
-//!  0 |one   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | pc += 4
+//!  0 |none   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | pc += 4
 //!  1 |jal   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | pc += sext(imm[19:0])
 //!  2 |jalr  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | t = pc + 4; pc = (x[rs1] + sext(imm[11:0])) & ~1
 //!  3 |beq   | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] ==  x[rs2]), pc += sext(imm[19:0])
@@ -67,7 +67,7 @@
 pub mod b_type;
 pub mod i_type;
 pub mod j_type;
-pub mod memory;
+// pub mod memory;
 pub mod r_type;
 pub mod s_type;
 pub mod u_type;
@@ -447,83 +447,117 @@ impl LoadOps {
     }
 }
 
+#[derive(Clone, Copy)]
 #[non_exhaustive]
-pub struct OpID;
+pub struct OpID(u8, u8, u8);
 
 impl OpID {
-    pub const NONE: (u8, u8, u8) = (0, 0, 0);
-    pub const LUI: (u8, u8, u8) = (1, 0, 0);
-    pub const AUIPC: (u8, u8, u8) = (2, 0, 0);
-    pub const ADDI: (u8, u8, u8) = (3, 0, 0);
-    pub const SLTI: (u8, u8, u8) = (4, 0, 0);
-    pub const SLTIU: (u8, u8, u8) = (5, 0, 0);
-    pub const XORI: (u8, u8, u8) = (6, 0, 0);
-    pub const ORI: (u8, u8, u8) = (7, 0, 0);
-    pub const ANDI: (u8, u8, u8) = (8, 0, 0);
-    pub const SLLI: (u8, u8, u8) = (9, 0, 0);
-    pub const SRLI: (u8, u8, u8) = (10, 0, 0);
-    pub const SRAI: (u8, u8, u8) = (11, 0, 0);
-    pub const ADD: (u8, u8, u8) = (12, 0, 0);
-    pub const SUB: (u8, u8, u8) = (13, 0, 0);
-    pub const SLL: (u8, u8, u8) = (14, 0, 0);
-    pub const SLT: (u8, u8, u8) = (15, 0, 0);
-    pub const SLTU: (u8, u8, u8) = (16, 0, 0);
-    pub const XOR: (u8, u8, u8) = (17, 0, 0);
-    pub const SRL: (u8, u8, u8) = (18, 0, 0);
-    pub const SRA: (u8, u8, u8) = (19, 0, 0);
-    pub const OR: (u8, u8, u8) = (20, 0, 0);
-    pub const AND: (u8, u8, u8) = (21, 0, 0);
-    pub const LB: (u8, u8, u8) = (22, 0, 0);
-    pub const LH: (u8, u8, u8) = (23, 0, 0);
-    pub const LW: (u8, u8, u8) = (24, 0, 0);
-    pub const LBU: (u8, u8, u8) = (25, 0, 0);
-    pub const LHU: (u8, u8, u8) = (26, 0, 0);
-    pub const MUL: (u8, u8, u8) = (29, 0, 0);
-    pub const MULH: (u8, u8, u8) = (30, 0, 0);
-    pub const MULHSU: (u8, u8, u8) = (31, 0, 0);
-    pub const MULHU: (u8, u8, u8) = (32, 0, 0);
-    pub const DIV: (u8, u8, u8) = (33, 0, 0);
-    pub const DIVU: (u8, u8, u8) = (34, 0, 0);
-    pub const REM: (u8, u8, u8) = (35, 0, 0);
-    pub const REMU: (u8, u8, u8) = (36, 0, 0);
-    pub const SB: (u8, u8, u8) = (0, 1, 0);
-    pub const SH: (u8, u8, u8) = (0, 2, 0);
-    pub const SW: (u8, u8, u8) = (0, 3, 0);
-    pub const JAL: (u8, u8, u8) = (27, 0, 1);
-    pub const JALR: (u8, u8, u8) = (28, 0, 2);
-    pub const BEQ: (u8, u8, u8) = (0, 0, 3);
-    pub const BNE: (u8, u8, u8) = (0, 0, 4);
-    pub const BLT: (u8, u8, u8) = (0, 0, 5);
-    pub const BGE: (u8, u8, u8) = (0, 0, 6);
-    pub const BLTU: (u8, u8, u8) = (0, 0, 7);
-    pub const BGEU: (u8, u8, u8) = (0, 0, 8);
+    pub const NONE: OpID = OpID(0, 0, 0);
+    pub const LUI: OpID = OpID(1, 0, 0);
+    pub const AUIPC: OpID = OpID(2, 0, 0);
+    pub const ADDI: OpID = OpID(3, 0, 0);
+    pub const SLTI: OpID = OpID(4, 0, 0);
+    pub const SLTIU: OpID = OpID(5, 0, 0);
+    pub const XORI: OpID = OpID(6, 0, 0);
+    pub const ORI: OpID = OpID(7, 0, 0);
+    pub const ANDI: OpID = OpID(8, 0, 0);
+    pub const SLLI: OpID = OpID(9, 0, 0);
+    pub const SRLI: OpID = OpID(10, 0, 0);
+    pub const SRAI: OpID = OpID(11, 0, 0);
+    pub const ADD: OpID = OpID(12, 0, 0);
+    pub const SUB: OpID = OpID(13, 0, 0);
+    pub const SLL: OpID = OpID(14, 0, 0);
+    pub const SLT: OpID = OpID(15, 0, 0);
+    pub const SLTU: OpID = OpID(16, 0, 0);
+    pub const XOR: OpID = OpID(17, 0, 0);
+    pub const SRL: OpID = OpID(18, 0, 0);
+    pub const SRA: OpID = OpID(19, 0, 0);
+    pub const OR: OpID = OpID(20, 0, 0);
+    pub const AND: OpID = OpID(21, 0, 0);
+    pub const LB: OpID = OpID(22, 0, 0);
+    pub const LH: OpID = OpID(23, 0, 0);
+    pub const LW: OpID = OpID(24, 0, 0);
+    pub const LBU: OpID = OpID(25, 0, 0);
+    pub const LHU: OpID = OpID(26, 0, 0);
+    pub const MUL: OpID = OpID(29, 0, 0);
+    pub const MULH: OpID = OpID(30, 0, 0);
+    pub const MULHSU: OpID = OpID(31, 0, 0);
+    pub const MULHU: OpID = OpID(32, 0, 0);
+    pub const DIV: OpID = OpID(33, 0, 0);
+    pub const DIVU: OpID = OpID(34, 0, 0);
+    pub const REM: OpID = OpID(35, 0, 0);
+    pub const REMU: OpID = OpID(36, 0, 0);
+    pub const SB: OpID = OpID(0, 1, 0);
+    pub const SH: OpID = OpID(0, 2, 0);
+    pub const SW: OpID = OpID(0, 3, 0);
+    pub const JAL: OpID = OpID(27, 0, 1);
+    pub const JALR: OpID = OpID(28, 0, 2);
+    pub const BEQ: OpID = OpID(0, 0, 3);
+    pub const BNE: OpID = OpID(0, 0, 4);
+    pub const BLT: OpID = OpID(0, 0, 5);
+    pub const BGE: OpID = OpID(0, 0, 6);
+    pub const BLTU: OpID = OpID(0, 0, 7);
+    pub const BGEU: OpID = OpID(0, 0, 8);
+}
+
+impl OpID {
+    fn rd_w_id(&self) -> u8 {
+        self.0
+    }
+
+    fn mem_w_id(&self) -> u8 {
+        self.1
+    }
+
+    fn pc_w_id(&self) -> u8 {
+        self.2
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct OpRegisters(u8, u8, u8);
+
+impl OpRegisters {
+    fn new(rs2: u8, rs1: u8, rd: u8) -> Self {
+        Self(rs2, rs1, rd)
+    }
+
+    pub(crate) fn rs1(&self) -> u8 {
+        self.1
+    }
+    pub(crate) fn rs2(&self) -> u8 {
+        self.0
+    }
+    pub(crate) fn rsd(&self) -> u8 {
+        self.2
+    }
 }
 
 pub struct InstructionsParser {
-    pub imm: Vec<i64>,
-    pub instructions: Vec<i64>,
+    pub imm: Vec<u32>,
+    pub op_registers: Vec<OpRegisters>,
+    pub op_id: Vec<OpID>,
+    pub instructions: Vec<u32>,
 }
 
 impl InstructionsParser {
     pub fn new() -> Self {
         InstructionsParser {
             imm: Vec::new(),
+            op_id: Vec::new(),
+            op_registers: Vec::new(),
             instructions: Vec::new(),
         }
     }
 
+    pub fn max_count(&self) -> usize {
+        self.imm.len()
+    }
+
     pub fn add(&mut self, instruction: Instruction) {
-        let (rs2, rs1, rd) = instruction.get_registers();
-        let (rd_w, mem_w, pc_w) = instruction.get_opid();
-        self.imm.push(instruction.get_immediate() as i64);
-        self.instructions.push(
-            (rs2 as i64) << 26
-                | (rs1 as i64) << 21
-                | (rd as i64) << 16
-                | (rd_w as i64) << 10
-                | (mem_w as i64) << 5
-                | (pc_w as i64),
-        );
+        self.imm.push(instruction.get_immediate());
+        self.op_registers.push(instruction.get_registers());
+        self.op_id.push(instruction.get_opid());
     }
 
     pub fn assert_size(&self, size: usize) {
@@ -531,7 +565,20 @@ impl InstructionsParser {
         assert_eq!(self.instructions.len(), size);
     }
 
-    pub fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
+    /// Retreive immediate value of insturction at index `idx` (i.e. pc = idx * 4)
+    pub fn get_imm(&self, idx: usize) -> u32 {
+        self.instructions[idx]
+    }
+
+    pub fn get_opid(&self, idx: usize) -> OpID {
+        self.op_id[idx]
+    }
+
+    pub fn get_opregisters(&self, idx: usize) -> OpRegisters {
+        self.op_registers[idx]
+    }
+
+    pub fn _get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
         assert!(self.imm.len() > idx);
         let data = self.instructions[idx];
         (
@@ -548,19 +595,25 @@ impl InstructionsParser {
     pub fn assert_instruction(
         &self,
         idx: usize,
-        imm: i64,
-        rs2: i64,
-        rs1: i64,
-        rd: i64,
-        rd_w: i64,
-        mem_w: i64,
-        pc_w: i64,
+        imm: u32,
+        rs2: u8,
+        rs1: u8,
+        rd: u8,
+        rd_w: u8,
+        mem_w: u8,
+        pc_w: u8,
     ) {
-        let (imm_have, rs2_have, rs1_have, rd_have, rd_w_have, mem_w_have, pc_w_have) =
-            self.get(idx);
-
         let number_of_instructions: usize = self.imm.len();
         assert!(number_of_instructions > idx);
+
+        let imm_have = self.get_imm(idx);
+        let op_registers = self.get_opregisters(idx);
+        let (rs2_have, rs1_have, rd_have) =
+            (op_registers.rs2(), op_registers.rs1(), op_registers.rsd());
+        let op_id = self.get_opid(idx);
+        let (rd_w_have, mem_w_have, pc_w_have) =
+            (op_id.rd_w_id(), op_id.mem_w_id(), op_id.pc_w_id());
+
         assert_eq!(
             imm_have, imm,
             "invalid imm: have {:032b} want {:032b}",
@@ -885,18 +938,18 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_registers(&self) -> (u8, u8, u8) {
+    pub fn get_registers(&self) -> OpRegisters {
         match self.get_type() {
-            Type::R => (self.get_rs2(), self.get_rs1(), self.get_rd()),
-            Type::I => (0, self.get_rs1(), self.get_rd()),
-            Type::S | Type::B => (self.get_rs2(), self.get_rs1(), 0),
-            Type::U | Type::J => (0, 0, self.get_rd()),
-            Type::NONE => (0, 0, 0),
+            Type::R => OpRegisters::new(self.get_rs2(), self.get_rs1(), self.get_rd()),
+            Type::I => OpRegisters::new(0, self.get_rs1(), self.get_rd()),
+            Type::S | Type::B => OpRegisters::new(self.get_rs2(), self.get_rs1(), 0),
+            Type::U | Type::J => OpRegisters::new(0, 0, self.get_rd()),
+            Type::NONE => OpRegisters::new(0, 0, 0),
         }
     }
 
     #[inline(always)]
-    pub fn get_opid(&self) -> (u8, u8, u8) {
+    pub fn get_opid(&self) -> OpID {
         let opcode: u8 = self.get_opcode();
         match self.get_type() {
             Type::R => match (self.get_funct7(), self.get_funct3()) {

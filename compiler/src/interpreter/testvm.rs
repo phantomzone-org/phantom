@@ -309,7 +309,7 @@ impl TestVM {
                 + (extract_bits(inst >> 20, 1) << 11)
                 + (extract_bits(inst >> 12, 8) << 12)
                 + (extract_bits(inst >> 31, 1) << 20);
-            imm = sign_extend(imm, 21);
+            imm = sign_extend(imm, 20); // TODO: This was 21 and I chaned it to 20
 
             return Inst::JAL(rd, imm);
         } else if opcode == 0b1100111 && (extract_bits(inst >> 12, 3) == 0) {
