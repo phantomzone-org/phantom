@@ -10,6 +10,7 @@ fhe-ram = {path = "../../fhe-ram"}
 rand_core = "0.9.3"
 core = {path = "../../poulpy/core"}
 num-bigfloat = "1.7.2"
+rand = "0.9.1"
 
 [profile.release]
 debug = true

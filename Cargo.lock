@@ -247,6 +247,7 @@ dependencies = [
  "fhe-ram",
  "itertools 0.14.0",
  "num-bigfloat",
+ "rand 0.9.1",
  "rand_core 0.9.3",
  "sampling",
 ]

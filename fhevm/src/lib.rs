@@ -10,6 +10,7 @@ pub mod parameters;
 // pub mod trace;
 pub mod arithmetic;
 pub mod registers;
+pub mod utils;
 
 #[inline(always)]
 pub fn reverse_bits_msb(x: usize, n: u32) -> usize {
