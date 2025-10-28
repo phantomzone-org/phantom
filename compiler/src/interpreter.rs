@@ -265,6 +265,9 @@ impl Phantom {
         let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
         sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
 
+        let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+        sk_glwe_prepared.prepare(params.module(), &sk_glwe);
+
         // Needs the bug fix in poulpy
         // let lwe_pt_infos = LWEPlaintextLayout {
         //     k: params.k_glwe_pt() + 1,
@@ -301,7 +304,7 @@ impl Phantom {
         // keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
         let mut interpreter = Interpreter::new();
-        interpreter.init_pc(lwe_pt_infos, lwe_layout, &sk_lwe);
+        interpreter.init_pc(&sk_glwe_prepared);
         interpreter.init_instructions(&sk_glwe, parser);
         interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
         interpreter.init_ram(&sk_glwe, &ram_with_input);

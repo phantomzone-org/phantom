@@ -1,10 +1,11 @@
 use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram};
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_hal::{
-    source::Source,
+    api::{ScratchOwnedAlloc, ScratchOwnedBorrow}, layouts::ScratchOwned, source::Source
 };
 
-use poulpy_core::layouts::{GLWESecret, LWE, LWEPlaintext, LWESecret, LWEPlaintextLayout, LWELayout, LWEInfos};
+use poulpy_core::layouts::{GLWESecret, GLWESecretPrepared, LWE, LWEInfos, LWELayout, LWEPlaintext, LWEPlaintextLayout, LWESecret};
+use poulpy_schemes::tfhe::bdd_arithmetic::FheUintBlocksPrepared;
 
 // pub struct Interpreter {
 //     params: Parameters<BackendImpl>,
@@ -59,7 +60,7 @@ pub struct Interpreter {
     pub ram: Ram<BackendImpl>,
     pub ram_offset: u32,
 
-    pub program_counter: Vec<LWE<Vec<u8>>>,
+    pub program_counter: FheUintBlocksPrepared<Vec<u8>, u32, BackendImpl>,
 
     // pub imm: Memory,
     // pub instructions: Memory,
@@ -96,9 +97,11 @@ impl Interpreter {
 
         let seed_xa: [u8; 32] = [0u8; 32];
         let seed_xe: [u8; 32] = [0u8; 32];
+
+        let params = CryptographicParameters::<BackendImpl>::new();
     
         Self {
-            params: CryptographicParameters::new(),
+            params: CryptographicParameters::<BackendImpl>::new(),
 
             source_xa: Source::new(seed_xa),
             source_xe: Source::new(seed_xe),
@@ -111,7 +114,7 @@ impl Interpreter {
             registers: Ram::new_from_ram_params(32, DECOMP_N.to_vec(), 32),
             ram: Ram::new_from_ram_params(8, DECOMP_N.to_vec(), RAM_MAX_ADDR),
             ram_offset: 0,
-            program_counter: vec![],
+            program_counter: FheUintBlocksPrepared::alloc(params.module(), &params.ggsw_infos()),
         }
 
         // let module_lwe: &Module = params.module_lwe();
@@ -236,18 +239,27 @@ impl Interpreter {
         ct_lwe
     }
 
-    pub fn init_pc(&mut self, lwe_pt_infos: LWELayout, lwe_ct_infos: LWELayout, sk_lwe: &LWESecret<Vec<u8>>) {
+    pub fn init_pc(&mut self, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
         let pc_value = 0;
-        // Extract each bit and encrypt
-        self.program_counter = (0..32)
-            .map(|bit_idx| {
-                // Extract the bit at position bit_idx
-                let bit_value = ((pc_value >> bit_idx) & 1) as u8;
+        // Generate random seeds for encryption
+        let seed_xa = [5u8; 32];
+        let seed_xe = [6u8; 32];
 
-                // Encrypt the bit
-                self.encrypt_bit(lwe_pt_infos, lwe_ct_infos, bit_value, sk_lwe)
-            })
-            .collect()
+        let mut source_xa = Source::new(seed_xa);
+        let mut source_xe = Source::new(seed_xe);
+
+        // TODO: set scratch correctly.
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+
+        self.program_counter.encrypt_sk(
+            self.params.module(),
+            pc_value,
+            sk_glwe_prep,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );    
+
     }
 
     pub fn init_instructions(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, instructions: InstructionsParser) {
