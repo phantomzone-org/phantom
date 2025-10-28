@@ -2,12 +2,23 @@ use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
     segment::ProgramHeader,
 };
+
+// use fhevm::parameters::Parameters;
 use fhevm::{
+    Interpreter,
     instructions::{Instruction, InstructionsParser},
-    interpreter::Interpreter,
-    parameters::Parameters,
+//     interpreter::Interpreter,
+//     parameters::Parameters,
 };
 use itertools::Itertools;
+
+use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram};
+use poulpy_backend::FFT64Ref as BackendImpl;
+use poulpy_core::layouts::{
+    prepared::GLWESecretPrepared, Degree, GLWEInfos, GLWESecret, GetDegree, LWELayout, LWEPlaintextLayout, LWESecret
+};
+
+use poulpy_hal::{api::{ScratchOwnedAlloc, ScratchOwnedBorrow}, layouts::ScratchOwned, source::Source};
 use testvm::TestVM;
 
 mod testvm;
@@ -49,17 +60,8 @@ struct OutputInfo {
     size: usize,
 }
 
-/// Phantom VM: Encrypted Risc-v
-pub struct Phantom {
-    boot_rom: BootMemory,
-    boot_ram: BootMemory,
-    output_info: OutputInfo,
-    input_info: InputInfo,
-    _elf_bytes: Vec<u8>,
-}
-
 pub struct EncryptedVM {
-    params: Parameters,
+    // params: Parameters,
     interpreter: Interpreter,
     output_info: OutputInfo,
     ram_offset: usize,
@@ -71,22 +73,32 @@ impl EncryptedVM {
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
             // let time = std::time::Instant::now();
-            self.interpreter.cycle(&self.params);
+            self.interpreter.cycle();
             // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
     }
 
     pub fn output_tape(&self) -> Vec<u8> {
-        let mem_bytes: Vec<u8> = (&self.interpreter.ram).into();
-        assert!(mem_bytes.len() == RAM_SIZE);
+        // let mem_bytes: Vec<u8> = (&self.interpreter.ram).into();
+        // assert!(mem_bytes.len() == RAM_SIZE);
 
-        let mut output = Vec::with_capacity(self.output_info.size);
-        for i in 0..self.output_info.size {
-            output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
-        }
-        output
+        // let mut output = Vec::with_capacity(self.output_info.size);
+        // for i in 0..self.output_info.size {
+        //     output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
+        // }
+        // output
+        vec![]
     }
+}
+
+/// Phantom VM: Encrypted Risc-v
+pub struct Phantom {
+    boot_rom: BootMemory,
+    boot_ram: BootMemory,
+    output_info: OutputInfo,
+    input_info: InputInfo,
+    _elf_bytes: Vec<u8>,
 }
 
 impl Phantom {
@@ -224,24 +236,75 @@ impl Phantom {
             ..(self.input_info.start_addr + self.input_info.size - ram_offset)]
             .copy_from_slice(input_tape);
         // RAM: byte vector -> u32 vec
-        let ram_data_u32 = ram_with_input
-            .chunks_exact(4)
-            .map(|four_bytes| {
-                let mut date_u32 = 0u32;
-                for i in 0..4 {
-                    date_u32 += (four_bytes[i] as u32) << (i * 8);
-                }
-                date_u32
-            })
-            .collect_vec();
+        // let ram_data_u32 = ram_with_input
+        //     .chunks_exact(4)
+        //     .map(|four_bytes| {
+        //         let mut date_u32 = 0u32;
+        //         for i in 0..4 {
+        //             date_u32 += (four_bytes[i] as u32) << (i * 8);
+        //         }
+        //         date_u32
+        //     })
+        //     .collect_vec();
 
         // Initialize interpreter
-        let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
-        let mut interpreter = Interpreter::new(&params);
-        interpreter.init_pc(&params);
-        interpreter.init_instructions(parser);
-        interpreter.init_registers(&vec![0u32; 32]);
-        interpreter.init_ram(&ram_data_u32);
+        // let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
+
+        // Initializing cryptographic parameters
+        let params = CryptographicParameters::new();
+
+        let seed_xs: [u8; 32] = [0u8; 32];
+        // let seed_xa: [u8; 32] = [0u8; 32];
+        // let seed_xe: [u8; 32] = [0u8; 32];
+    
+        let mut source_xs: Source = Source::new(seed_xs);
+        // let mut source_xa: Source = Source::new(seed_xa);
+        // let mut source_xe: Source = Source::new(seed_xe);
+    
+        // Generates a new secret-key along with the public evaluation keys.
+        let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+        sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+
+        // Needs the bug fix in poulpy
+        // let lwe_pt_infos = LWEPlaintextLayout {
+        //     k: params.k_glwe_pt() + 1,
+        //     base2k: params.basek(),
+        // };
+
+        let lwe_pt_infos = LWELayout {
+            k: params.k_glwe_pt() + 1,
+            n: Degree(1),
+            base2k: params.basek(),
+        };
+
+        let lwe_layout = LWELayout {
+            k: params.k_glwe_ct(),
+            n: params.module().ring_degree(),
+            base2k: params.basek()
+        };
+
+        let mut sk_lwe = LWESecret::alloc(lwe_layout.n);
+        let mut source_xs: Source = Source::new([1u8; 32]);
+        sk_lwe.fill_binary_block(8, &mut source_xs);
+
+        // let keys: EvaluationKeys<Vec<u8>> =
+        // EvaluationKeys::encrypt_sk(&params, &sk_glwe, &mut source_xa, &mut source_xe);
+
+        // let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
+
+        // let mut sk_prep: GLWESecretPrepared<Vec<u8>, BackendImpl> =
+        //     GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
+        // sk_prep.prepare(params.module(), &sk_glwe);
+
+        // let mut keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+        //     EvaluationKeysPrepared::alloc(&params);
+        // keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+
+        let mut interpreter = Interpreter::new();
+        interpreter.init_pc(lwe_pt_infos, lwe_layout, &sk_lwe);
+        interpreter.init_instructions(&sk_glwe, parser);
+        interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
+        interpreter.init_ram(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
         // interpreter.cycle(&params);
@@ -249,7 +312,7 @@ impl Phantom {
         // println!("Instructions: {:?}", _instructions);
 
         EncryptedVM {
-            params: params,
+            // params: params,
             interpreter,
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,

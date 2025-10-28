@@ -411,7 +411,7 @@ impl TestVM {
         let inst_u32 = self.rom.read_word(self.pc as usize);
         let inst = self.decode_inst(inst_u32);
 
-        verbose_println!("XXXXXXXXX");
+        // verbose_println!("XXXXXXXXX");
         verbose_println!("PC = {}", self.pc);
         verbose_println!("REGs = {:?}", self.registers);
         match inst {

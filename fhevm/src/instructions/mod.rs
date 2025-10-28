@@ -67,7 +67,7 @@
 pub mod b_type;
 pub mod i_type;
 pub mod j_type;
-pub mod memory;
+// pub mod memory;
 pub mod r_type;
 pub mod s_type;
 pub mod u_type;
@@ -502,6 +502,7 @@ impl OpID {
 pub struct InstructionsParser {
     pub imm: Vec<i64>,
     pub instructions: Vec<i64>,
+    pub instructions_raw: Vec<Instruction>
 }
 
 impl InstructionsParser {
@@ -509,6 +510,7 @@ impl InstructionsParser {
         InstructionsParser {
             imm: Vec::new(),
             instructions: Vec::new(),
+            instructions_raw: Vec::new(),
         }
     }
 
@@ -524,11 +526,16 @@ impl InstructionsParser {
                 | (mem_w as i64) << 5
                 | (pc_w as i64),
         );
+        self.instructions_raw.push(instruction);
     }
 
     pub fn assert_size(&self, size: usize) {
         assert_eq!(self.imm.len(), size);
         assert_eq!(self.instructions.len(), size);
+    }
+
+    pub fn get_raw(&self, idx: usize) -> Instruction {
+        self.instructions_raw[idx].clone()
     }
 
     pub fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
@@ -599,6 +606,7 @@ impl InstructionsParser {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct Instruction(pub u32);
 
 pub const RS1MASK: u32 = 0x000F_8000;
@@ -730,6 +738,19 @@ impl Instruction {
     }
 
     #[inline(always)]
+    pub fn get_rs1_or_zero(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::S | Type::B => {
+                    self.get_rs1()
+                }
+                _ => 0
+            }
+        }
+    }
+
+    #[inline(always)]
     pub fn set_rs1(&mut self, rs1: u8) {
         #[cfg(debug_assertions)]
         {
@@ -760,6 +781,20 @@ impl Instruction {
     }
 
     #[inline(always)]
+    pub fn get_rs2_or_zero(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::S | Type::B => {
+                    self.get_rs2()
+                }
+                _ => 0
+            }
+        }
+        
+    }
+
+    #[inline(always)]
     pub fn set_rs2(&mut self, rs2: u8) {
         #[cfg(debug_assertions)]
         {
@@ -787,6 +822,19 @@ impl Instruction {
             }
         }
         ((self.0 & RDMASK) >> RDSHIFT) as u8
+    }
+
+    #[inline(always)]
+    pub fn get_rd_or_zero(&self) -> u8 {
+        #[cfg(debug_assertions)]
+        {
+            match self.get_type() {
+                Type::R | Type::I | Type::U | Type::J => {
+                    self.get_rd()
+                }
+                _ => 0
+            }
+        }
     }
 
     #[inline(always)]

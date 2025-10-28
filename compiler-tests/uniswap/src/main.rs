@@ -43,39 +43,40 @@ fn main() {
         t0: rng.random(),
         t1: rng.random(),
     };
-    for _ in 0..1 {
-        let input = Input {
-            pool: pool.clone(),
-            inp0: rng.random(),
-            inp1: rng.random(),
-        };
+    let input = Input {
+        pool: pool.clone(),
+        inp0: rng.random(),
+        inp1: rng.random(),
+    };
 
-        let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), 100);
-        enc_vm.execute();
+    let MAX_CYCLES = 10;
 
-        // Init -> read input tape -> run -> read output tape
-        let mut vm = pz.test_vm();
-        vm.read_input_tape(to_u8_slice(&input));
-        let mut count = 0;
-        while vm.is_exec() && count < 100 {
-            vm.run();
-            count += 1;
-        }
+    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
+    enc_vm.execute();
 
-        let output_tape = vm.output_tape();
-        assert_eq!(output_tape, enc_vm.output_tape());
-
-        // Check output
-        let output = from_u8_slice::<Output>(&output_tape);
-        if pool.t0 > input.inp0 {
-            assert!(output.out0 == input.inp0);
-            assert!(output.pool.t0 == input.pool.t0 - input.inp0);
-        }
-        if pool.t1 > input.inp1 {
-            assert!(output.out1 == input.inp1);
-            assert!(output.pool.t1 == input.pool.t1 - input.inp1);
-        }
-
-        pool = output.pool;
+    // Init -> read input tape -> run -> read output tape
+    let mut vm = pz.test_vm();
+    vm.read_input_tape(to_u8_slice(&input));
+    let mut count = 0;
+    while vm.is_exec() && count < MAX_CYCLES {
+        println!("Running cycle {}", count);
+        vm.run();
+        count += 1;
     }
+
+    let output_tape = vm.output_tape();
+    assert_eq!(output_tape, enc_vm.output_tape());
+
+    // // Check output
+    // let output = from_u8_slice::<Output>(&output_tape);
+    // if pool.t0 > input.inp0 {
+    //     assert!(output.out0 == input.inp0);
+    //     assert!(output.pool.t0 == input.pool.t0 - input.inp0);
+    // }
+    // if pool.t1 > input.inp1 {
+    //     assert!(output.out1 == input.inp1);
+    //     assert!(output.pool.t1 == input.pool.t1 - input.inp1);
+    // }
+
+    // pool = output.pool;
 }

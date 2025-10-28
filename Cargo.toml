@@ -3,9 +3,7 @@ resolver = "2"
 members = [
     "fhevm",
     "compiler",
-    "runtime",
-    "macros"
-    ]
+]
 
 # Workspace-wide dependencies and settings can go here
 [workspace.package]

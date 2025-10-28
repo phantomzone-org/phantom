@@ -5,8 +5,11 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
-base2k = { path = "../../poulpy/base2k"}
-sampling = { path = "../../poulpy/sampling"}
+poulpy-hal = {path = "../../poulpy/poulpy-hal"}
+poulpy-core = {path = "../../poulpy/poulpy-core"}
+poulpy-backend = {path = "../../poulpy/poulpy-backend"}
+poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
+fhe-ram = { path = "../../fhe-ram"}
 rand_core = "0.6.4"
 
 [profile.release]
