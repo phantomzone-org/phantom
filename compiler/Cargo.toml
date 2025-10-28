@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 elf = "0.7.4"
-poulpy-hal = "0.3.1"
-poulpy-core = "0.3.1"
-poulpy-backend = "0.3.1"
-poulpy-schemes = "0.3.0"
+poulpy-hal = {path = "../../poulpy/poulpy-hal"}
+poulpy-core = {path = "../../poulpy/poulpy-core"}
+poulpy-backend = {path = "../../poulpy/poulpy-backend"}
+poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
 fhe-ram = { path = "../../fhe-ram"}
 fhevm = { path = "../fhevm"}
 itertools = "0.14.0"

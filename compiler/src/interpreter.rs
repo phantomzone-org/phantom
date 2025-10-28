@@ -251,7 +251,7 @@ impl Phantom {
         // let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
 
         // Initializing cryptographic parameters
-        let params = CryptographicParameters::new();
+        let params = CryptographicParameters::<BackendImpl>::new();
 
         let seed_xs: [u8; 32] = [0u8; 32];
         // let seed_xa: [u8; 32] = [0u8; 32];
