@@ -73,7 +73,7 @@ impl EncryptedVM {
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
             // let time = std::time::Instant::now();
-            self.interpreter.cycle();
+            // self.interpreter.cycle();
             // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
@@ -268,18 +268,6 @@ impl Phantom {
         let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_glwe_prepared.prepare(params.module(), &sk_glwe);
 
-        // Needs the bug fix in poulpy
-        // let lwe_pt_infos = LWEPlaintextLayout {
-        //     k: params.k_glwe_pt() + 1,
-        //     base2k: params.basek(),
-        // };
-
-        let lwe_pt_infos = LWELayout {
-            k: params.k_glwe_pt() + 1,
-            n: Degree(1),
-            base2k: params.basek(),
-        };
-
         let lwe_layout = LWELayout {
             k: params.k_glwe_ct(),
             n: params.module().ring_degree(),
@@ -290,29 +278,15 @@ impl Phantom {
         let mut source_xs: Source = Source::new([1u8; 32]);
         sk_lwe.fill_binary_block(8, &mut source_xs);
 
-        // let keys: EvaluationKeys<Vec<u8>> =
-        // EvaluationKeys::encrypt_sk(&params, &sk_glwe, &mut source_xa, &mut source_xe);
+        let mut interpreter = Interpreter::new(&sk_glwe, &sk_glwe_prepared);
 
-        // let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
-
-        // let mut sk_prep: GLWESecretPrepared<Vec<u8>, BackendImpl> =
-        //     GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
-        // sk_prep.prepare(params.module(), &sk_glwe);
-
-        // let mut keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
-        //     EvaluationKeysPrepared::alloc(&params);
-        // keys_prepared.prepare(params.module(), &keys, scratch.borrow());
-
-        let mut interpreter = Interpreter::new();
-        interpreter.init_pc(&sk_glwe_prepared);
+        interpreter.init_pc(1, &sk_glwe_prepared);
         interpreter.init_instructions(&sk_glwe, parser);
         interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
         interpreter.init_ram(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
-        // interpreter.cycle(&params);
-
-        // println!("Instructions: {:?}", _instructions);
+        interpreter.cycle(&sk_glwe, &sk_glwe_prepared);
 
         EncryptedVM {
             // params: params,

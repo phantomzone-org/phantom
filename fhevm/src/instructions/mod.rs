@@ -739,14 +739,11 @@ impl Instruction {
 
     #[inline(always)]
     pub fn get_rs1_or_zero(&self) -> u8 {
-        #[cfg(debug_assertions)]
-        {
-            match self.get_type() {
-                Type::R | Type::I | Type::S | Type::B => {
-                    self.get_rs1()
-                }
-                _ => 0
+        match self.get_type() {
+            Type::R | Type::I | Type::S | Type::B => {
+                self.get_rs1()
             }
+            _ => 0
         }
     }
 
@@ -782,16 +779,12 @@ impl Instruction {
 
     #[inline(always)]
     pub fn get_rs2_or_zero(&self) -> u8 {
-        #[cfg(debug_assertions)]
-        {
-            match self.get_type() {
-                Type::R | Type::S | Type::B => {
-                    self.get_rs2()
-                }
-                _ => 0
+        match self.get_type() {
+            Type::R | Type::S | Type::B => {
+                self.get_rs2()
             }
+            _ => 0
         }
-        
     }
 
     #[inline(always)]
@@ -826,14 +819,11 @@ impl Instruction {
 
     #[inline(always)]
     pub fn get_rd_or_zero(&self) -> u8 {
-        #[cfg(debug_assertions)]
-        {
-            match self.get_type() {
-                Type::R | Type::I | Type::U | Type::J => {
-                    self.get_rd()
-                }
-                _ => 0
+        match self.get_type() {
+            Type::R | Type::I | Type::U | Type::J => {
+                self.get_rd()
             }
+            _ => 0
         }
     }
 

@@ -1,10 +1,10 @@
 use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram};
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_hal::{
-    api::{ScratchOwnedAlloc, ScratchOwnedBorrow}, layouts::ScratchOwned, source::Source
+    api::{ScratchOwnedAlloc, ScratchOwnedBorrow, ScratchTakeBasic}, layouts::{Backend, Module, Scratch, ScratchOwned, ZnxView}, source::Source
 };
 
-use poulpy_core::layouts::{GLWESecret, GLWESecretPrepared, LWE, LWEInfos, LWELayout, LWEPlaintext, LWEPlaintextLayout, LWESecret};
+use poulpy_core::{GLWEDecrypt, layouts::{GLWE, GLWEPlaintext, GLWESecret, GLWESecretPrepared, LWE, LWEInfos, LWELayout, LWEPlaintext, LWEPlaintextLayout, LWESecret}};
 use poulpy_schemes::tfhe::bdd_arithmetic::FheUintBlocksPrepared;
 
 // pub struct Interpreter {
@@ -51,6 +51,11 @@ pub struct Interpreter {
     pub source_xa: Source,
     pub source_xe: Source,
 
+    pub imm_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+    pub rs1_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+    pub rs2_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+    pub rd_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+
     pub imm_rom: Ram<BackendImpl>,
     pub rs1_rom: Ram<BackendImpl>,
     pub rs2_rom: Ram<BackendImpl>,
@@ -90,15 +95,47 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new() -> Self {
+    pub fn new(sk_glwe: &GLWESecret<Vec<u8>>, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) -> Self {
         pub const DECOMP_N: [u8; 6] = [2, 2, 2, 2, 2, 2];
         pub const ROM_MAX_ADDR: usize = 1 << 14;
         pub const RAM_MAX_ADDR: usize = 1 << 14;
 
-        let seed_xa: [u8; 32] = [0u8; 32];
-        let seed_xe: [u8; 32] = [0u8; 32];
+        let imm_rom = Ram::new_from_ram_params(32, DECOMP_N.to_vec(), ROM_MAX_ADDR);
+        let rs1_rom = Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR);
+        let rs2_rom = Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR);
+        let rd_rom = Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR);
+        
+        let registers = Ram::new_from_ram_params(32, DECOMP_N.to_vec(), 32);
+        let ram = Ram::new_from_ram_params(8, DECOMP_N.to_vec(), RAM_MAX_ADDR);
 
-        let params = CryptographicParameters::<BackendImpl>::new();
+        // Generate random seeds for encryption
+        let seed_xa = [5u8; 32];
+        let seed_xe = [6u8; 32];
+
+        let mut source_xa = Source::new(seed_xa);
+        let mut source_xe = Source::new(seed_xe);
+
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+        
+        let params = Parameters::<BackendImpl>::new();
+        let keys: EvaluationKeys<Vec<u8>> =
+            EvaluationKeys::encrypt_sk(&params, sk_glwe, &mut source_xa, &mut source_xe);
+        
+        let mut imm_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+            EvaluationKeysPrepared::alloc(&params);
+        imm_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+
+        let mut rs1_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+            EvaluationKeysPrepared::alloc(&params);
+        rs1_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+
+        let mut rs2_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+            EvaluationKeysPrepared::alloc(&params);
+        rs2_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+
+        let mut rd_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+            EvaluationKeysPrepared::alloc(&params);
+        rd_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
     
         Self {
             params: CryptographicParameters::<BackendImpl>::new(),
@@ -106,141 +143,25 @@ impl Interpreter {
             source_xa: Source::new(seed_xa),
             source_xe: Source::new(seed_xe),
 
-            imm_rom: Ram::new_from_ram_params(32, DECOMP_N.to_vec(), ROM_MAX_ADDR),
-            rs1_rom: Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR),
-            rs2_rom: Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR),
-            rd_rom: Ram::new_from_ram_params(5, DECOMP_N.to_vec(), ROM_MAX_ADDR),
+            imm_rom_keys_prepared: imm_rom_keys_prepared,
+            rs1_rom_keys_prepared: rs1_rom_keys_prepared,
+            rs2_rom_keys_prepared: rs2_rom_keys_prepared,
+            rd_rom_keys_prepared: rd_rom_keys_prepared,
+
+            imm_rom: imm_rom,
+            rs1_rom: rs1_rom,
+            rs2_rom: rs2_rom,
+            rd_rom: rd_rom,
+            registers: registers,
+            ram: ram,
             
-            registers: Ram::new_from_ram_params(32, DECOMP_N.to_vec(), 32),
-            ram: Ram::new_from_ram_params(8, DECOMP_N.to_vec(), RAM_MAX_ADDR),
             ram_offset: 0,
             program_counter: FheUintBlocksPrepared::alloc(params.module(), &params.ggsw_infos()),
         }
-
-        // let module_lwe: &Module = params.module_lwe();
-        // let module_pbs: &Module = params.module_pbs();
-        // let log_k: usize = LOGBASE2K * (VMPPMAT_COLS - 1) - 5;
-        // let cols: usize = (log_k + LOGBASE2K - 1) / LOGBASE2K;
-        // let mut pc_recomposition: Memory =
-        //     Memory::new(module_lwe, LOGBASE2K, cols, params.rom_size);
-        // let mut data: Vec<i64> = vec![i64::default(); params.rom_size];
-        // data.iter_mut().enumerate().for_each(|(i, x)| *x = i as i64);
-        // pc_recomposition.set(&data, log_k);
-        // Self {
-        //     imm: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.rom_size),
-        //     instructions: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.rom_size),
-        //     registers: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.u5_max()),
-        //     ram: Memory::new(module_lwe, LOGBASE2K, RLWE_COLS, params.ram_size),
-        //     ret: false,
-        //     ram_offset: 0,
-        //     pc_recomposition: pc_recomposition,
-        //     circuit_btp: CircuitBootstrapper::new(LOGBASE2K, VMPPMAT_COLS),
-        //     decomposer: Decomposer::new(params.module_pbs(), RLWE_COLS),
-        //     addr_pc_precomp: Precomp::new(
-        //         module_pbs.n(),
-        //         &params.addr_rom_decomp.as_1d(),
-        //         LOGBASE2K,
-        //         RLWE_COLS,
-        //     ),
-        //     addr_pc: Address::new(
-        //         module_lwe,
-        //         &params.addr_rom_decomp,
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     precomp_decompose_instructions: Precomp::new(
-        //         module_pbs.n(),
-        //         &params.instr_decomp,
-        //         LOGBASE2K,
-        //         RLWE_COLS,
-        //     ),
-        //     precomp_decompose_arithmetic: Precomp::new(
-        //         module_pbs.n(),
-        //         &Base1D(DECOMP_U32.to_vec()),
-        //         LOGBASE2K,
-        //         RLWE_COLS,
-        //     ),
-        //     addr_ram_precomp: Precomp::new(
-        //         module_pbs.n(),
-        //         &params.addr_ram_decomp.as_1d(),
-        //         LOGBASE2K,
-        //         RLWE_COLS,
-        //     ),
-        //     addr_u2_precomp: Precomp::new(module_pbs.n(), &params.u2_decomp, LOGBASE2K, RLWE_COLS),
-        //     addr_u4_precomp: Precomp::new(module_pbs.n(), &params.u4_decomp, LOGBASE2K, RLWE_COLS),
-        //     addr_u5_precomp: Precomp::new(module_pbs.n(), &params.u5_decomp, LOGBASE2K, RLWE_COLS),
-        //     addr_u6_precomp: Precomp::new(module_pbs.n(), &params.u6_decomp, LOGBASE2K, RLWE_COLS),
-        //     tmp_bytes: alloc_aligned(next_tmp_bytes(module_pbs, module_lwe)),
-        //     addr_instr: Address::new(
-        //         module_lwe,
-        //         &params.addr_rom_decomp,
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     addr_ram: Address::new(
-        //         module_lwe,
-        //         &params.addr_ram_decomp,
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     addr_u4: Address::new(
-        //         module_lwe,
-        //         &Base2D(vec![params.u4_decomp.clone()]),
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     addr_u5: Address::new(
-        //         module_lwe,
-        //         &Base2D(vec![params.u5_decomp.clone()]),
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     addr_u6: Address::new(
-        //         module_lwe,
-        //         &Base2D(vec![params.u6_decomp.clone()]),
-        //         VMPPMAT_ROWS,
-        //         VMPPMAT_COLS,
-        //     ),
-        //     addr_ram_state: false,
-        // }
     }
 
-    /// Encrypts a single bit value as a GLWE ciphertext
-    pub fn encrypt_bit(
-        &self,
-        lwe_pt_infos: LWELayout,
-        lwe_ct_infos: LWELayout,
-        bit: u8,
-        sk_lwe: &LWESecret<Vec<u8>>,
-    ) -> LWE<Vec<u8>> {
-        
-        let mut pt_lwe = LWEPlaintext::alloc_from_infos(&lwe_pt_infos);
-        let mut ct_lwe = LWE::alloc_from_infos(&lwe_ct_infos);
-        
-        pt_lwe.encode_i64(bit as i64, pt_lwe.k());
-        
-        // Generate random seeds for encryption
-        let seed_xa = [5u8; 32];
-        let seed_xe = [6u8; 32];
-
-        let mut source_xa = Source::new(seed_xa);
-        let mut source_xe = Source::new(seed_xe);
-        
-        let module = self.params.module();
-
-        ct_lwe.encrypt_sk(
-            module,
-            &pt_lwe,
-            sk_lwe,
-            &mut source_xa,
-            &mut source_xe,
-        );
-        
-        ct_lwe
-    }
-
-    pub fn init_pc(&mut self, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
-        let pc_value = 0;
+    pub fn init_pc(&mut self, initial_pc: u32, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+        let pc_value = initial_pc;
         // Generate random seeds for encryption
         let seed_xa = [5u8; 32];
         let seed_xe = [6u8; 32];
@@ -259,25 +180,24 @@ impl Interpreter {
             &mut source_xe,
             scratch.borrow(),
         );    
-
     }
 
     pub fn init_instructions(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, instructions: InstructionsParser) {
         
-        let max_addr = self.imm_rom.params.max_addr();
-
-        // TODO: use different parameters for different ROMs
-        // let default_word_size = self.imm_rom.params.word_size();
+        let max_addr_imm = self.imm_rom.params.max_addr();
+        let max_addr_rs1 = self.rs1_rom.params.max_addr();
+        let max_addr_rs2 = self.rs2_rom.params.max_addr();
+        let max_addr_rd = self.rd_rom.params.max_addr();
 
         let rs1_word_size = self.rs1_rom.params.word_size();
         let rs2_word_size = self.rs2_rom.params.word_size();
         let rd_word_size = self.rd_rom.params.word_size();
         let imm_word_size = self.imm_rom.params.word_size();
         
-        let mut data_ram_rs1 = vec![0u8; max_addr * rs1_word_size];
-        let mut data_ram_rs2 = vec![0u8; max_addr * rs2_word_size];
-        let mut data_ram_rd = vec![0u8; max_addr * rd_word_size];
-        let mut data_ram_imm = vec![0u8; max_addr * imm_word_size];
+        let mut data_ram_rs1 = vec![0u8; max_addr_rs1 * rs1_word_size];
+        let mut data_ram_rs2 = vec![0u8; max_addr_rs2 * rs2_word_size];
+        let mut data_ram_rd = vec![0u8; max_addr_rd * rd_word_size];
+        let mut data_ram_imm = vec![0u8; max_addr_imm * imm_word_size];
         
         for i in 0..instructions.instructions.len() {
             
@@ -285,6 +205,7 @@ impl Interpreter {
             let rs2 = instructions.get_raw(i).get_rs2_or_zero();
             let rd = instructions.get_raw(i).get_rd_or_zero();
             let imm = instructions.get_raw(i).get_immediate();
+            println!("rs1: {:?}, rs2: {:?}, rd: {:?}, imm: {:?}", rs1, rs2, rd, imm);
 
             data_ram_rs1[i * rs1_word_size..(i + 1) * rs1_word_size]
                 .iter_mut()
@@ -305,7 +226,6 @@ impl Interpreter {
                 .iter_mut()
                 .enumerate()
                 .for_each(|(idx, v)| *v = ((imm >> idx) & 1) as u8);
-
         }
 
         self.rs1_rom.encrypt_sk(&data_ram_rs1, &sk_glwe, &mut self.source_xa, &mut self.source_xe);
@@ -349,7 +269,19 @@ impl Interpreter {
         self.ram.encrypt_sk(&ram_data, &sk_glwe, &mut self.source_xa, &mut self.source_xe);
     }
 
-    pub fn cycle(&mut self) {
+    pub fn cycle(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+
+        let params = Parameters::<BackendImpl>::new();
+        let mut address_rom: Address<Vec<u8>> = Address::alloc_from_params(&params);
+        address_rom.set_from_fheuint(self.params.module(), &self.program_counter, scratch.borrow());
+
+        let imm_glwe = self.imm_rom.read(&address_rom, &self.imm_rom_keys_prepared);
+        let rs1_glwe = self.rs1_rom.read(&address_rom, &self.rs1_rom_keys_prepared);
+        let rs2_glwe = self.rs2_rom.read(&address_rom, &self.rs2_rom_keys_prepared);
+        let rd_glwe = self.rd_rom.read(&address_rom, &self.rd_rom_keys_prepared);
+
         // println!(
         //     "pc: {}",
         //     self.addr_pc.debug_as_u32(params.module_lwe()) << 2
