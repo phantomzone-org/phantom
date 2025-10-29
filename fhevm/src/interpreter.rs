@@ -1,48 +1,19 @@
-use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram};
+use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, FHEUintBlocksToAddress, Parameters, Ram};
+use crate::{TEST_GLWE_INFOS, TEST_GGSW_INFOS, TEST_BDD_KEY_LAYOUT};
+
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_hal::{
-    api::{ScratchOwnedAlloc, ScratchOwnedBorrow, ScratchTakeBasic}, layouts::{Backend, Module, Scratch, ScratchOwned, ZnxView}, source::Source
+    api::{ScratchOwnedAlloc, ScratchOwnedBorrow, ScratchTakeBasic},
+    layouts::{Backend, Module, Scratch, ScratchOwned, ZnxView},
+    source::Source
 };
 
 use poulpy_core::{GLWEDecrypt, layouts::{GLWE, GLWEPlaintext, GLWESecret, GLWESecretPrepared, LWE, LWEInfos, LWELayout, LWEPlaintext, LWEPlaintextLayout, LWESecret}};
-use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, FheUintPrepared};
+use poulpy_schemes::tfhe::{bdd_arithmetic::{BDDKey, BDDKeyInfos, BDDKeyLayout, BDDKeyPrepared, FheUint, FheUintPrepared}, blind_rotation::CGGI, circuit_bootstrapping::CircuitBootstrappingKeyLayout};
 
-// pub struct Interpreter {
-//     params: Parameters<BackendImpl>,
-//     r1_ram: Ram<BackendImpl>,
-//     r2_ram: Ram<BackendImpl>,
-//     rd_ram: Ram<BackendImpl>,
-//     imm_ram: Ram<BackendImpl>,
-// }
-
-// impl Interpreter {
-//     pub fn new() -> Self {
-//         Self {
-//             params: Parameters::new(),
-//             r1_ram: Ram::new(),
-//             r2_ram: Ram::new(),
-//             rd_ram: Ram::new(),
-//             imm_ram: Ram::new(),
-//         }
-//     }
-// }
-
-// //use crate::gadget::Gadget;
-// use crate::address::Address;
-// use crate::circuit_bootstrapping::{bootstrap_address_tmp_bytes, CircuitBootstrapper};
-// use crate::decompose::{Base1D, Base2D, Decomposer, Precomp};
-// use crate::instructions::memory::{
-//     extract_from_byte_offset, load, prepare_address_floor_byte_offset, store,
-// };
 use crate::{instructions::{
     decompose, reconstruct, InstructionsParser, LOAD_OPS_LIST, PC_OPS_LIST, RD_OPS_LIST,
 }, Instruction};
-// use crate::memory::{read_tmp_bytes, Memory};
-// use crate::parameters::{
-//     Parameters, DECOMP_U32, LOGBASE2K, LOGK, RLWE_COLS, VMPPMAT_COLS, VMPPMAT_ROWS,
-// };
-// use crate::trace::trace_inplace_inv;
-// use base2k::{alloc_aligned, Encoding, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps};
 use itertools::izip;
 
 pub struct Interpreter {
@@ -52,6 +23,7 @@ pub struct Interpreter {
     pub source_xe: Source,
 
     pub fhe_ram_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+    pub bdd_key_prepared: BDDKeyPrepared<Vec<u8>, CGGI, BackendImpl>,
 
     pub imm_rom: Ram<BackendImpl>,
     pub rs1_rom: Ram<BackendImpl>,
@@ -92,7 +64,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(sk_glwe: &GLWESecret<Vec<u8>>) -> Self {
+    pub fn new(sk_lwe: &LWESecret<Vec<u8>>, sk_glwe: &GLWESecret<Vec<u8>>) -> Self {
         pub const DECOMP_N: [u8; 6] = [2, 2, 2, 2, 2, 2];
         pub const ROM_MAX_ADDR: usize = 1 << 14;
         pub const RAM_MAX_ADDR: usize = 1 << 14;
@@ -122,14 +94,21 @@ impl Interpreter {
         let mut fhe_ram_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
             EvaluationKeysPrepared::alloc(&params);
         fhe_ram_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
-    
+
+        let mut bdd_key: BDDKey<Vec<u8>, CGGI> = BDDKey::alloc_from_infos(&TEST_BDD_KEY_LAYOUT);
+        bdd_key.encrypt_sk(params.module(), sk_lwe, sk_glwe, &mut source_xa, &mut source_xe, scratch.borrow());
+
+        let mut bdd_key_prepared: BDDKeyPrepared<Vec<u8>, CGGI, BackendImpl> = BDDKeyPrepared::alloc_from_infos(params.module(), &TEST_BDD_KEY_LAYOUT);
+        bdd_key_prepared.prepare(params.module(), &bdd_key, scratch.borrow());
+
         Self {
             params: CryptographicParameters::<BackendImpl>::new(),
 
             source_xa,
             source_xe,
 
-            fhe_ram_keys_prepared: fhe_ram_keys_prepared,
+            fhe_ram_keys_prepared,
+            bdd_key_prepared,
 
             imm_rom: imm_rom,
             rs1_rom: rs1_rom,
@@ -245,57 +224,32 @@ impl Interpreter {
         self.ram.encrypt_sk(&ram_data, &sk_glwe, &mut self.source_xa, &mut self.source_xe);
     }
 
-    pub fn cycle(&mut self) {
+    pub fn cycle(&mut self, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
 
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
 
         let params = Parameters::<BackendImpl>::new();
         let mut instruction_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
-        instruction_address.set_from_fheuint(self.params.module(), &self.program_counter, scratch.borrow());
+        instruction_address.set_from_fheuint_prepared(self.params.module(), &self.program_counter, scratch.borrow());
 
-        let imm_glwe = self.imm_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
-        let rs1_glwe = self.rs1_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
-        let rs2_glwe = self.rs2_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
-        let rd_glwe = self.rd_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
+        let imm_fheuint: FheUint<Vec<u8>, u32> = self.imm_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+        
+        let rs1_fheuint: FheUint<Vec<u8>, u32> = self.rs1_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+        let rs2_fheuint: FheUint<Vec<u8>, u32> = self.rs2_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+        let rd_fheuint: FheUint<Vec<u8>, u32> = self.rd_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
 
-        // println!(
-        //     "pc: {}",
-        //     self.addr_pc.debug_as_u32(params.module_lwe()) << 2
-        // );
-        // println!("REGS: {:?}", &self.registers.debug_as_u32());
-        // println!("MEM: {:?}", &self.ram.debug_as_u32()[..32]);
+        let mut rs1_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
+        rs1_address.set_from_fheuint(self.params.module(), &rs1_fheuint, &self.bdd_key_prepared, &params.ggsw_infos(), scratch.borrow());
 
-        // let module_lwe: &Module = params.module_lwe();
-        // let module_pbs: &Module = params.module_pbs();
+        let mut rs2_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
+        rs2_address.set_from_fheuint(self.params.module(), &rs2_fheuint, &self.bdd_key_prepared, &params.ggsw_infos(), scratch.borrow());
 
-        // // 0) Fetches instructions selectors
-        // //let now: Instant = Instant::now();
-        // let (rs2_u5, rs1_u5, rd_u5, rd_w_u6, mem_w_u5, pc_w_u5) =
-        //     self.get_instruction_selectors();
-        // println!(
-        //    "get_instruction_selectors: {} ms",
-        //    now.elapsed().as_millis()
-        // );
+        let mut rd_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
+        rd_address.set_from_fheuint(self.params.module(), &rd_fheuint, &self.bdd_key_prepared, &params.ggsw_infos(), scratch.borrow());
 
-        // //println!("rd_w_u6: {}", rd_w_u6);
-        // //println!("mem_w_u5: {}", mem_w_u5);
-        // //println!("pc_w_u5: {}", pc_w_u5);
-        // //println!("rs1_u5: {}", rs1_u5);
-        // //println!("rs2_u5: {}", rs2_u5);
-        // //println!("rd_u5: {}", rd_u5);
-
-        // // 1) Retrieve 8xLWE(u4) inputs (imm, rs2, rs1, pc)
-        // //let now: Instant = Instant::now();
-        // let (imm_lwe, rs2_lwe, rs1_lwe, pc_lwe) =
-        //     self.get_lwe_inputs(module_pbs, module_lwe, rs2_u5, rs1_u5);
-        // //println!(
-        // //    "get_lwe_inputs           : {} ms",
-        // //    now.elapsed().as_millis()
-        // //);
-
-        // //println!("rs2_lwe: {}", reconstruct(&rs2_lwe));
-        // //println!("rs1_lwe: {}", reconstruct(&rs1_lwe));
-        // //println!("imm_lwe: {}", reconstruct(&imm_lwe));
+        let reg_rs1: FheUint<Vec<u8>, u32> = self.registers.read_to_fheuint(&rs1_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+        let reg_rs2: FheUint<Vec<u8>, u32> = self.registers.read_to_fheuint(&rs2_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+        let reg_rd: FheUint<Vec<u8>, u32> = self.registers.read_to_fheuint(&rd_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
 
         // // 2) Prepares ram address read/write (x_rs1 + sext(imm) - offset) where offset = (x_rs1 + sext(imm))%4
         // //let now: Instant = Instant::now();

@@ -264,7 +264,10 @@ impl Phantom {
         let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_glwe_prepared.prepare(params.module(), &sk_glwe);
 
-        let mut interpreter = Interpreter::new(&sk_glwe);
+        let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+        sk_lwe.fill_binary_block(8, &mut source_xs);
+
+        let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
 
         interpreter.init_pc(&sk_glwe_prepared);
         interpreter.init_instructions(&sk_glwe, parser);
@@ -272,7 +275,7 @@ impl Phantom {
         interpreter.init_ram(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
-        interpreter.cycle();
+        interpreter.cycle(&sk_glwe_prepared);
 
         EncryptedVM {
             // params: params,
