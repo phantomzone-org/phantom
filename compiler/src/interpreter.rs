@@ -254,12 +254,8 @@ impl Phantom {
         let params = CryptographicParameters::<BackendImpl>::new();
 
         let seed_xs: [u8; 32] = [0u8; 32];
-        // let seed_xa: [u8; 32] = [0u8; 32];
-        // let seed_xe: [u8; 32] = [0u8; 32];
     
         let mut source_xs: Source = Source::new(seed_xs);
-        // let mut source_xa: Source = Source::new(seed_xa);
-        // let mut source_xe: Source = Source::new(seed_xe);
     
         // Generates a new secret-key along with the public evaluation keys.
         let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
@@ -268,25 +264,15 @@ impl Phantom {
         let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_glwe_prepared.prepare(params.module(), &sk_glwe);
 
-        let lwe_layout = LWELayout {
-            k: params.k_glwe_ct(),
-            n: params.module().ring_degree(),
-            base2k: params.basek()
-        };
+        let mut interpreter = Interpreter::new(&sk_glwe);
 
-        let mut sk_lwe = LWESecret::alloc(lwe_layout.n);
-        let mut source_xs: Source = Source::new([1u8; 32]);
-        sk_lwe.fill_binary_block(8, &mut source_xs);
-
-        let mut interpreter = Interpreter::new(&sk_glwe, &sk_glwe_prepared);
-
-        interpreter.init_pc(1, &sk_glwe_prepared);
+        interpreter.init_pc(&sk_glwe_prepared);
         interpreter.init_instructions(&sk_glwe, parser);
         interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
         interpreter.init_ram(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
-        interpreter.cycle(&sk_glwe, &sk_glwe_prepared);
+        interpreter.cycle();
 
         EncryptedVM {
             // params: params,

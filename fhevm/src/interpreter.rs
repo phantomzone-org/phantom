@@ -5,7 +5,7 @@ use poulpy_hal::{
 };
 
 use poulpy_core::{GLWEDecrypt, layouts::{GLWE, GLWEPlaintext, GLWESecret, GLWESecretPrepared, LWE, LWEInfos, LWELayout, LWEPlaintext, LWEPlaintextLayout, LWESecret}};
-use poulpy_schemes::tfhe::bdd_arithmetic::FheUintBlocksPrepared;
+use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, FheUintPrepared};
 
 // pub struct Interpreter {
 //     params: Parameters<BackendImpl>,
@@ -51,10 +51,7 @@ pub struct Interpreter {
     pub source_xa: Source,
     pub source_xe: Source,
 
-    pub imm_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
-    pub rs1_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
-    pub rs2_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
-    pub rd_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
+    pub fhe_ram_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl>,
 
     pub imm_rom: Ram<BackendImpl>,
     pub rs1_rom: Ram<BackendImpl>,
@@ -65,7 +62,7 @@ pub struct Interpreter {
     pub ram: Ram<BackendImpl>,
     pub ram_offset: u32,
 
-    pub program_counter: FheUintBlocksPrepared<Vec<u8>, u32, BackendImpl>,
+    pub program_counter: FheUintPrepared<Vec<u8>, u32, BackendImpl>,
 
     // pub imm: Memory,
     // pub instructions: Memory,
@@ -95,7 +92,7 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
-    pub fn new(sk_glwe: &GLWESecret<Vec<u8>>, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) -> Self {
+    pub fn new(sk_glwe: &GLWESecret<Vec<u8>>) -> Self {
         pub const DECOMP_N: [u8; 6] = [2, 2, 2, 2, 2, 2];
         pub const ROM_MAX_ADDR: usize = 1 << 14;
         pub const RAM_MAX_ADDR: usize = 1 << 14;
@@ -118,35 +115,21 @@ impl Interpreter {
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
         
         let params = Parameters::<BackendImpl>::new();
+
         let keys: EvaluationKeys<Vec<u8>> =
             EvaluationKeys::encrypt_sk(&params, sk_glwe, &mut source_xa, &mut source_xe);
-        
-        let mut imm_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
-            EvaluationKeysPrepared::alloc(&params);
-        imm_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
-        let mut rs1_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
+        let mut fhe_ram_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
             EvaluationKeysPrepared::alloc(&params);
-        rs1_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
-
-        let mut rs2_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
-            EvaluationKeysPrepared::alloc(&params);
-        rs2_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
-
-        let mut rd_rom_keys_prepared: EvaluationKeysPrepared<Vec<u8>, BackendImpl> =
-            EvaluationKeysPrepared::alloc(&params);
-        rd_rom_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+        fhe_ram_keys_prepared.prepare(params.module(), &keys, scratch.borrow());
     
         Self {
             params: CryptographicParameters::<BackendImpl>::new(),
 
-            source_xa: Source::new(seed_xa),
-            source_xe: Source::new(seed_xe),
+            source_xa,
+            source_xe,
 
-            imm_rom_keys_prepared: imm_rom_keys_prepared,
-            rs1_rom_keys_prepared: rs1_rom_keys_prepared,
-            rs2_rom_keys_prepared: rs2_rom_keys_prepared,
-            rd_rom_keys_prepared: rd_rom_keys_prepared,
+            fhe_ram_keys_prepared: fhe_ram_keys_prepared,
 
             imm_rom: imm_rom,
             rs1_rom: rs1_rom,
@@ -156,18 +139,12 @@ impl Interpreter {
             ram: ram,
             
             ram_offset: 0,
-            program_counter: FheUintBlocksPrepared::alloc(params.module(), &params.ggsw_infos()),
+            program_counter: FheUintPrepared::alloc(params.module(), &params.ggsw_infos()),
         }
     }
 
-    pub fn init_pc(&mut self, initial_pc: u32, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
-        let pc_value = initial_pc;
-        // Generate random seeds for encryption
-        let seed_xa = [5u8; 32];
-        let seed_xe = [6u8; 32];
-
-        let mut source_xa = Source::new(seed_xa);
-        let mut source_xe = Source::new(seed_xe);
+    pub fn init_pc(&mut self, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+        let pc_value = 0;
 
         // TODO: set scratch correctly.
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
@@ -176,10 +153,10 @@ impl Interpreter {
             self.params.module(),
             pc_value,
             sk_glwe_prep,
-            &mut source_xa,
-            &mut source_xe,
+            &mut self.source_xa,
+            &mut self.source_xe,
             scratch.borrow(),
-        );    
+        );
     }
 
     pub fn init_instructions(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, instructions: InstructionsParser) {
@@ -205,7 +182,6 @@ impl Interpreter {
             let rs2 = instructions.get_raw(i).get_rs2_or_zero();
             let rd = instructions.get_raw(i).get_rd_or_zero();
             let imm = instructions.get_raw(i).get_immediate();
-            println!("rs1: {:?}, rs2: {:?}, rd: {:?}, imm: {:?}", rs1, rs2, rd, imm);
 
             data_ram_rs1[i * rs1_word_size..(i + 1) * rs1_word_size]
                 .iter_mut()
@@ -269,18 +245,18 @@ impl Interpreter {
         self.ram.encrypt_sk(&ram_data, &sk_glwe, &mut self.source_xa, &mut self.source_xe);
     }
 
-    pub fn cycle(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+    pub fn cycle(&mut self) {
 
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
 
         let params = Parameters::<BackendImpl>::new();
-        let mut address_rom: Address<Vec<u8>> = Address::alloc_from_params(&params);
-        address_rom.set_from_fheuint(self.params.module(), &self.program_counter, scratch.borrow());
+        let mut instruction_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
+        instruction_address.set_from_fheuint(self.params.module(), &self.program_counter, scratch.borrow());
 
-        let imm_glwe = self.imm_rom.read(&address_rom, &self.imm_rom_keys_prepared);
-        let rs1_glwe = self.rs1_rom.read(&address_rom, &self.rs1_rom_keys_prepared);
-        let rs2_glwe = self.rs2_rom.read(&address_rom, &self.rs2_rom_keys_prepared);
-        let rd_glwe = self.rd_rom.read(&address_rom, &self.rd_rom_keys_prepared);
+        let imm_glwe = self.imm_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
+        let rs1_glwe = self.rs1_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
+        let rs2_glwe = self.rs2_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
+        let rd_glwe = self.rd_rom.read(&instruction_address, &self.fhe_ram_keys_prepared);
 
         // println!(
         //     "pc: {}",
