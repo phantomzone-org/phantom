@@ -9,8 +9,9 @@ poulpy-hal = {path = "../../poulpy/poulpy-hal"}
 poulpy-core = {path = "../../poulpy/poulpy-core"}
 poulpy-backend = {path = "../../poulpy/poulpy-backend"}
 poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
-fhe-ram = { path = "../../fhe-ram"}
-rand_core = "0.6.4"
+rand_core = "0.9.3"
+strum = "0.27.2"
+strum_macros = "0.27.2"
 
 [profile.release]
 debug = true

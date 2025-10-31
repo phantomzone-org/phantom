@@ -1,9 +1,11 @@
 pub mod interpreter;
 pub mod instructions;
+pub mod ram;
 
 // Re-export the main functionality
 pub use interpreter::*;
 pub use instructions::*;
+pub use ram::*;
 use poulpy_core::layouts::{Base2K, Degree, Dnum, Dsize, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision};
 use poulpy_schemes::tfhe::{bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout, circuit_bootstrapping::CircuitBootstrappingKeyLayout};
 
