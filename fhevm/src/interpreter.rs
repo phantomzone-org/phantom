@@ -118,7 +118,7 @@ impl Interpreter {
             ram: ram,
             
             ram_offset: 0,
-            program_counter: FheUintPrepared::alloc(params.module(), &params.ggsw_infos()),
+            program_counter: FheUintPrepared::alloc_from_infos(params.module(), &params.ggsw_infos()),
         }
     }
 
