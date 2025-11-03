@@ -25,7 +25,7 @@ where
     fn get_gglwe_to_ggsw_key(&self) -> &GGLWEToGGSWKeyPrepared<D, BE>;
 }
 
-impl<D: DataRef, BE: Backend> RAMKeysHelper<D, BE> for RAMKeysPrepared<D, BE>{
+impl<D: DataRef, BE: Backend> RAMKeysHelper<D, BE> for RAMKeysPrepared<D, BE> {
     fn get_gglwe_to_ggsw_key(&self) -> &GGLWEToGGSWKeyPrepared<D, BE> {
         &self.tsk_ggsw_inv
     }

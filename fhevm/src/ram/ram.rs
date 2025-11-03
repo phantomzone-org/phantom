@@ -1,10 +1,9 @@
 use itertools::izip;
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWLayout,
-        GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEInfos,
-        GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
-        TorusPrecision, GLWE,
+        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWLayout, GGSWPreparedFactory,
+        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
+        GLWESecretPreparedToRef, GetGaloisElement, TorusPrecision, GLWE,
     },
     GGSWAutomorphism, GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize,
     GLWEPacker, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
@@ -14,15 +13,16 @@ use poulpy_hal::{
     layouts::{Backend, DataMut, DataRef, Module, Scratch, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, UnsignedInteger};
+use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, ToBits, UnsignedInteger};
 
 use crate::{
-    Address, Base2D, Coordinate, CoordinatePrepared, TakeCoordinatePrepared, get_base_2d, keys::RAMKeysHelper, parameters::CryptographicParameters, reverse_bits_msb
+    get_base_2d, keys::RAMKeysHelper, parameters::CryptographicParameters, reverse_bits_msb,
+    Address, Base2D, Coordinate, CoordinatePrepared, TakeCoordinatePrepared,
 };
 
 /// [Ram] core implementation of the FHE-RAM.
 pub struct Ram {
-    pub subrams: Vec<SubRam>,
+    subrams: Vec<SubRam>,
     max_addr: usize,
     word_size: usize,
     base_2d: Base2D,
@@ -36,6 +36,8 @@ impl Ram {
         decomp_n: &Vec<u8>,
         max_addr: usize,
     ) -> Self where {
+        assert!(word_size <= u32::BITS as usize);
+
         Self {
             subrams: (0..word_size)
                 .map(|_| SubRam::alloc(params, max_addr))
@@ -56,6 +58,14 @@ impl Ram {
 
     pub fn glwe_infos(&self) -> GLWELayout {
         self.subrams[0].data[0].glwe_layout()
+    }
+
+    pub fn base_2d(&self) -> &Base2D {
+        &self.base_2d
+    }
+
+    pub fn subram(&self, i: usize) -> &SubRam {
+        &self.subrams[i]
     }
 
     /// Scratch space size required by the [Ram].
@@ -99,7 +109,7 @@ impl Ram {
     pub fn encrypt_sk<M, S, BE: Backend>(
         &mut self,
         module: &M,
-        data: &[u8],
+        data: &[u32],
         sk: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
@@ -112,26 +122,15 @@ impl Ram {
         let max_addr: usize = self.max_addr;
         let ram_chunks: usize = self.word_size;
 
-        assert!(
-            data.len().is_multiple_of(ram_chunks),
-            "invalid data: data.len()%ram_chunks={} != 0",
-            data.len().is_multiple_of(ram_chunks),
-        );
+        assert!(data.len() / ram_chunks <= max_addr);
 
-        assert!(
-            data.len() / ram_chunks == max_addr,
-            "invalid data: data.len()/ram_chunks={} != max_addr={}",
-            data.len() / ram_chunks,
-            max_addr
-        );
-
-        let mut data_split: Vec<u8> = vec![0u8; max_addr];
+        let mut bits: Vec<u8> = vec![0u8; max_addr];
 
         for i in 0..ram_chunks {
-            for (j, x) in data_split.iter_mut().enumerate() {
-                *x = data[j * ram_chunks + i];
+            for (x, y) in bits.iter_mut().zip(data.iter()) {
+                *x = y.bit(i);
             }
-            self.subrams[i].encrypt_sk(module, &data_split, sk, source_xa, source_xe, scratch);
+            self.subrams[i].encrypt_sk(module, &bits, sk, source_xa, source_xe, scratch);
         }
     }
 
@@ -317,12 +316,18 @@ impl SubRam {
         }
 
         Self {
-            data: Vec::new(),
+            data: (0..max_addr.div_ceil(module.n()))
+                .map(|_| GLWE::alloc_from_infos(&glwe_infos))
+                .collect(),
             tree,
             packer: GLWEPacker::alloc(&glwe_infos, 0),
             state: false,
             k: params.k_glwe_pt(),
         }
+    }
+
+    pub fn data(&self) -> &[GLWE<Vec<u8>>] {
+        &self.data
     }
 
     pub fn encrypt_sk<M, BE: Backend, S>(
@@ -342,7 +347,12 @@ impl SubRam {
         let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
 
         for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter_mut()) {
-            data_i64[chunk.len()..].iter_mut().for_each(|x| *x = 0);
+            data_i64.fill(0);
+
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter()) {
+                *y = *x as i64
+            }
+
             pt.encode_vec_i64(&data_i64, self.k);
             ct.encrypt_sk(module, &pt, sk_prepared, source_xa, source_xe, scratch_2);
         }

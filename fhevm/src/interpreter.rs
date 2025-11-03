@@ -34,18 +34,17 @@ pub struct Interpreter<BE: Backend> {
     pub registers: Ram,
     pub ram: Ram,
     pub ram_offset: u32,
-    pub program_counter: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub pc: FheUintPrepared<Vec<u8>, u32, BE>,
     pub pc_addr: Address<Vec<u8>>,
     pub rs1_addr: Address<Vec<u8>>,
     pub rs2_addr: Address<Vec<u8>>,
     pub rd_addr: Address<Vec<u8>>,
-    pub imm_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub imm_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>, // Address value of RS1
+    pub rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>, // Address value of RS2
+    pub rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,  // Address value of RD
+    pub rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,  // Registers[RS1]
+    pub rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,  // Registers[RS2]
+    pub imm_val_fhe_uint: FheUint<Vec<u8>, u32>,  // IMM
 }
 
 impl<BE: Backend> Interpreter<BE> {
@@ -77,15 +76,11 @@ impl<BE: Backend> Interpreter<BE> {
             registers,
             ram: ram,
             ram_offset: 0,
-            program_counter: FheUintPrepared::alloc_from_infos(
-                params.module(),
-                &params.ggsw_infos(),
-            ),
+            pc: FheUintPrepared::alloc_from_infos(params.module(), &params.ggsw_infos()),
             pc_addr: Address::alloc_from_params(params, &get_base_2d(rom_size as u32, &decomp_n)),
             rs1_addr: Address::alloc_from_params(params, &base_2d_register),
             rs2_addr: Address::alloc_from_params(params, &base_2d_register),
             rd_addr: Address::alloc_from_params(params, &base_2d_register),
-            imm_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs1_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs2_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rd_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
@@ -108,14 +103,8 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
         M: FheUintBlocksPreparedEncryptSk<u32, BE>,
     {
-        self.program_counter.encrypt_sk(
-            module,
-            pc_value,
-            sk_prepared,
-            source_xa,
-            source_xe,
-            scratch,
-        );
+        self.pc
+            .encrypt_sk(module, pc_value, sk_prepared, source_xa, source_xe, scratch);
     }
 
     pub fn instructions_encrypt_sk<M, S>(
@@ -136,41 +125,16 @@ impl<BE: Backend> Interpreter<BE> {
         let max_addr_rs2: usize = self.rs2_rom.max_addr();
         let max_addr_rd: usize = self.rd_rom.max_addr();
 
-        let rs1_word_size: usize = self.rs1_rom.word_size();
-        let rs2_word_size: usize = self.rs2_rom.word_size();
-        let rd_word_size: usize = self.rd_rom.word_size();
-        let imm_word_size: usize = self.imm_rom.word_size();
-
-        let mut data_ram_rs1: Vec<u8> = vec![0u8; max_addr_rs1 * rs1_word_size];
-        let mut data_ram_rs2: Vec<u8> = vec![0u8; max_addr_rs2 * rs2_word_size];
-        let mut data_ram_rd: Vec<u8> = vec![0u8; max_addr_rd * rd_word_size];
-        let mut data_ram_imm: Vec<u8> = vec![0u8; max_addr_imm * imm_word_size];
+        let mut data_ram_rs1: Vec<u32> = vec![0u32; max_addr_rs1];
+        let mut data_ram_rs2: Vec<u32> = vec![0u32; max_addr_rs2];
+        let mut data_ram_rd: Vec<u32> = vec![0u32; max_addr_rd];
+        let mut data_ram_imm: Vec<u32> = vec![0u32; max_addr_imm];
 
         for i in 0..instructions.instructions.len() {
-            let rs1 = instructions.get_raw(i).get_rs1_or_zero();
-            let rs2 = instructions.get_raw(i).get_rs2_or_zero();
-            let rd = instructions.get_raw(i).get_rd_or_zero();
-            let imm = instructions.get_raw(i).get_immediate();
-
-            data_ram_rs1[i * rs1_word_size..(i + 1) * rs1_word_size]
-                .iter_mut()
-                .enumerate()
-                .for_each(|(idx, v)| *v = ((rs1 >> idx) & 1) as u8);
-
-            data_ram_rs2[i * rs2_word_size..(i + 1) * rs2_word_size]
-                .iter_mut()
-                .enumerate()
-                .for_each(|(idx, v)| *v = ((rs2 >> idx) & 1) as u8);
-
-            data_ram_rd[i * rd_word_size..(i + 1) * rd_word_size]
-                .iter_mut()
-                .enumerate()
-                .for_each(|(idx, v)| *v = ((rd >> idx) & 1) as u8);
-
-            data_ram_imm[i * imm_word_size..(i + 1) * imm_word_size]
-                .iter_mut()
-                .enumerate()
-                .for_each(|(idx, v)| *v = ((imm >> idx) & 1) as u8);
+            data_ram_rs1[i] = instructions.get_raw(i).get_rs1_or_zero() as u32;
+            data_ram_rs2[i] = instructions.get_raw(i).get_rs2_or_zero() as u32;
+            data_ram_rd[i] = instructions.get_raw(i).get_rd_or_zero() as u32;
+            data_ram_imm[i] = instructions.get_raw(i).get_immediate() as u32;
         }
 
         self.rs1_rom.encrypt_sk(
@@ -213,8 +177,8 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn init_registers<M, S>(
         &mut self,
-        registers: &Vec<u32>,
         module: &M,
+        data: &[u32],
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
@@ -224,30 +188,14 @@ impl<BE: Backend> Interpreter<BE> {
         M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let max_addr = self.registers.max_addr();
-        let default_word_size = self.registers.word_size(); // TODO: hardcoded based on 8-bit plaintext precision
-
-        let mut registers_data = vec![0u8; max_addr * default_word_size];
-        for i in 0..registers.len() {
-            for j in 0..default_word_size {
-                registers_data[j + i * default_word_size] = ((registers[i] >> j) & 1) as u8;
-            }
-        }
-
-        self.registers.encrypt_sk(
-            module,
-            &registers_data,
-            sk_prepared,
-            source_xa,
-            source_xe,
-            scratch,
-        );
+        self.registers
+            .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
     pub fn init_ram<M, S>(
         &mut self,
-        ram: &Vec<u8>,
         module: &M,
+        data: &[u32],
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
@@ -257,24 +205,10 @@ impl<BE: Backend> Interpreter<BE> {
         M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        assert!(ram.len() <= self.ram.max_addr());
-        let max_addr = self.ram.max_addr();
-        let default_word_size = self.ram.word_size(); // TODO: hardcoded based on 8-bit plaintext precision
-        let mut ram_data = vec![0u8; max_addr * default_word_size];
-        for i in 0..ram.len() {
-            for j in 0..default_word_size {
-                ram_data[j + i * default_word_size] = ((ram[i] >> j) & 1) as u8;
-            }
-        }
+        assert!(data.len() <= self.ram.max_addr());
 
-        self.ram.encrypt_sk(
-            module,
-            &ram_data,
-            sk_prepared,
-            source_xa,
-            source_xe,
-            scratch,
-        );
+        self.ram
+            .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
     // TODO: add missing components
@@ -283,7 +217,13 @@ impl<BE: Backend> Interpreter<BE> {
         module: &M,
         key: &H,
         scratch: &mut Scratch<BE>,
-    ) where
+    ) -> (
+        &FheUint<Vec<u8>, u32>,
+        &FheUint<Vec<u8>, u32>,
+        &FheUint<Vec<u8>, u32>,
+        &FheUint<Vec<u8>, u32>,
+    )
+    where
         M: FHEUintBlocksToAddress<u32, BE>
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
@@ -295,11 +235,11 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.pc_addr
-            .set_from_fheuint_prepared(module, &self.program_counter, scratch);
+            .set_from_fheuint_prepared(module, &self.pc, scratch);
 
         self.imm_rom.read_to_fheuint(
             module,
-            &mut self.imm_addr_fhe_uint,
+            &mut self.imm_val_fhe_uint,
             &self.pc_addr,
             key,
             scratch,
@@ -326,6 +266,13 @@ impl<BE: Backend> Interpreter<BE> {
             key,
             scratch,
         );
+
+        (
+            &self.imm_val_fhe_uint,
+            &self.rs1_addr_fhe_uint,
+            &self.rs2_addr_fhe_uint,
+            &self.rd_addr_fhe_uint,
+        )
     }
 
     pub fn read_registers<M, DK, H, K, BRA>(
@@ -333,7 +280,8 @@ impl<BE: Backend> Interpreter<BE> {
         module: &M,
         key: &H,
         scratch: &mut Scratch<BE>,
-    ) where
+    ) -> (&FheUint<Vec<u8>, u32>, &FheUint<Vec<u8>, u32>)
+    where
         BRA: BlindRotationAlgo,
         DK: DataRef,
         M: FheUintBlocksPreparedFactory<u32, BE>
@@ -368,6 +316,8 @@ impl<BE: Backend> Interpreter<BE> {
             key,
             scratch,
         );
+
+        (&self.rs1_val_fhe_uint, &self.rs2_val_fhe_uint)
     }
 
     pub fn cycle<M, V, DK, H, K, BRA>(&mut self, module: &M, key: &H, scratch: &mut Scratch<BE>)
