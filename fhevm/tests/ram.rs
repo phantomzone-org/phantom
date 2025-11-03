@@ -121,7 +121,7 @@ fn test_fhe_ram() {
             (params.k_glwe_pt().as_usize() as f64 + 1.0)
         );
     }
-    
+
     let start: Instant = Instant::now();
     let ct: Vec<GLWE<Vec<u8>>> =
         ram.read_prepare_write(params.module(), &addr, &keys_prepared, scratch.borrow());
@@ -289,6 +289,49 @@ fn test_fhe_ram_read_to_fheuint() {
 
     let decrypted_value: u32 = res.decrypt(params.module(), &sk_prep, scratch.borrow());
     assert_eq!(decrypted_value, want);
+
+}
+
+#[test]
+fn test_fheuint_pack() {
+
+    let seed_xs: [u8; 32] = [0u8; 32];
+    let seed_xa: [u8; 32] = [0u8; 32];
+    let seed_xe: [u8; 32] = [0u8; 32];
+
+    let mut source_xs: Source = Source::new(seed_xs);
+    let mut source_xa: Source = Source::new(seed_xa);
+    let mut source_xe: Source = Source::new(seed_xe);
+
+    // See parameters.rs for configuration
+    let params: CryptographicParameters<FFT64Ref> = CryptographicParameters::<FFT64Ref>::new();
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk.fill_ternary_prob(0.5, &mut source_xs);
+
+    let keys: RAMKeys<Vec<u8>> = RAMKeys::encrypt_sk(&params, &sk, &mut source_xa, &mut source_xe);
+
+    let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
+
+    let mut sk_prep: GLWESecretPrepared<Vec<u8>, FFT64Ref> =
+        GLWESecretPrepared::alloc(params.module(), sk.rank());
+    sk_prep.prepare(params.module(), &sk);
+
+    let mut keys_prepared: RAMKeysPrepared<Vec<u8>, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    keys_prepared.prepare(params.module(), &keys, scratch.borrow());
+
+    let mut ct: Vec<GLWE<Vec<u8>>> = Vec::new();
+    let value: u32 = 1;
+    for i in 0..32 {
+        ct.push(encrypt_glwe(&params, value.bit(i), &sk_prep));
+    }
+
+    let mut res: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&params.glwe_ct_infos());
+    res.pack(params.module(), ct, &keys_prepared, scratch.borrow());
+
+    let decrypted_value: u32 = res.decrypt(params.module(), &sk_prep, scratch.borrow());
+    assert_eq!(decrypted_value, value);
 
 }
 
