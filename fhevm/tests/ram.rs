@@ -289,12 +289,10 @@ fn test_fhe_ram_read_to_fheuint() {
 
     let decrypted_value: u32 = res.decrypt(params.module(), &sk_prep, scratch.borrow());
     assert_eq!(decrypted_value, want);
-
 }
 
 #[test]
 fn test_fheuint_pack() {
-
     let seed_xs: [u8; 32] = [0u8; 32];
     let seed_xa: [u8; 32] = [0u8; 32];
     let seed_xe: [u8; 32] = [0u8; 32];
@@ -332,7 +330,6 @@ fn test_fheuint_pack() {
 
     let decrypted_value: u32 = res.decrypt(params.module(), &sk_prep, scratch.borrow());
     assert_eq!(decrypted_value, value);
-
 }
 
 fn encrypt_glwe<B: Backend>(

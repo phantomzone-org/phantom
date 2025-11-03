@@ -1,17 +1,21 @@
 use poulpy_core::layouts::{
-    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision
+    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout,
+    GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
 };
 use poulpy_hal::{
     api::ModuleNew,
     layouts::{Backend, Module},
 };
-use poulpy_schemes::tfhe::{bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout, circuit_bootstrapping::CircuitBootstrappingKeyLayout};
+use poulpy_schemes::tfhe::{
+    bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout,
+    circuit_bootstrapping::CircuitBootstrappingKeyLayout,
+};
 
 const LOG_N: u32 = 11;
 const N_GLWE: u32 = 1 << LOG_N;
 const BASE2K: u32 = 17;
 const RANK: u32 = 1;
-const K_GLWE_PT: u32 = 3; //u8::BITS;
+const K_GLWE_PT: u32 = 2; //u8::BITS;
 const K_GLWE_CT: u32 = BASE2K * 3;
 const K_GGSW_ADDR: u32 = BASE2K * 4;
 const K_EVK_TRACE: u32 = BASE2K * 4;
@@ -149,14 +153,14 @@ impl<B: Backend> CryptographicParameters<B> {
                 n_glwe: Degree(N_GLWE),
                 n_lwe: Degree(N_GLWE),
                 base2k: Base2K(BASE2K),
-                k: TorusPrecision(5*BASE2K),
+                k: TorusPrecision(5 * BASE2K),
                 dnum: Dnum(4),
                 rank: Rank(RANK),
             },
             layout_atk: GLWEAutomorphismKeyLayout {
                 n: Degree(N_GLWE),
                 base2k: Base2K(BASE2K),
-                k: TorusPrecision(5*BASE2K),
+                k: TorusPrecision(5 * BASE2K),
                 rank: Rank(RANK),
                 dnum: Dnum(4),
                 dsize: Dsize(1),
@@ -164,7 +168,7 @@ impl<B: Backend> CryptographicParameters<B> {
             layout_tsk: GLWETensorKeyLayout {
                 n: Degree(N_GLWE),
                 base2k: Base2K(BASE2K),
-                k: TorusPrecision(5*BASE2K),
+                k: TorusPrecision(5 * BASE2K),
                 rank: Rank(RANK),
                 dnum: Dnum(4),
                 dsize: Dsize(1),
@@ -176,7 +180,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWEToLWEKeyLayout {
             n: Degree(N_GLWE),
             base2k: Base2K(BASE2K),
-            k: TorusPrecision(4*BASE2K),
+            k: TorusPrecision(4 * BASE2K),
             rank_in: Rank(RANK),
             dnum: Dnum(3),
         }
