@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use itertools::izip;
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGLWEToGGSWKeyPrepared, GGSWLayout,
-        GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared, GLWEInfos,
+        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWLayout,
+        GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEInfos,
         GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
         TorusPrecision, GLWE,
     },
@@ -19,8 +17,7 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, UnsignedInteger};
 
 use crate::{
-    get_base_2d, parameters::CryptographicParameters, reverse_bits_msb, Address, Base2D,
-    Coordinate, CoordinatePrepared, EvaluationKeysPrepared, TakeCoordinatePrepared,
+    Address, Base2D, Coordinate, CoordinatePrepared, TakeCoordinatePrepared, get_base_2d, keys::RAMKeysHelper, parameters::CryptographicParameters, reverse_bits_msb
 };
 
 /// [Ram] core implementation of the FHE-RAM.
@@ -220,14 +217,15 @@ impl Ram {
 
     /// Writes w to the [Ram]. Requires that [Self::read_prepare_write] was
     /// called Bforehand.
-    pub fn write<D: DataRef, DA: DataRef, K: DataRef, BE: Backend>(
+    pub fn write<D: DataRef, DA: DataRef, DH, H, BE: Backend>(
         &mut self,
         module: &Module<BE>,
         w: &[GLWE<D>], // Must encrypt [w, 0, 0, ..., 0];
         address: &Address<DA>,
-        keys: &EvaluationKeysPrepared<K, BE>,
+        keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
+        DH: DataRef,
         Module<BE>: GGSWPreparedFactory<BE>
             + GGSWAutomorphism<BE>
             + GLWENormalize<BE>
@@ -237,17 +235,17 @@ impl Ram {
             + GLWERotate<BE>
             + GLWEExternalProduct<BE>,
         ScratchOwned<BE>: ScratchOwnedBorrow<BE>,
+        H: RAMKeysHelper<DH, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         assert!(w.len() == self.subrams.len());
 
-        let atk_glwe: &HashMap<i64, GLWEAutomorphismKeyPrepared<K, BE>> = &keys.atk_glwe;
-        let atk_ggsw_inv: &GLWEAutomorphismKeyPrepared<K, BE> = &keys.atk_ggsw_inv;
-        let tsk_ggsw_inv: &GGLWEToGGSWKeyPrepared<K, BE> = &keys.tsk_ggsw_inv;
+        //let atk_ggsw_inv: &GLWEAutomorphismKeyPrepared<K, BE> = &keys.atk_ggsw_inv;
+        //let tsk_ggsw_inv: &GGLWEToGGSWKeyPrepared<K, BE> = &keys.tsk_ggsw_inv;
 
         // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
         for (i, subram) in self.subrams.iter_mut().enumerate() {
-            subram.write_first_step(module, &w[i], address.n2(), atk_glwe, scratch);
+            subram.write_first_step(module, &w[i], address.n2(), keys, scratch);
         }
 
         for i in (0..address.n2() - 1).rev() {
@@ -260,13 +258,13 @@ impl Ram {
             inv_coordinate_prepared.prepare_inv(
                 module,
                 coordinate,
-                atk_ggsw_inv,
-                tsk_ggsw_inv,
+                keys.get_ggsw_inv_key(),
+                keys.get_gglwe_to_ggsw_key(),
                 scratch_1,
             );
 
             for subram in self.subrams.iter_mut() {
-                subram.write_mid_step(i, module, &inv_coordinate_prepared, atk_glwe, scratch_1);
+                subram.write_mid_step(i, module, &inv_coordinate_prepared, keys, scratch_1);
             }
         }
 
@@ -278,8 +276,8 @@ impl Ram {
         inv_coordinate_prepared.prepare_inv(
             module,
             coordinate,
-            atk_ggsw_inv,
-            tsk_ggsw_inv,
+            keys.get_ggsw_inv_key(),
+            keys.get_gglwe_to_ggsw_key(),
             scratch_1,
         );
 
@@ -544,12 +542,12 @@ impl SubRam {
         module.glwe_normalize_inplace(to_write_on, scratch_1);
     }
 
-    fn write_mid_step<DC: DataRef, K: DataRef, BE: Backend>(
+    fn write_mid_step<DC: DataRef, K, H, BE: Backend>(
         &mut self,
         step: usize,
         module: &Module<BE>,
         inv_coordinate: &CoordinatePrepared<DC, BE>,
-        auto_keys: &HashMap<i64, GLWEAutomorphismKeyPrepared<K, BE>>,
+        auto_keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
         Module<BE>: GLWEExternalProduct<BE>
@@ -558,6 +556,8 @@ impl SubRam {
             + GLWEAdd
             + GLWENormalize<BE>
             + GLWERotate<BE>,
+        H: GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let log_n: usize = module.log_n();

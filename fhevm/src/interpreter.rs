@@ -4,7 +4,7 @@ use crate::{
 };
 
 use poulpy_hal::{
-    api::{ModuleN},
+    api::ModuleN,
     layouts::{Backend, DataRef, Module, Scratch},
     source::Source,
 };
@@ -18,8 +18,8 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, FheUint, FheUintBlocksPrepare,
-        FheUintBlocksPreparedEncryptSk, FheUintBlocksPreparedFactory, FheUintPrepared,
+        BDDKeyHelper, FheUint, FheUintBlocksPrepare, FheUintBlocksPreparedEncryptSk,
+        FheUintBlocksPreparedFactory, FheUintPrepared,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -95,7 +95,7 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub fn set_pc_to<S, M>(
+    pub fn pc_encrypt_sk<S, M>(
         &mut self,
         module: &M,
         pc_value: u32,
@@ -118,7 +118,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn init_instructions<M, S>(
+    pub fn instructions_encrypt_sk<M, S>(
         &mut self,
         module: &M,
         instructions: &InstructionsParser,

@@ -279,7 +279,7 @@ impl Phantom {
         sk_glwe_prepared.prepare(params.module(), &sk_glwe);
 
         interpreter.init_pc(&sk_glwe_prepared);
-        interpreter.init_instructions(&sk_glwe, &parser);
+        interpreter.instructions_encrypt_sk(&sk_glwe, &parser);
         interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
         interpreter.init_ram(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);

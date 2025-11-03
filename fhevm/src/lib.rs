@@ -3,6 +3,7 @@ pub mod arithmetic;
 pub(crate) mod codegen;
 pub mod instructions;
 pub mod interpreter;
+pub mod keys;
 pub mod parameters;
 pub mod ram;
 pub mod store;
@@ -24,11 +25,8 @@ const LOG_N: u32 = 12;
 const N_GLWE: u32 = 1 << LOG_N;
 const BASE2K: u32 = 17;
 const RANK: u32 = 1;
-const K_GLWE_PT: u32 = 3; //u8::BITS;
 const K_GLWE_CT: u32 = BASE2K * 3;
 const K_GGSW_ADDR: u32 = BASE2K * 4;
-const K_EVK_TRACE: u32 = BASE2K * 4;
-const K_EVK_GGSW_INV: u32 = BASE2K * 5;
 
 pub static TEST_GLWE_INFOS: GLWELayout = GLWELayout {
     n: Degree(N_GLWE),

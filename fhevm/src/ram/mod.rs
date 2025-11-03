@@ -2,14 +2,12 @@ mod address;
 mod base;
 mod coordinate;
 mod coordinate_prepared;
-mod keys;
 mod ram;
 
 pub use address::*;
 pub use base::*;
 pub(crate) use coordinate::*;
 pub(crate) use coordinate_prepared::*;
-pub use keys::*;
 pub use ram::*;
 
 #[inline(always)]

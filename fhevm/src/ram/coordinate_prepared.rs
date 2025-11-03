@@ -119,7 +119,7 @@ impl<D: DataMut, B: Backend> CoordinatePrepared<D, B> {
         module: &M,
         other: &Coordinate<DR>,
         auto_key: &G,
-        tensor_key: &T,
+        gglwe_to_ggsw_key: &T,
         scratch: &mut Scratch<B>,
     ) where
         G: GGLWEPreparedToRef<B> + GetGaloisElement + GGLWEInfos,
@@ -131,7 +131,7 @@ impl<D: DataMut, B: Backend> CoordinatePrepared<D, B> {
         assert_eq!(self.base1d, other.base1d);
         let (mut tmp_ggsw, scratch_1) = scratch.take_ggsw(other);
         for (prepared, other) in self.value.iter_mut().zip(other.value.iter()) {
-            tmp_ggsw.automorphism(module, other, auto_key, tensor_key, scratch_1);
+            tmp_ggsw.automorphism(module, other, auto_key, gglwe_to_ggsw_key, scratch_1);
             prepared.prepare(module, &tmp_ggsw, scratch_1);
         }
         self.base1d = other.base1d.clone();
