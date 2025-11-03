@@ -8,8 +8,8 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyPrepared, FheUint, FheUintBlocksPrepare, FheUintBlocksPreparedFactory,
-        FheUintPrepared, GGSWBlindRotation, UnsignedInteger,
+        BDDKeyHelper, FheUint, FheUintBlocksPrepare, FheUintBlocksPreparedFactory, FheUintPrepared,
+        GGSWBlindRotation, UnsignedInteger,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -86,14 +86,16 @@ impl<D: DataMut> Address<D> {
         module.fhe_uint_blocks_to_address(self, fheuint_prepared, scratch);
     }
 
-    pub fn set_from_fheuint<F, T, M, BRA: BlindRotationAlgo, BE: Backend>(
+    pub fn set_from_fheuint<F, T, M, DK, BRA: BlindRotationAlgo, K, BE: Backend>(
         &mut self,
         module: &M,
         fheuint: &FheUint<F, T>,
-        bdd_key_prepared: &BDDKeyPrepared<F, BRA, BE>,
+        key: &K,
         scratch: &mut Scratch<BE>,
     ) where
         F: DataRef + DataMut,
+        DK: DataRef,
+        K: BDDKeyHelper<DK, BRA, BE>,
         T: UnsignedInteger,
         M: FheUintBlocksPreparedFactory<T, BE>
             + FheUintBlocksPrepare<BRA, T, BE>
@@ -101,7 +103,7 @@ impl<D: DataMut> Address<D> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut fheuint_prepared = FheUintPrepared::alloc_from_infos(module, self);
-        fheuint_prepared.prepare(module, &fheuint, &bdd_key_prepared, scratch);
+        fheuint_prepared.prepare(module, &fheuint, key, scratch);
         self.set_from_fheuint_prepared(module, &fheuint_prepared, scratch);
     }
 }

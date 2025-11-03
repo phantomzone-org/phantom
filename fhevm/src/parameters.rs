@@ -15,8 +15,6 @@ const K_GGSW_ADDR: u32 = BASE2K * 4;
 const K_EVK_TRACE: u32 = BASE2K * 4;
 const K_EVK_GGSW_INV: u32 = BASE2K * 5;
 pub const DECOMP_N: [u8; 2] = [6, 5];
-const WORDSIZE: usize = 4;
-const MAX_ADDR: usize = 1 << 14;
 
 pub struct CryptographicParameters<B: Backend> {
     module: Module<B>,              // FFT/NTT tables.

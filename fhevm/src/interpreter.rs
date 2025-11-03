@@ -4,7 +4,7 @@ use crate::{
 };
 
 use poulpy_hal::{
-    api::{ModuleN, ScratchOwnedBorrow},
+    api::{ModuleN},
     layouts::{Backend, DataRef, Module, Scratch},
     source::Source,
 };
@@ -18,8 +18,8 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyPrepared, FheUint, FheUintBlocksPrepare, FheUintBlocksPreparedEncryptSk,
-        FheUintBlocksPreparedFactory, FheUintPrepared,
+        BDDKeyHelper, FheUint, FheUintBlocksPrepare,
+        FheUintBlocksPreparedEncryptSk, FheUintBlocksPreparedFactory, FheUintPrepared,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -91,6 +91,7 @@ impl<BE: Backend> Interpreter<BE> {
             rd_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs1_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs2_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
+            imm_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
         }
     }
 
@@ -327,14 +328,14 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn read_registers<M, F, K, BRA>(
+    pub fn read_registers<M, DK, H, K, BRA>(
         &mut self,
         module: &M,
-        vm_key: &K,
+        key: &H,
         scratch: &mut Scratch<BE>,
     ) where
         BRA: BlindRotationAlgo,
-        F: DataRef,
+        DK: DataRef,
         M: FheUintBlocksPreparedFactory<u32, BE>
             + FheUintBlocksPrepare<BRA, u32, BE>
             + FHEUintBlocksToAddress<u32, BE>
@@ -343,32 +344,33 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
             + GLWEPacking<BE>,
-        K:,
+        H: BDDKeyHelper<DK, BRA, BE> + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.rs1_addr
-            .set_from_fheuint(module, &self.rs1_addr_fhe_uint, bdd_key_prepared, scratch);
+            .set_from_fheuint(module, &self.rs1_addr_fhe_uint, key, scratch);
 
         self.rs2_addr
-            .set_from_fheuint(module, &self.rs2_addr_fhe_uint, bdd_key_prepared, scratch);
+            .set_from_fheuint(module, &self.rs2_addr_fhe_uint, key, scratch);
 
         self.registers.read_to_fheuint(
             module,
             &mut self.rs1_val_fhe_uint,
             &self.rs1_addr,
-            &self.bdd_key_prepared,
+            key,
             scratch,
         );
         self.registers.read_to_fheuint(
             module,
             &mut self.rs2_val_fhe_uint,
             &self.rs2_addr,
-            &self.bdd_key_prepared,
+            key,
             scratch,
         );
     }
 
-    pub fn cycle<M, V, K, BRA>(&mut self, module: &M, vm_keys: &V, scratch: &mut Scratch<BE>)
+    pub fn cycle<M, V, DK, H, K, BRA>(&mut self, module: &M, key: &H, scratch: &mut Scratch<BE>)
     where
         M: FHEUintBlocksToAddress<u32, BE>
             + GGSWPreparedFactory<BE>
@@ -380,10 +382,12 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintBlocksPrepare<BRA, u32, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
+        DK: DataRef,
         V: GLWEAutomorphismKeyHelper<K, BE>,
+        H: BDDKeyHelper<DK, BRA, BE> + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
-        self.read_instruction_components(module, vm_keys, scratch);
-        self.read_registers(module, vm_keys, scratch);
+        self.read_instruction_components(module, key, scratch);
+        self.read_registers(module, key, scratch);
     }
 }

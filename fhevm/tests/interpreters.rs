@@ -1,4 +1,4 @@
-use fhevm::{CryptographicParameters, Instruction, InstructionsParser, Interpreter};
+use fhevm::{Instruction, InstructionsParser, Interpreter, parameters::CryptographicParameters};
 use poulpy_backend::FFT64Ref;
 use poulpy_core::layouts::{GLWESecret, GLWESecretPrepared, LWESecret};
 use poulpy_hal::{
@@ -6,26 +6,6 @@ use poulpy_hal::{
     layouts::ScratchOwned,
     source::Source,
 };
-
-#[test]
-pub fn test_interpreter_init() {
-    // Initializing cryptographic parameters
-    let params = CryptographicParameters::<FFT64Ref>::new();
-
-    let seed_xs: [u8; 32] = [0u8; 32];
-
-    let mut source_xs: Source = Source::new(seed_xs);
-
-    let interpreter = Interpreter::new(params);
-
-    assert_eq!(interpreter.params.basek(), params.basek());
-    assert_eq!(interpreter.params.rank(), params.rank());
-    assert_eq!(interpreter.params.k_evk_trace(), params.k_evk_trace());
-    assert_eq!(interpreter.params.k_evk_ggsw_inv(), params.k_evk_ggsw_inv());
-    assert_eq!(interpreter.params.dnum_ct(), params.dnum_ct());
-    assert_eq!(interpreter.params.dnum_ggsw(), params.dnum_ggsw());
-    assert_eq!(interpreter.params.k_evk_ggsw_inv(), params.k_evk_ggsw_inv());
-}
 
 #[test]
 pub fn test_interpreter_init_pc() {

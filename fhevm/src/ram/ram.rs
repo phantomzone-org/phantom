@@ -28,7 +28,6 @@ pub struct Ram {
     pub subrams: Vec<SubRam>,
     max_addr: usize,
     word_size: usize,
-    decomp_n: Vec<u8>,
     base_2d: Base2D,
 }
 
@@ -45,8 +44,7 @@ impl Ram {
                 .map(|_| SubRam::alloc(params, max_addr))
                 .collect(),
             word_size,
-            base_2d: get_base_2d(max_addr as u32, &decomp_n),
-            decomp_n: decomp_n.clone(),
+            base_2d: get_base_2d(max_addr as u32, decomp_n),
             max_addr,
         }
     }
