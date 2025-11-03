@@ -1,12 +1,14 @@
 use poulpy_core::layouts::{
-    Base2K, Dnum, Dsize, GGLWELayout, GGSWLayout, GLWELayout, Rank, TorusPrecision,
+    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision
 };
 use poulpy_hal::{
     api::ModuleNew,
     layouts::{Backend, Module},
 };
+use poulpy_schemes::tfhe::{bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout, circuit_bootstrapping::CircuitBootstrappingKeyLayout};
 
 const LOG_N: u32 = 11;
+const N_GLWE: u32 = 1 << LOG_N;
 const BASE2K: u32 = 17;
 const RANK: u32 = 1;
 const K_GLWE_PT: u32 = 3; //u8::BITS;
@@ -137,5 +139,53 @@ impl<B: Backend> CryptographicParameters<B> {
 
     pub fn dnum_ggsw(&self) -> Dnum {
         self.k_ggsw_addr().div_ceil(self.basek()).into()
+    }
+}
+
+impl<B: Backend> CryptographicParameters<B> {
+    pub fn cbt_key_layout(&self) -> CircuitBootstrappingKeyLayout {
+        CircuitBootstrappingKeyLayout {
+            layout_brk: BlindRotationKeyLayout {
+                n_glwe: Degree(N_GLWE),
+                n_lwe: Degree(N_GLWE),
+                base2k: Base2K(BASE2K),
+                k: TorusPrecision(5*BASE2K),
+                dnum: Dnum(4),
+                rank: Rank(RANK),
+            },
+            layout_atk: GLWEAutomorphismKeyLayout {
+                n: Degree(N_GLWE),
+                base2k: Base2K(BASE2K),
+                k: TorusPrecision(5*BASE2K),
+                rank: Rank(RANK),
+                dnum: Dnum(4),
+                dsize: Dsize(1),
+            },
+            layout_tsk: GLWETensorKeyLayout {
+                n: Degree(N_GLWE),
+                base2k: Base2K(BASE2K),
+                k: TorusPrecision(5*BASE2K),
+                rank: Rank(RANK),
+                dnum: Dnum(4),
+                dsize: Dsize(1),
+            },
+        }
+    }
+
+    pub fn glwe_to_lwe_key_layout(&self) -> GLWEToLWEKeyLayout {
+        GLWEToLWEKeyLayout {
+            n: Degree(N_GLWE),
+            base2k: Base2K(BASE2K),
+            k: TorusPrecision(4*BASE2K),
+            rank_in: Rank(RANK),
+            dnum: Dnum(3),
+        }
+    }
+
+    pub fn bdd_key_layout(&self) -> BDDKeyLayout {
+        BDDKeyLayout {
+            cbt: self.cbt_key_layout(),
+            ks: self.glwe_to_lwe_key_layout(),
+        }
     }
 }
