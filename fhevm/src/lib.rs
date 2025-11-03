@@ -1,13 +1,24 @@
-pub mod interpreter;
+pub mod address_conversion;
+pub mod arithmetic;
+pub(crate) mod codegen;
 pub mod instructions;
+pub mod interpreter;
+pub mod parameters;
 pub mod ram;
+pub mod store;
 
 // Re-export the main functionality
-pub use interpreter::*;
 pub use instructions::*;
+pub use interpreter::*;
+use poulpy_core::layouts::{
+    Base2K, Degree, Dnum, Dsize, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout,
+    GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
+};
+use poulpy_schemes::tfhe::{
+    bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout,
+    circuit_bootstrapping::CircuitBootstrappingKeyLayout,
+};
 pub use ram::*;
-use poulpy_core::layouts::{Base2K, Degree, Dnum, Dsize, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision};
-use poulpy_schemes::tfhe::{bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout, circuit_bootstrapping::CircuitBootstrappingKeyLayout};
 
 const LOG_N: u32 = 12;
 const N_GLWE: u32 = 1 << LOG_N;

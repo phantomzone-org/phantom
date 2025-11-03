@@ -7,10 +7,11 @@ use poulpy_backend::FFT64Avx as BackendImpl;
 use poulpy_backend::FFT64Ref as BackendImpl;
 
 use poulpy_core::{
-    GLWEDecrypt, GLWEEncryptSk, ScratchTakeCore,
     layouts::{
-        GLWE, GLWEInfos, GLWELayout, GLWEPlaintext, GLWESecret, LWEInfos, LWESecret, prepared::GLWESecretPrepared
+        prepared::GLWESecretPrepared, GLWEInfos, GLWELayout, GLWEPlaintext, GLWESecret, LWEInfos,
+        LWESecret, GLWE,
     },
+    GLWEDecrypt, GLWEEncryptSk, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ScratchOwnedAlloc, ScratchOwnedBorrow, ScratchTakeBasic},
@@ -18,9 +19,15 @@ use poulpy_hal::{
     source::Source,
 };
 
-use poulpy_schemes::tfhe::{bdd_arithmetic::{BDDKey, BDDKeyPrepared, FheUint}, blind_rotation::CGGI};
+use fhevm::{
+    Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram,
+    TEST_BDD_KEY_LAYOUT,
+};
+use poulpy_schemes::tfhe::{
+    bdd_arithmetic::{BDDKey, BDDKeyPrepared, FheUint},
+    blind_rotation::CGGI,
+};
 use rand_core::RngCore;
-use fhevm::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram, TEST_BDD_KEY_LAYOUT};
 
 fn cast_u8_to_signed(value: u8, bit_length: usize) -> i64 {
     assert!(
@@ -174,7 +181,6 @@ fn test_fhe_ram_read() {
             (params.k_glwe_pt().as_usize() as f64 + 1.0)
         );
     });
-
 }
 
 #[test]
@@ -210,9 +216,17 @@ fn test_fhe_ram_read_to_fheuint() {
     sk_lwe.fill_zero();
 
     let mut bdd_key: BDDKey<Vec<u8>, CGGI> = BDDKey::alloc_from_infos(&TEST_BDD_KEY_LAYOUT);
-    bdd_key.encrypt_sk(params.module(), &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe, scratch.borrow());
+    bdd_key.encrypt_sk(
+        params.module(),
+        &sk_lwe,
+        &sk_glwe,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
 
-    let mut bdd_key_prepared: BDDKeyPrepared<Vec<u8>, CGGI, BackendImpl> = BDDKeyPrepared::alloc_from_infos(params.module(), &TEST_BDD_KEY_LAYOUT);
+    let mut bdd_key_prepared: BDDKeyPrepared<Vec<u8>, CGGI, BackendImpl> =
+        BDDKeyPrepared::alloc_from_infos(params.module(), &TEST_BDD_KEY_LAYOUT);
     bdd_key_prepared.prepare(params.module(), &bdd_key, scratch.borrow());
 
     let keys: EvaluationKeys<Vec<u8>> =
@@ -261,17 +275,17 @@ fn test_fhe_ram_read_to_fheuint() {
 
     // Reads from the FHE-RAM
     let start: Instant = Instant::now();
-    let ct_fheuint: FheUint<Vec<u8>, u32> = ram.read_to_fheuint(&addr, &keys_prepared, &bdd_key_prepared);
+    let ct_fheuint: FheUint<Vec<u8>, u32> =
+        ram.read_to_fheuint(&addr, &keys_prepared, &bdd_key_prepared);
     let duration: std::time::Duration = start.elapsed();
     println!("READ Elapsed time: {} ms", duration.as_millis());
 
-    let decrypted_value: u32 = ct_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let decrypted_value: u32 =
+        ct_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
     // println!("decrypted_value: {}", decrypted_value);
     // println!("should be: {:?}", &data[idx as usize * ws..(idx as usize + 1) * ws]);
 
     // TODO: put the correct assertion
-    
-
 }
 
 #[test]

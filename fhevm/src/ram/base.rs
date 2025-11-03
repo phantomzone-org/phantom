@@ -81,8 +81,8 @@ impl Base2D {
     }
 }
 
-pub fn get_base_2d(value: u32, base: Vec<u8>) -> Base2D {
-    let mut out = Vec::new();
+pub fn get_base_2d(value: u32, base: &Vec<u8>) -> Base2D {
+    let mut out: Vec<Base1D> = Vec::new();
     let mut value_bit_size = 32 - (value - 1).leading_zeros();
 
     while value_bit_size != 0 {
@@ -117,7 +117,7 @@ mod tests {
         let base1 = Base1D(vec![4, 4, 4]); // 3 * 4 = 12 bits
         assert_eq!(base1.max(), 1 << 12); // 2^12 = 4096
 
-        let base2 = Base1D(vec![8, 8]); // 2 * 8 = 16 bits  
+        let base2 = Base1D(vec![8, 8]); // 2 * 8 = 16 bits
         assert_eq!(base2.max(), 1 << 16); // 2^16 = 65536
 
         let base3 = Base1D(vec![12]); // 1 * 12 = 12 bits
@@ -191,11 +191,11 @@ mod tests {
         assert_eq!(base.gap(log_n), 1);
 
         let base2 = Base1D(vec![6, 6]); // 12 bits total
-        // gap = 12 >> 12 = 0, result = 1
+                                        // gap = 12 >> 12 = 0, result = 1
         assert_eq!(base2.gap(log_n), 1);
 
         let base3 = Base1D(vec![3, 3, 3, 3]); // 12 bits total
-        // gap = 12 >> 12 = 0, result = 1
+                                              // gap = 12 >> 12 = 0, result = 1
         assert_eq!(base3.gap(log_n), 1);
     }
 
@@ -266,7 +266,7 @@ mod tests {
         // Test with simple case
         let base = vec![4, 4, 4]; // 12 bits
         let value = 1000u32; // Fits in 12 bits
-        let base2d = get_base_2d(value, base);
+        let base2d = get_base_2d(value, &base);
 
         // Should create a single Base1D with the decomposition
         assert_eq!(base2d.0.len(), 1);
@@ -276,7 +276,7 @@ mod tests {
         // Test with larger value requiring multiple Base1D
         let base2 = vec![4, 4]; // 8 bits per Base1D
         let value2 = 1000u32; // Requires 10 bits, so needs 2 Base1D instances
-        let base2d_2 = get_base_2d(value2, base2);
+        let base2d_2 = get_base_2d(value2, &base2);
 
         // Should create multiple Base1D instances
         assert!(base2d_2.0.len() >= 1);

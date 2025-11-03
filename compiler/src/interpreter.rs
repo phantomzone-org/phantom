@@ -5,20 +5,27 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    Interpreter,
     instructions::{Instruction, InstructionsParser},
-//     interpreter::Interpreter,
-//     parameters::Parameters,
+    //     interpreter::Interpreter,
+    //     parameters::Parameters,
+    Interpreter,
 };
 use itertools::Itertools;
 
-use fhe_ram::{Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram};
+use fhe_ram::{
+    Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram,
+};
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{
-    prepared::GLWESecretPrepared, Degree, GLWEInfos, GLWESecret, GetDegree, LWELayout, LWEPlaintextLayout, LWESecret
+    prepared::GLWESecretPrepared, Degree, GLWEInfos, GLWESecret, GetDegree, LWELayout,
+    LWEPlaintextLayout, LWESecret,
 };
 
-use poulpy_hal::{api::{ScratchOwnedAlloc, ScratchOwnedBorrow}, layouts::ScratchOwned, source::Source};
+use poulpy_hal::{
+    api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
+    layouts::ScratchOwned,
+    source::Source,
+};
 use testvm::TestVM;
 
 mod testvm;
@@ -226,7 +233,6 @@ impl Phantom {
             })
             .for_each(|i| parser.add(i));
 
-
         // setup RAM
         let ram_offset = self.boot_ram.offset;
         assert!(self.boot_ram.size % 4 == 0);
@@ -255,11 +261,12 @@ impl Phantom {
         let params = CryptographicParameters::<BackendImpl>::new();
 
         let seed_xs: [u8; 32] = [0u8; 32];
-    
+
         let mut source_xs: Source = Source::new(seed_xs);
-    
+
         // Generates a new secret-key along with the public evaluation keys.
-        let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+        let mut sk_glwe: GLWESecret<Vec<u8>> =
+            GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
         sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
 
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
@@ -267,7 +274,8 @@ impl Phantom {
 
         let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
 
-        let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+        let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
+            GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_glwe_prepared.prepare(params.module(), &sk_glwe);
 
         interpreter.init_pc(&sk_glwe_prepared);

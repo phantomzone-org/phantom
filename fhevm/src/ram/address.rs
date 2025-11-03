@@ -5,11 +5,11 @@ use poulpy_hal::{
 };
 
 use poulpy_core::{
-    GGSWEncryptSk, ScratchTakeCore,
     layouts::{GGSWInfos, GLWEInfos, GLWESecret, GLWESecretPreparedFactory, LWEInfos},
+    GGSWEncryptSk, ScratchTakeCore,
 };
 
-use crate::{Base2D, Coordinate, Parameters};
+use crate::{parameters::CryptographicParameters, Base2D, Coordinate};
 
 /// [Address] stores GGSW(X^{addr}) in decomposed
 /// form. That is, given addr = prod X^{a_i}, then
@@ -55,8 +55,11 @@ impl<D: Data> GGSWInfos for Address<D> {
 
 impl Address<Vec<u8>> {
     /// Allocates a new [Address].
-    pub fn alloc_from_params<B: Backend>(params: &Parameters<B>) -> Self {
-        Self::alloc_from_infos(&params.ggsw_infos(), &params.base2d())
+    pub fn alloc_from_params<B: Backend>(
+        params: &CryptographicParameters<B>,
+        base_2d: &Base2D,
+    ) -> Self {
+        Self::alloc_from_infos(&params.ggsw_infos(), base_2d)
     }
 
     pub fn alloc_from_infos<A>(infos: &A, base_2d: &Base2D) -> Self
@@ -73,7 +76,7 @@ impl Address<Vec<u8>> {
         }
     }
 
-    pub fn encrypt_sk_tmp_bytes<B: Backend>(params: &Parameters<B>) -> usize
+    pub fn encrypt_sk_tmp_bytes<B: Backend>(params: &CryptographicParameters<B>) -> usize
     where
         Module<B>: GLWESecretPreparedFactory<B> + GGSWEncryptSk<B>,
     {
@@ -85,7 +88,7 @@ impl<D: DataMut> Address<D> {
     /// Encrypts an u32 value into an [Address] under the provided secret.
     pub fn encrypt_sk<B: Backend>(
         &mut self,
-        params: &Parameters<B>,
+        params: &CryptographicParameters<B>,
         value: u32,
         sk: &GLWESecret<Vec<u8>>,
         source_xa: &mut Source,

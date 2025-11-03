@@ -6,14 +6,14 @@ use poulpy_hal::{
 };
 
 use poulpy_core::{
-    GGSWAutomorphism, GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
     layouts::{
-        GGLWELayout, GGSW, GGSWInfos, GGSWLayout, GLWE, GLWEInfos, GLWELayout, GLWESecretPrepared,
-        GLWESecretPreparedFactory, GLWESecretToRef, LWEInfos,
+        GGLWELayout, GGSWInfos, GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPrepared,
+        GLWESecretPreparedFactory, GLWESecretToRef, LWEInfos, GGSW, GLWE,
     },
+    GGSWAutomorphism, GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
 };
 
-use crate::{Base1D, Parameters};
+use crate::{parameters::CryptographicParameters, Base1D};
 
 /// Coordinate stores Vec<GGSW(X^a_i)> such that prod X^{a_i} = X^a.
 /// This provides a second decomposition over the one in base N to
@@ -72,7 +72,9 @@ impl Coordinate<Vec<u8>> {
     }
 
     /// Scratch space required to invert a coordinate, i.e. map GGSW(X^{i}) to GGSW(X^{-i}).
-    pub(crate) fn prepare_inv_scratch_space<B: Backend>(params: &Parameters<B>) -> usize
+    pub(crate) fn prepare_inv_scratch_space<B: Backend>(
+        params: &CryptographicParameters<B>,
+    ) -> usize
     where
         Module<B>: GGSWAutomorphism<B>,
     {
@@ -85,7 +87,7 @@ impl Coordinate<Vec<u8>> {
     }
 
     /// Scratch space required to evaluate GGSW(X^{i}) * GLWE(m).
-    pub(crate) fn product_scratch_space<B: Backend>(params: &Parameters<B>) -> usize
+    pub(crate) fn product_scratch_space<B: Backend>(params: &CryptographicParameters<B>) -> usize
     where
         Module<B>: GLWEExternalProduct<B>,
     {
@@ -95,7 +97,7 @@ impl Coordinate<Vec<u8>> {
         GLWE::external_product_tmp_bytes(module, glwe_infos, glwe_infos, ggsw_infos)
     }
 
-    pub(crate) fn encrypt_sk_tmp_bytes<B: Backend>(params: &Parameters<B>) -> usize
+    pub(crate) fn encrypt_sk_tmp_bytes<B: Backend>(params: &CryptographicParameters<B>) -> usize
     where
         Module<B>: GLWESecretPreparedFactory<B> + GGSWEncryptSk<B>,
     {

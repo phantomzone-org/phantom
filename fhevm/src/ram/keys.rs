@@ -6,16 +6,16 @@ use poulpy_hal::{
 use std::collections::HashMap;
 
 use poulpy_core::{
+    layouts::{
+        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory,
+        GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared,
+        GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWE,
+    },
     GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution,
     ScratchTakeCore,
-    layouts::{
-        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory, GLWE,
-        GLWEAutomorphismKey, GLWEAutomorphismKeyPrepared, GLWEAutomorphismKeyPreparedFactory,
-        GLWEInfos, GLWESecretToRef,
-    },
 };
 
-use crate::Parameters;
+use crate::parameters::CryptographicParameters;
 
 /// Struct storing the FHE evaluation keys for the read/write on FHE-RAM.
 pub struct EvaluationKeys<D: Data> {
@@ -30,8 +30,20 @@ pub struct EvaluationKeysPrepared<D: Data, B: Backend> {
     pub(crate) tsk_ggsw_inv: GGLWEToGGSWKeyPrepared<D, B>,
 }
 
+impl<D: DataRef, BE: Backend> GLWEAutomorphismKeyHelper<GLWEAutomorphismKeyPrepared<D, BE>, BE>
+    for EvaluationKeysPrepared<D, BE>
+{
+    fn automorphism_key_infos(&self) -> GGLWELayout {
+        self.atk_glwe.automorphism_key_infos()
+    }
+
+    fn get_automorphism_key(&self, k: i64) -> Option<&GLWEAutomorphismKeyPrepared<D, BE>> {
+        self.atk_glwe.get_automorphism_key(k)
+    }
+}
+
 impl<B: Backend> EvaluationKeysPrepared<Vec<u8>, B> {
-    pub fn alloc(params: &Parameters<B>) -> Self
+    pub fn alloc(params: &CryptographicParameters<B>) -> Self
     where
         Module<B>: GLWETrace<B> + GLWEAutomorphismKeyPreparedFactory<B>,
     {
@@ -133,7 +145,7 @@ impl EvaluationKeys<Vec<u8>> {
 
 impl EvaluationKeys<Vec<u8>> {
     pub fn encrypt_sk<S, BE: Backend>(
-        params: &Parameters<BE>,
+        params: &CryptographicParameters<BE>,
         sk: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,

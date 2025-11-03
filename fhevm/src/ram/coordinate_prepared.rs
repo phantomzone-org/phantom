@@ -1,14 +1,14 @@
 use poulpy_hal::{
     api::ModuleN,
-    layouts::{Backend, Data, DataMut, DataRef, Module, Scratch},
+    layouts::{Backend, Data, DataMut, DataRef, Scratch},
 };
 
 use poulpy_core::{
-    GGSWAutomorphism, GLWEExternalProduct, ScratchTakeCore,
     layouts::{
         GGLWEInfos, GGLWEPreparedToRef, GGLWEToGGSWKeyPreparedToRef, GGSWInfos, GGSWPrepared,
         GGSWPreparedFactory, GLWEInfos, GLWEToMut, GLWEToRef, GetGaloisElement, LWEInfos,
     },
+    GGSWAutomorphism, GLWEExternalProduct, ScratchTakeCore,
 };
 
 use crate::{Base1D, Coordinate};
@@ -18,13 +18,11 @@ pub(crate) struct CoordinatePrepared<D: Data, B: Backend> {
     pub(crate) base1d: Base1D,
 }
 
-impl<B: Backend> CoordinatePrepared<Vec<u8>, B>
-where
-    Module<B>: GGSWPreparedFactory<B>,
-{
-    pub(crate) fn alloc_bytes<A>(module: &Module<B>, infos: &A, size: usize) -> usize
+impl<B: Backend> CoordinatePrepared<Vec<u8>, B> {
+    pub(crate) fn alloc_bytes<M, A>(module: &M, infos: &A, size: usize) -> usize
     where
         A: GGSWInfos,
+        M: GGSWPreparedFactory<B>,
     {
         size * GGSWPrepared::bytes_of_from_infos(module, infos)
     }
@@ -97,17 +95,15 @@ where
     }
 }
 
-impl<DM: DataMut, B: Backend> CoordinatePrepared<DM, B>
-where
-    Module<B>: GGSWPreparedFactory<B>,
-{
-    pub(crate) fn prepare<DR: DataRef>(
+impl<DM: DataMut, B: Backend> CoordinatePrepared<DM, B> {
+    pub(crate) fn prepare<M, DR: DataRef>(
         &mut self,
-        module: &Module<B>,
+        module: &M,
         other: &Coordinate<DR>,
         scratch: &mut Scratch<B>,
     ) where
         DR: DataRef,
+        M: GGSWPreparedFactory<B>,
     {
         assert_eq!(self.base1d, other.base1d);
         for (el_prep, el) in self.value.iter_mut().zip(other.value.iter()) {
@@ -161,14 +157,10 @@ impl<D: DataRef, B: Backend> CoordinatePrepared<D, B> {
     }
 
     /// Evaluates GLWE(m) * GGSW(X^i).
-    pub(crate) fn product_inplace<R>(
-        &self,
-        module: &Module<B>,
-        res: &mut R,
-        scratch: &mut Scratch<B>,
-    ) where
+    pub(crate) fn product_inplace<M, R>(&self, module: &M, res: &mut R, scratch: &mut Scratch<B>)
+    where
         R: GLWEToMut,
-        Module<B>: GLWEExternalProduct<B>,
+        M: GLWEExternalProduct<B>,
         Scratch<B>: ScratchTakeCore<B>,
     {
         for coordinate in self.value.iter() {

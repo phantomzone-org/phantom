@@ -1,8 +1,8 @@
 use poulpy_core::{
-    GLWEAdd, GLWECopy, GLWERotate, GLWESub, GLWETrace,
     layouts::{
         GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GLWEToMut, GetGaloisElement,
     },
+    GLWEAdd, GLWECopy, GLWERotate, GLWESub, GLWETrace,
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN},
@@ -149,11 +149,11 @@ fn vm_select_store_fft64_ref() {
 
     use poulpy_backend::FFT64Ref;
     use poulpy_core::{
-        GLWEPacker, GLWERotate,
         layouts::{
             Dnum, Dsize, GGSWLayout, GLWEAutomorphismKey, GLWEAutomorphismKeyLayout,
             GLWEAutomorphismKeyPrepared, GLWELayout, GLWESecret, GLWESecretPrepared,
         },
+        GLWEPacker, GLWERotate,
     };
     use poulpy_hal::{
         api::{ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
