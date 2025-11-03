@@ -53,7 +53,7 @@ impl Interpreter {
 
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
         
-        let params = crate::Parameters::<BackendImpl>::new();
+        let params: Parameters<BackendImpl> = crate::Parameters::<BackendImpl>::new();
 
         let keys: EvaluationKeys<Vec<u8>> =
             EvaluationKeys::encrypt_sk(&params, sk_glwe, &mut source_xa, &mut source_xe);
@@ -85,7 +85,7 @@ impl Interpreter {
         }
     }
 
-    pub fn init_pc(&mut self, sk_glwe_prep: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+    pub fn init_pc(&mut self, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
         let pc_value = 0;
 
         // TODO: set scratch correctly.
@@ -94,14 +94,28 @@ impl Interpreter {
         self.program_counter.encrypt_sk(
             self.params.module(),
             pc_value,
-            sk_glwe_prep,
+            sk_glwe_prepared,
             &mut self.source_xa,
             &mut self.source_xe,
             scratch.borrow(),
         );
     }
 
-    pub fn init_instructions(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, instructions: InstructionsParser) {
+    pub fn set_pc_to(&mut self, pc_value: u32, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+        // TODO: set scratch correctly.
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+
+        self.program_counter.encrypt_sk(
+            self.params.module(),
+            pc_value,
+            sk_glwe_prepared,
+            &mut self.source_xa,
+            &mut self.source_xe,
+            scratch.borrow(),
+        );
+    }    
+
+    pub fn init_instructions(&mut self, sk_glwe: &GLWESecret<Vec<u8>>, instructions: &InstructionsParser) {
         
         let max_addr_imm = self.imm_rom.params.max_addr();
         let max_addr_rs1 = self.rs1_rom.params.max_addr();
@@ -187,11 +201,11 @@ impl Interpreter {
         self.ram.encrypt_sk(&ram_data, &sk_glwe, &mut self.source_xa, &mut self.source_xe);
     }
 
-    pub fn cycle(&mut self, sk_glwe_prepared: &GLWESecretPrepared<Vec<u8>, BackendImpl>) {
+    // TODO: add missing components
+    pub fn read_instruction_components(&mut self) -> (FheUint<Vec<u8>, u32>, FheUint<Vec<u8>, u32>, FheUint<Vec<u8>, u32>, FheUint<Vec<u8>, u32>) {
+        let params = Parameters::<BackendImpl>::new(); // TODO: pass params, instead of hardcoding it
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22); // TODO: Set correct scratch
 
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
-
-        let params = Parameters::<BackendImpl>::new();
         let mut instruction_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
         instruction_address.set_from_fheuint_prepared(self.params.module(), &self.program_counter, scratch.borrow());
 
@@ -200,6 +214,13 @@ impl Interpreter {
         let rs1_fheuint: FheUint<Vec<u8>, u32> = self.rs1_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
         let rs2_fheuint: FheUint<Vec<u8>, u32> = self.rs2_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
         let rd_fheuint: FheUint<Vec<u8>, u32> = self.rd_rom.read_to_fheuint(&instruction_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
+
+        (imm_fheuint, rs1_fheuint, rs2_fheuint, rd_fheuint)
+    }
+
+    pub fn read_registers(&mut self, rs1_fheuint:FheUint<Vec<u8>, u32>, rs2_fheuint:FheUint<Vec<u8>, u32>, rd_fheuint:FheUint<Vec<u8>, u32>) -> (FheUint<Vec<u8>, u32>, FheUint<Vec<u8>, u32>, FheUint<Vec<u8>, u32>) {
+        let params = Parameters::<BackendImpl>::new(); // TODO: pass params, instead of hardcoding it
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22); // TODO: Set correct scratch
 
         let mut rs1_address: Address<Vec<u8>> = Address::alloc_from_params(&params);
         rs1_address.set_from_fheuint(self.params.module(), &rs1_fheuint, &self.bdd_key_prepared, &params.ggsw_infos(), scratch.borrow());
@@ -214,6 +235,193 @@ impl Interpreter {
         let reg_rs2: FheUint<Vec<u8>, u32> = self.registers.read_to_fheuint(&rs2_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
         let reg_rd: FheUint<Vec<u8>, u32> = self.registers.read_to_fheuint(&rd_address, &self.fhe_ram_keys_prepared, &self.bdd_key_prepared);
 
+        (reg_rs1, reg_rs2, reg_rd)
+    }
+
+    pub fn cycle(&mut self) {
+
+        let (imm_fheuint, rs1_fheuint, rs2_fheuint, rd_fheuint) = self.read_instruction_components();
+        let (reg_rs1, reg_rs2, reg_rd) = self.read_registers(rs1_fheuint, rs2_fheuint, rd_fheuint);
       
     }
+}
+
+#[test]
+pub fn test_interpreter_init() {
+    // Initializing cryptographic parameters
+    let params = CryptographicParameters::<BackendImpl>::new();
+
+    let seed_xs: [u8; 32] = [0u8; 32];
+
+    let mut source_xs: Source = Source::new(seed_xs);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
+
+    let interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
+
+    assert_eq!(interpreter.params.basek(), params.basek());
+    assert_eq!(interpreter.params.rank(), params.rank());
+    assert_eq!(interpreter.params.k_evk_trace(), params.k_evk_trace());
+    assert_eq!(interpreter.params.k_evk_ggsw_inv(), params.k_evk_ggsw_inv());
+    assert_eq!(interpreter.params.dnum_ct(), params.dnum_ct());
+    assert_eq!(interpreter.params.dnum_ggsw(), params.dnum_ggsw());
+    assert_eq!(interpreter.params.k_evk_ggsw_inv(), params.k_evk_ggsw_inv());
+    
+}
+
+#[test]
+pub fn test_interpreter_init_pc() {
+    // use poulpy_schemes::tfhe::bdd_arithmetic::{FheUintPreparedDebug, FheUintBlockDebugPrepare};
+
+    let params = CryptographicParameters::<BackendImpl>::new();
+
+    let seed_xs: [u8; 32] = [0u8; 32];
+
+    let mut source_xs: Source = Source::new(seed_xs);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
+
+    let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
+
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+    sk_glwe_prepared.prepare(params.module(), &sk_glwe);
+    interpreter.init_pc(&sk_glwe_prepared);
+
+    // TODO: decrypt the prepared program counter
+    // fheuint_debug can only be initialized from 
+
+}
+
+#[test]
+pub fn test_interpreter_init_one_instruction() {
+    use crate::Instruction;
+
+    let params = CryptographicParameters::<BackendImpl>::new();
+
+    let seed_xs: [u8; 32] = [0u8; 32];
+
+    let mut source_xs: Source = Source::new(seed_xs);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    // sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    sk_glwe.fill_zero();
+
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    // sk_lwe.fill_binary_block(8, &mut source_xs);
+    sk_lwe.fill_zero();
+
+    let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
+
+    let instruction_u32 = 258455;
+    let mut parser = InstructionsParser::new();
+    parser.add(Instruction::new(instruction_u32));
+
+    interpreter.init_instructions(&sk_glwe, &parser);
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+    sk_glwe_prepared.prepare(params.module(), &sk_glwe);
+
+    let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+
+    let instruction = parser.get_raw(0);
+    let correct_imm = instruction.get_immediate();
+    let correct_rs1 = instruction.get_rs1() as u32;
+    let correct_rs2 = instruction.get_rs2() as u32;
+    let correct_rd = instruction.get_rd() as u32;
+
+    interpreter.init_pc(&sk_glwe_prepared);
+    let (imm_fheuint, rs1_fheuint, rs2_fheuint, rd_fheuint) = interpreter.read_instruction_components();
+
+    let dec_rs1 = rs1_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_rs2 = rs2_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_rd = rd_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_imm = imm_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+
+    println!("{} {} {} {}", correct_imm, correct_rs1, correct_rs2, correct_rd);
+    println!("{} {} {} {}", dec_imm, dec_rs1, dec_rs2, dec_rd);
+
+    assert_eq!(correct_imm, dec_imm);
+    assert_eq!(correct_rs1, dec_rs1);
+    assert_eq!(correct_rs2, dec_rs2);
+    assert_eq!(correct_rd, dec_rd);
+
+}
+
+#[test]
+pub fn test_interpreter_init_many_instructions() {
+    use crate::Instruction;
+
+    let params = CryptographicParameters::<BackendImpl>::new();
+
+    let seed_xs: [u8; 32] = [0u8; 32];
+
+    let mut source_xs: Source = Source::new(seed_xs);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
+
+    let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
+
+    let instructions_u32 = vec![
+        258455,
+        33653139,
+        512279,
+        4286644499,
+        66579,
+        10507363,
+        3221229683,
+        8388847,
+        3221229683,
+        791,
+        8585319,
+        259383,
+    ];
+
+    let mut parser = InstructionsParser::new();
+    for inst in instructions_u32.clone() {
+        parser.add(Instruction::new(inst));
+    }
+
+    interpreter.init_instructions(&sk_glwe, &parser);
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> = GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+    sk_glwe_prepared.prepare(params.module(), &sk_glwe);
+
+    let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+
+    for idx in 0..instructions_u32.len() {
+
+        let instruction = parser.get_raw(idx);
+        let correct_imm = instruction.get_immediate();
+        let correct_rs1 = instruction.get_rs1() as u32;
+        let correct_rs2 = instruction.get_rs2() as u32;
+        let correct_rd = instruction.get_rd() as u32;
+
+        interpreter.set_pc_to(idx as u32, &sk_glwe_prepared);
+        let (imm_fheuint, rs1_fheuint, rs2_fheuint, rd_fheuint) = interpreter.read_instruction_components();
+
+        let dec_rs1 = rs1_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+        let dec_rs2 = rs2_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+        let dec_rd = rd_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+        let dec_imm = imm_fheuint.decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+
+        assert_eq!(correct_imm, dec_imm);
+        assert_eq!(correct_rs1, dec_rs1);
+        assert_eq!(correct_rs2, dec_rs2);
+        assert_eq!(correct_rd, dec_rd);
+    }
+
 }

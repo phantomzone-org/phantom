@@ -235,7 +235,7 @@ dependencies = [
  "poulpy-core",
  "poulpy-hal",
  "poulpy-schemes",
- "rand_core 0.9.3",
+ "rand_core",
  "strum",
  "strum_macros",
 ]
