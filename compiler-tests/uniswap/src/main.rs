@@ -1,5 +1,5 @@
 use compiler::{CompileOpts, Phantom};
-use rand::{rng, Rng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
@@ -38,7 +38,7 @@ fn main() {
     let elf_bytes = compiler.build();
     let pz = Phantom::init(elf_bytes);
 
-    let mut rng = rng();
+    let mut rng = StdRng::from_seed([0; 32]);
     let mut pool = Pool {
         t0: rng.random(),
         t1: rng.random(),
@@ -49,7 +49,7 @@ fn main() {
         inp1: rng.random(),
     };
 
-    let MAX_CYCLES = 10;
+    let MAX_CYCLES = 10_000;
 
     let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
     enc_vm.execute();

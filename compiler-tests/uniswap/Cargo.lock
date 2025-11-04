@@ -147,7 +147,6 @@ name = "compiler"
 version = "0.1.0"
 dependencies = [
  "elf",
- "fhe-ram",
  "fhevm",
  "itertools 0.14.0",
  "poulpy-backend",
@@ -233,30 +232,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4445909572dbd556c457c849c4ca58623d84b27c8fff1e74b0b4227d8b90d17b"
 
 [[package]]
-name = "fhe-ram"
-version = "0.1.0"
-dependencies = [
- "itertools 0.14.0",
- "poulpy-backend",
- "poulpy-core",
- "poulpy-hal",
- "poulpy-schemes",
- "rand_core 0.9.3",
- "strum",
- "strum_macros",
-]
-
-[[package]]
 name = "fhevm"
 version = "0.1.0"
 dependencies = [
- "fhe-ram",
  "itertools 0.14.0",
  "poulpy-backend",
  "poulpy-core",
  "poulpy-hal",
  "poulpy-schemes",
- "rand_core 0.6.4",
+ "rand_core",
+ "strum",
+ "strum_macros",
 ]
 
 [[package]]
@@ -441,7 +427,7 @@ dependencies = [
  "poulpy-hal",
  "rand",
  "rand_chacha",
- "rand_core 0.9.3",
+ "rand_core",
  "rand_distr",
  "rug",
 ]
@@ -472,7 +458,7 @@ dependencies = [
  "once_cell",
  "rand",
  "rand_chacha",
- "rand_core 0.9.3",
+ "rand_core",
  "rand_distr",
  "rug",
 ]
@@ -524,7 +510,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6db2770f06117d490610c7488547d543617b21bfa07796d7a12f6f1bd53850d1"
 dependencies = [
  "rand_chacha",
- "rand_core 0.9.3",
+ "rand_core",
 ]
 
 [[package]]
@@ -534,14 +520,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3022b5f1df60f26e1ffddd6c66e8aa15de382ae63b3a0c1bfc0e4d3e3f325cb"
 dependencies = [
  "ppv-lite86",
- "rand_core 0.9.3",
+ "rand_core",
 ]
-
-[[package]]
-name = "rand_core"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 
 [[package]]
 name = "rand_core"

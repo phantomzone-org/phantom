@@ -141,7 +141,6 @@ name = "compiler"
 version = "0.1.0"
 dependencies = [
  "elf",
- "fhe-ram",
  "fhevm",
  "itertools 0.14.0",
  "poulpy-backend",
@@ -225,20 +224,6 @@ name = "elf"
 version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4445909572dbd556c457c849c4ca58623d84b27c8fff1e74b0b4227d8b90d17b"
-
-[[package]]
-name = "fhe-ram"
-version = "0.1.0"
-dependencies = [
- "itertools 0.14.0",
- "poulpy-backend",
- "poulpy-core",
- "poulpy-hal",
- "poulpy-schemes",
- "rand_core",
- "strum",
- "strum_macros",
-]
 
 [[package]]
 name = "fhevm"

@@ -4,7 +4,7 @@ MEMORY
 {
     /* Define different memory regions for code and data memory */
     FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 20K  /* Code memory */
-    RAM   (rwx) : ORIGIN = 0x3E800, LENGTH = 16K /* Data memory */
+    RAM   (rwx) : ORIGIN = 0x00000000 LENGTH = 16K /* Data memory */
 }
 
 SECTIONS
@@ -50,8 +50,8 @@ SECTIONS
     . = ALIGN(4);
 
     /* Must be called __global_pointer$ for linker relaxations to work.
-       
-       Must point to address where .sdata starts offset by 2048 bytes 
+
+       Must point to address where .sdata starts offset by 2048 bytes
        for best optimisation
 
        ref: https://gnu-mcu-eclipse.github.io/arch/riscv/programmer/#the-gp-global-pointer-register
