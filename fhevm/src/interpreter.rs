@@ -31,6 +31,10 @@ pub struct Interpreter<BE: Backend> {
     pub rs1_rom: Ram,
     pub rs2_rom: Ram,
     pub rd_rom: Ram,
+    pub rdu_rom: Ram,
+    pub mu_rom: Ram,
+    pub pcu_rom: Ram,
+
     pub registers: Ram,
     pub ram: Ram,
     pub ram_offset: u32,
@@ -45,6 +49,9 @@ pub struct Interpreter<BE: Backend> {
     pub rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,  // Registers[RS1]
     pub rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,  // Registers[RS2]
     pub imm_val_fhe_uint: FheUint<Vec<u8>, u32>,  // IMM
+    pub rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,  // RDU
+    pub mu_val_fhe_uint: FheUint<Vec<u8>, u32>,  // MU
+    pub pcu_val_fhe_uint: FheUint<Vec<u8>, u32>,  // PCU
 }
 
 impl<BE: Backend> Interpreter<BE> {
@@ -58,12 +65,16 @@ impl<BE: Backend> Interpreter<BE> {
         Module<BE>: FheUintBlocksPreparedFactory<u32, BE>,
     {
         let imm_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let rs1_rom: Ram = Ram::new(params, 5, &decomp_n, rom_size);
-        let rs2_rom: Ram = Ram::new(params, 5, &decomp_n, rom_size);
-        let rd_rom: Ram = Ram::new(params, 5, &decomp_n, rom_size);
+        let rs1_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let rs2_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let rd_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+
+        let rdu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let mu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let pcu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
 
         let registers: Ram = Ram::new(params, 32, &decomp_n, 32);
-        let ram: Ram = Ram::new(params, 8, &decomp_n, ram_size);
+        let ram: Ram = Ram::new(params, 32, &decomp_n, ram_size);
 
         let base_2d_register: Base2D = get_base_2d(32, &[5].to_vec());
         let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
@@ -73,6 +84,10 @@ impl<BE: Backend> Interpreter<BE> {
             rs1_rom,
             rs2_rom,
             rd_rom,
+            rdu_rom,
+            mu_rom,
+            pcu_rom,
+
             registers,
             ram: ram,
             ram_offset: 0,
@@ -86,7 +101,11 @@ impl<BE: Backend> Interpreter<BE> {
             rd_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs1_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs2_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
+            
             imm_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
+            rdu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
+            mu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
+            pcu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
         }
     }
 
@@ -124,17 +143,28 @@ impl<BE: Backend> Interpreter<BE> {
         let max_addr_rs1: usize = self.rs1_rom.max_addr();
         let max_addr_rs2: usize = self.rs2_rom.max_addr();
         let max_addr_rd: usize = self.rd_rom.max_addr();
+        let max_addr_rdu: usize = self.rdu_rom.max_addr();
+        let max_addr_mu: usize = self.mu_rom.max_addr();
+        let max_addr_pcu: usize = self.pcu_rom.max_addr();
 
         let mut data_ram_rs1: Vec<u32> = vec![0u32; max_addr_rs1];
         let mut data_ram_rs2: Vec<u32> = vec![0u32; max_addr_rs2];
         let mut data_ram_rd: Vec<u32> = vec![0u32; max_addr_rd];
         let mut data_ram_imm: Vec<u32> = vec![0u32; max_addr_imm];
+        let mut data_ram_rdu: Vec<u32> = vec![0u32; max_addr_rdu];
+        let mut data_ram_mu: Vec<u32> = vec![0u32; max_addr_mu];
+        let mut data_ram_pcu: Vec<u32> = vec![0u32; max_addr_pcu];
+
 
         for i in 0..instructions.instructions.len() {
             data_ram_rs1[i] = instructions.get_raw(i).get_rs1_or_zero() as u32;
             data_ram_rs2[i] = instructions.get_raw(i).get_rs2_or_zero() as u32;
             data_ram_rd[i] = instructions.get_raw(i).get_rd_or_zero() as u32;
             data_ram_imm[i] = instructions.get_raw(i).get_immediate() as u32;
+            let (rdu, mu, pcu) = instructions.get_raw(i).get_opid();
+            data_ram_rdu[i] = rdu as u32;
+            data_ram_mu[i] = mu as u32;
+            data_ram_pcu[i] = pcu as u32;
         }
 
         self.rs1_rom.encrypt_sk(
@@ -169,6 +199,31 @@ impl<BE: Backend> Interpreter<BE> {
             source_xe,
             scratch,
         );
+
+        self.rdu_rom.encrypt_sk(
+            module,
+            &data_ram_rdu,
+            sk_prepared,
+            source_xa,
+            source_xe,
+            scratch,
+        );
+        self.mu_rom.encrypt_sk(
+            module,
+            &data_ram_mu,
+            sk_prepared,
+            source_xa,
+            source_xe,
+            scratch,
+        );
+        self.pcu_rom.encrypt_sk(
+            module,
+            &data_ram_pcu,
+            sk_prepared,
+            source_xa,
+            source_xe,
+            scratch,
+        );                        
     }
 
     pub fn init_ram_offset(&mut self, ram_offset: u32) {
@@ -211,17 +266,11 @@ impl<BE: Backend> Interpreter<BE> {
             .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
-    // TODO: add missing components
     pub fn read_instruction_components<M, K, H>(
         &mut self,
         module: &M,
         key: &H,
         scratch: &mut Scratch<BE>,
-    ) -> (
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
     )
     where
         M: FHEUintBlocksToAddress<u32, BE>
@@ -240,6 +289,30 @@ impl<BE: Backend> Interpreter<BE> {
         self.imm_rom.read_to_fheuint(
             module,
             &mut self.imm_val_fhe_uint,
+            &self.pc_addr,
+            key,
+            scratch,
+        );
+
+        self.rdu_rom.read_to_fheuint(
+            module,
+            &mut self.rdu_val_fhe_uint,
+            &self.pc_addr,
+            key,
+            scratch,
+        );
+
+        self.mu_rom.read_to_fheuint(
+            module,
+            &mut self.mu_val_fhe_uint,
+            &self.pc_addr,
+            key,
+            scratch,
+        );
+
+        self.pcu_rom.read_to_fheuint(
+            module,
+            &mut self.pcu_val_fhe_uint,
             &self.pc_addr,
             key,
             scratch,
@@ -266,13 +339,6 @@ impl<BE: Backend> Interpreter<BE> {
             key,
             scratch,
         );
-
-        (
-            &self.imm_val_fhe_uint,
-            &self.rs1_addr_fhe_uint,
-            &self.rs2_addr_fhe_uint,
-            &self.rd_addr_fhe_uint,
-        )
     }
 
     pub fn read_registers<M, DK, H, K, BRA>(

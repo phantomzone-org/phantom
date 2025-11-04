@@ -51,6 +51,10 @@ pub fn test_interpreter_init_one_instruction() {
     let correct_rs1: u32 = instruction.get_rs1_or_zero() as u32;
     let correct_rs2: u32 = instruction.get_rs2_or_zero() as u32;
     let correct_rd: u32 = instruction.get_rd_or_zero() as u32;
+    let (rdu, mu, pcu) = instruction.get_opid();
+    let correct_rdu: u32 = rdu as u32;
+    let correct_mu: u32 = mu as u32;
+    let correct_pcu: u32 = pcu as u32;
 
     interpreter.pc_encrypt_sk(
         module,
@@ -86,16 +90,32 @@ pub fn test_interpreter_init_one_instruction() {
             .imm_val_fhe_uint
             .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
 
+    let dec_rdu: u32 =
+        interpreter
+            .rdu_val_fhe_uint
+            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_mu: u32 =
+        interpreter
+            .mu_val_fhe_uint
+            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_pcu: u32 =
+        interpreter
+            .pcu_val_fhe_uint
+            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    
     println!(
-        "{} {} {} {}",
-        correct_imm, correct_rs1, correct_rs2, correct_rd
+        "{} {} {} {} {} {} {}",
+        correct_imm, correct_rs1, correct_rs2, correct_rd, correct_rdu, correct_mu, correct_pcu
     );
-    println!("{} {} {} {}", dec_imm, dec_rs1, dec_rs2, dec_rd);
+    println!("{} {} {} {} {} {} {}", dec_imm, dec_rs1, dec_rs2, dec_rd, dec_rdu, dec_mu, dec_pcu);
 
     assert_eq!(correct_imm, dec_imm);
     assert_eq!(correct_rs1, dec_rs1);
     assert_eq!(correct_rs2, dec_rs2);
     assert_eq!(correct_rd, dec_rd);
+    assert_eq!(correct_rdu, dec_rdu);
+    assert_eq!(correct_mu, dec_mu);
+    assert_eq!(correct_pcu, dec_pcu);
 }
 
 #[test] //wip, not working for pc > 0
@@ -121,7 +141,8 @@ pub fn test_interpreter_init_many_instructions() {
 
     let instructions_u32 = vec![
         258455,
-        // 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
+        // 33653139,
+        // 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
         // 791, 8585319, 259383,
     ];
 
