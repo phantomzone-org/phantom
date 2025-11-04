@@ -73,8 +73,6 @@ fn test_fhe_ram() {
         *i = source.next_u32() & mask;
     }
 
-    println!("data: {:?}", &data);
-
     // Populates the FHE-RAM
     ram.encrypt_sk(
         params.module(),
@@ -89,7 +87,7 @@ fn test_fhe_ram() {
     let mut addr: Address<Vec<u8>> = Address::alloc_from_params(&params, ram.base_2d());
 
     // Random index
-    let idx: u32 = 0;
+    let idx: u32 = source.next_u32() % max_addr as u32;
 
     // Encrypts random index
     addr.encrypt_sk(
@@ -234,8 +232,6 @@ fn test_fhe_ram_read_to_fheuint() {
     for i in data.iter_mut() {
         *i = source.next_u32() & mask;
     }
-
-    println!("data: {:?}", &data);
 
     // Populates the FHE-RAM
     ram.encrypt_sk(
