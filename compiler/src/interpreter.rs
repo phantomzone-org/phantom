@@ -5,15 +5,8 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    instructions::{Instruction, InstructionsParser},
-    //     interpreter::Interpreter,
-    //     parameters::Parameters,
-    Interpreter,
-};
-use itertools::Itertools;
-
-use fhe_ram::{
-    Address, CryptographicParameters, EvaluationKeys, EvaluationKeysPrepared, Parameters, Ram,
+    Interpreter, instructions::{Instruction, InstructionsParser},
+    parameters::{CryptographicParameters, DECOMP_N}
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{
@@ -69,7 +62,7 @@ struct OutputInfo {
 
 pub struct EncryptedVM {
     // params: Parameters,
-    interpreter: Interpreter,
+    interpreter: Interpreter<BackendImpl>,
     output_info: OutputInfo,
     ram_offset: usize,
     max_cycles: usize,
@@ -259,10 +252,12 @@ impl Phantom {
 
         // Initializing cryptographic parameters
         let params = CryptographicParameters::<BackendImpl>::new();
+        let module = params.module();
 
-        let seed_xs: [u8; 32] = [0u8; 32];
-
-        let mut source_xs: Source = Source::new(seed_xs);
+        let mut source_xs: Source = Source::new([0u8; 32]);
+        let mut source_xa: Source = Source::new([0u8; 32]);
+        let mut source_xe: Source = Source::new([0u8; 32]);
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
 
         // Generates a new secret-key along with the public evaluation keys.
         let mut sk_glwe: GLWESecret<Vec<u8>> =
@@ -272,19 +267,24 @@ impl Phantom {
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
         sk_lwe.fill_binary_block(8, &mut source_xs);
 
-        let mut interpreter = Interpreter::new(&sk_lwe, &sk_glwe);
+        let mut interpreter = Interpreter::new(
+            &params,
+            self.boot_rom.size,
+            self.boot_ram.size,
+            DECOMP_N.into(),
+        );
 
-        let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
+        let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
             GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
-        sk_glwe_prepared.prepare(params.module(), &sk_glwe);
+        sk_prepared.prepare(params.module(), &sk_glwe);
 
-        interpreter.init_pc(&sk_glwe_prepared);
-        interpreter.instructions_encrypt_sk(&sk_glwe, &parser);
-        interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
-        interpreter.ram_encrypt_sk(&sk_glwe, &ram_with_input);
-        interpreter.init_ram_offset(self.boot_ram.offset as u32);
+        interpreter.pc_encrypt_sk(module, 0, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.instructions_encrypt_sk(module, &parser, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.init_registers(module, &vec![0u32; 32], &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.ram_encrypt_sk(module, &vec![0u32; self.boot_ram.size], &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.init_ram_offset(module, self.boot_ram.offset as u32, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
 
-        interpreter.cycle();
+        // interpreter.cycle();
 
         EncryptedVM {
             // params: params,
