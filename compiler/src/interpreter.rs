@@ -281,7 +281,7 @@ impl Phantom {
         interpreter.init_pc(&sk_glwe_prepared);
         interpreter.instructions_encrypt_sk(&sk_glwe, &parser);
         interpreter.init_registers(&sk_glwe, &vec![0u32; 32]);
-        interpreter.init_ram(&sk_glwe, &ram_with_input);
+        interpreter.ram_encrypt_sk(&sk_glwe, &ram_with_input);
         interpreter.init_ram_offset(self.boot_ram.offset as u32);
 
         interpreter.cycle();

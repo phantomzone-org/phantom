@@ -1,17 +1,17 @@
 use poulpy_core::{
     layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GetGaloisElement},
-    GLWEAdd, GLWECopy, GLWERotate, GLWETrace, ScratchTakeCore,
+    ScratchTakeCore,
 };
-use poulpy_hal::layouts::{Backend, DataMut, DataRef, Module, Scratch};
+use poulpy_hal::layouts::{Backend, DataMut, DataRef, Scratch};
 use poulpy_schemes::{
     define_bdd_2w_to_1w_trait, impl_bdd_2w_to_1w_trait,
     tfhe::bdd_arithmetic::{
-        Add, And, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepared, GLWEBlindRotation, Or, Sll,
-        Slt, Sltu, Sra, Srl, Sub, UnsignedInteger, Xor,
+        Add, And, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepared, Or, Sll, Slt, Sltu, Sra, Srl,
+        Sub, UnsignedInteger, Xor,
     },
 };
 
-use strum_macros::EnumIter;
+use crate::{OpID, RdOps};
 
 define_bdd_2w_to_1w_trait!(pub Auipc, auipc);
 impl_bdd_2w_to_1w_trait!(
@@ -40,34 +40,9 @@ impl_bdd_2w_to_1w_trait!(
     crate::codegen::codegen_lui::OUTPUT_CIRCUITS
 );
 
-#[derive(Debug, EnumIter)]
-pub enum RVI32ArithmeticOps {
-    None,
-    Lui,
-    Jalr,
-    Auipc,
-    Addi,
-    Slti,
-    Sltiu,
-    Xori,
-    Ori,
-    Andi,
-    Slli,
-    Srli,
-    Srai,
-    Add,
-    Sub,
-    Sll,
-    Slt,
-    Sltu,
-    Xor,
-    Srl,
-    Sra,
-    Or,
-    And,
-}
-
 pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
+    fn id(&self) -> usize;
+
     fn eval<R, A, B, I, P, H, K, M>(
         &self,
         module: &M,
@@ -90,7 +65,38 @@ pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
         Scratch<BE>: ScratchTakeCore<BE>;
 }
 
-impl<BE: Backend> Evaluate<u32, BE> for RVI32ArithmeticOps {
+impl<BE: Backend> Evaluate<u32, BE> for RdOps {
+    fn id(&self) -> usize {
+        match self {
+            Self::None => OpID::NONE.0 as usize,
+            Self::Auipc => OpID::AUIPC.0 as usize,
+            Self::Jalr => OpID::JALR.0 as usize,
+            Self::Lui => OpID::LUI.0 as usize,
+            Self::Add => OpID::ADD.0 as usize,
+            Self::Sub => OpID::SUB.0 as usize,
+            Self::Sll => OpID::SLL.0 as usize,
+            Self::Slt => OpID::SLT.0 as usize,
+            Self::Sltu => OpID::SLTU.0 as usize,
+            Self::Xor => OpID::XOR.0 as usize,
+            Self::Srl => OpID::SRL.0 as usize,
+            Self::Sra => OpID::SRA.0 as usize,
+            Self::Or => OpID::OR.0 as usize,
+            Self::Addi => OpID::ADDI.0 as usize,
+            Self::And => OpID::AND.0 as usize,
+            Self::Sltiu => OpID::SLTIU.0 as usize,
+            Self::Xori => OpID::XORI.0 as usize,
+            Self::Ori => OpID::ORI.0 as usize,
+            Self::Andi => OpID::ANDI.0 as usize,
+            Self::Slli => OpID::SLLI.0 as usize,
+            Self::Srli => OpID::SRLI.0 as usize,
+            Self::Srai => OpID::SRAI.0 as usize,
+            Self::Slti => OpID::SLTI.0 as usize,
+            _ => {
+                unimplemented!()
+            }
+        }
+    }
+
     fn eval<R, A, B, I, P, H, K, M>(
         &self,
         module: &M,
@@ -136,132 +142,9 @@ impl<BE: Backend> Evaluate<u32, BE> for RVI32ArithmeticOps {
             Self::Srli => res.srl(module, rs1, imm, key, scratch),
             Self::Srai => res.sra(module, rs1, imm, key, scratch),
             Self::Slti => res.slt(module, rs1, imm, key, scratch),
-        }
-    }
-}
-
-pub trait VMArithmetic<T: UnsignedInteger, BE: Backend> {
-    fn eval_ops<RD, R1, R2, IM, PC, OPS, K, H, EVAL>(
-        &self,
-        rd: &mut FheUint<RD, T>,
-        rs1: &FheUintPrepared<R1, u32, BE>,
-        rs2: &FheUintPrepared<R2, u32, BE>,
-        imm: &FheUintPrepared<IM, u32, BE>,
-        pc: &FheUintPrepared<PC, u32, BE>,
-        ops: OPS,
-        keys: &H,
-        scratch: &mut Scratch<BE>,
-    ) where
-        RD: DataMut,
-        R1: DataRef,
-        R2: DataRef,
-        IM: DataRef,
-        PC: DataRef,
-        EVAL: Evaluate<T, BE>,
-        OPS: IntoIterator<Item = EVAL>,
-        OPS::IntoIter: ExactSizeIterator,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        Scratch<BE>: ScratchTakeCore<BE>;
-
-    fn select_rd<RD, O, K, H>(
-        &self,
-        rd: &mut FheUint<RD, T>,
-        op_id: &FheUintPrepared<O, T, BE>,
-        ops_len: usize,
-        keys: &H,
-        scratch: &mut Scratch<BE>,
-    ) where
-        RD: DataMut,
-        O: DataRef,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        Scratch<BE>: ScratchTakeCore<BE>;
-}
-
-impl<T: UnsignedInteger, BE: Backend> VMArithmetic<T, BE> for Module<BE>
-where
-    Self: GLWECopy
-        + GLWEAdd
-        + GLWERotate<BE>
-        + GLWEBlindRotation<T, BE>
-        + GLWETrace<BE>
-        + ExecuteBDDCircuit2WTo1W<T, BE>,
-{
-    fn eval_ops<RD, R1, R2, IM, PC, OPS, K, H, EVAL>(
-        &self,
-        rd: &mut FheUint<RD, T>,
-        rs1: &FheUintPrepared<R1, u32, BE>,
-        rs2: &FheUintPrepared<R2, u32, BE>,
-        imm: &FheUintPrepared<IM, u32, BE>,
-        pc: &FheUintPrepared<PC, u32, BE>,
-        ops: OPS,
-        keys: &H,
-        scratch: &mut Scratch<BE>,
-    ) where
-        RD: DataMut,
-        R1: DataRef,
-        R2: DataRef,
-        IM: DataRef,
-        PC: DataRef,
-        EVAL: Evaluate<T, BE>,
-        OPS: IntoIterator<Item = EVAL>,
-        OPS::IntoIter: ExactSizeIterator,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-    {
-        let ops_vec: Vec<_> = ops.into_iter().collect();
-        let n: usize = ops_vec.len();
-
-        let (mut ops_res, scratch_1) = scratch.take_glwe_slice(ops_vec.len(), rd);
-
-        for (i, op) in ops_vec.iter().enumerate() {
-            op.eval(
-                self,
-                &mut FheUint::from_glwe_to_mut(&mut ops_res[i]),
-                rs1,
-                rs2,
-                imm,
-                pc,
-                keys,
-                scratch_1,
-            );
-        }
-
-        // Packs all results in a single ciphertext
-        for i in 0..n {
-            if i == 0 {
-                self.glwe_copy(rd, &mut ops_res[i]);
-            } else {
-                self.glwe_add_inplace(rd, &mut ops_res[i]);
-            }
-
-            if i < n {
-                self.glwe_rotate_inplace(-1, rd, scratch_1);
+            _ => {
+                unimplemented!()
             }
         }
-        self.glwe_rotate_inplace(n as i64, rd, scratch);
-    }
-
-    fn select_rd<RD, O, K, H>(
-        &self,
-        rd: &mut FheUint<RD, T>,
-        op_id: &FheUintPrepared<O, T, BE>,
-        ops_len: usize,
-        keys: &H,
-        scratch: &mut Scratch<BE>,
-    ) where
-        RD: DataMut,
-        O: DataRef,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-    {
-        let log_size = (usize::BITS - (ops_len - 1).leading_zeros()) as usize;
-
-        self.glwe_blind_rotation_inplace(rd, op_id, false, 0, log_size, 0, scratch);
-        // Clean other values
-        self.glwe_trace_inplace(rd, T::LOG_BITS as usize, self.log_n(), keys, scratch);
     }
 }

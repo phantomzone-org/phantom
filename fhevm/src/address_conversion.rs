@@ -8,7 +8,7 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, FheUint, FheUintBlocksPrepare, FheUintBlocksPreparedFactory, FheUintPrepared,
+        BDDKeyHelper, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory,
         GGSWBlindRotation, UnsignedInteger,
     },
     blind_rotation::BlindRotationAlgo,
@@ -16,12 +16,12 @@ use poulpy_schemes::tfhe::{
 
 use crate::Address;
 
-impl<T: UnsignedInteger, BE: Backend> FHEUintBlocksToAddress<T, BE> for Module<BE> where
+impl<T: UnsignedInteger, BE: Backend> FHEUintPreparedToAddress<T, BE> for Module<BE> where
     Self: ModuleN + GGSWBlindRotation<T, BE>
 {
 }
 
-pub trait FHEUintBlocksToAddress<T: UnsignedInteger, BE: Backend>
+pub trait FHEUintPreparedToAddress<T: UnsignedInteger, BE: Backend>
 where
     Self: ModuleN + GGSWBlindRotation<T, BE>,
 {
@@ -80,7 +80,7 @@ impl<D: DataMut> Address<D> {
     ) where
         F: DataRef,
         T: UnsignedInteger,
-        M: FHEUintBlocksToAddress<T, BE>,
+        M: FHEUintPreparedToAddress<T, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         module.fhe_uint_blocks_to_address(self, fheuint_prepared, scratch);
@@ -97,9 +97,9 @@ impl<D: DataMut> Address<D> {
         DK: DataRef,
         K: BDDKeyHelper<DK, BRA, BE>,
         T: UnsignedInteger,
-        M: FheUintBlocksPreparedFactory<T, BE>
-            + FheUintBlocksPrepare<BRA, T, BE>
-            + FHEUintBlocksToAddress<T, BE>,
+        M: FheUintPreparedFactory<T, BE>
+            + FheUintPrepare<BRA, T, BE>
+            + FHEUintPreparedToAddress<T, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut fheuint_prepared = FheUintPrepared::alloc_from_infos(module, self);
@@ -118,7 +118,7 @@ impl Address<Vec<u8>> {
         A: GLWEInfos,
         B: GGSWInfos,
         T: UnsignedInteger,
-        M: FHEUintBlocksToAddress<T, BE>,
+        M: FHEUintPreparedToAddress<T, BE>,
     {
         module.fhe_uint_blocks_to_address_tmp_bytes(res_infos, fheuint_infos)
     }

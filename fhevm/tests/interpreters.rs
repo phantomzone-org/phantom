@@ -102,12 +102,15 @@ pub fn test_interpreter_init_one_instruction() {
         interpreter
             .pcu_val_fhe_uint
             .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    
+
     println!(
         "{} {} {} {} {} {} {}",
         correct_imm, correct_rs1, correct_rs2, correct_rd, correct_rdu, correct_mu, correct_pcu
     );
-    println!("{} {} {} {} {} {} {}", dec_imm, dec_rs1, dec_rs2, dec_rd, dec_rdu, dec_mu, dec_pcu);
+    println!(
+        "{} {} {} {} {} {} {}",
+        dec_imm, dec_rs1, dec_rs2, dec_rd, dec_rdu, dec_mu, dec_pcu
+    );
 
     assert_eq!(correct_imm, dec_imm);
     assert_eq!(correct_rs1, dec_rs1);

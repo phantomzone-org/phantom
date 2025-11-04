@@ -369,7 +369,7 @@ impl RdOps {
     }
 }
 
-pub static RD_OPS_LIST: &[RdOps] = &[
+pub static RD_RV32_OP_LIST: &[RdOps] = &[
     RdOps::None,
     RdOps::Lui,
     RdOps::Auipc,
@@ -402,6 +402,33 @@ pub static RD_OPS_LIST: &[RdOps] = &[
     RdOps::Divu,
     RdOps::Rem,
     RdOps::Remu,
+];
+
+pub static RD_RV32I_OP_LIST: &[RdOps] = &[
+    RdOps::None,
+    RdOps::Lui,
+    RdOps::Auipc,
+    RdOps::Addi,
+    RdOps::Slti,
+    RdOps::Sltiu,
+    RdOps::Xori,
+    RdOps::Ori,
+    RdOps::Andi,
+    RdOps::Slli,
+    RdOps::Srli,
+    RdOps::Srai,
+    RdOps::Add,
+    RdOps::Sub,
+    RdOps::Sll,
+    RdOps::Slt,
+    RdOps::Sltu,
+    RdOps::Xor,
+    RdOps::Srl,
+    RdOps::Sra,
+    RdOps::Or,
+    RdOps::And,
+    RdOps::Jal,
+    RdOps::Jalr,
 ];
 
 pub enum LoadOps {

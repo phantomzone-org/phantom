@@ -161,7 +161,15 @@ impl Ram {
             .collect()
     }
 
-    pub fn read_to_fheuint<DR: DataMut, DA: DataRef, K, H, M, T: UnsignedInteger, BE: Backend>(
+    pub fn read_to_fheuint<
+        DR: DataMut,
+        DA: DataRef,
+        D: DataRef,
+        H,
+        M,
+        T: UnsignedInteger,
+        BE: Backend,
+    >(
         &mut self,
         module: &M,
         res: &mut FheUint<DR, T>,
@@ -174,8 +182,7 @@ impl Ram {
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
             + GLWEPacking<BE>,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        H: RAMKeysHelper<D, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         res.pack(
@@ -186,21 +193,58 @@ impl Ram {
         );
     }
 
+    pub fn read_prepare_write_to_fheuint<
+        DR: DataMut,
+        DA: DataRef,
+        K,
+        H,
+        M,
+        D,
+        T: UnsignedInteger,
+        BE: Backend,
+    >(
+        &mut self,
+        module: &M,
+        res: &mut FheUint<DR, T>,
+        address: &Address<DA>,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: GGSWPreparedFactory<BE>
+            + GLWEExternalProduct<BE>
+            + GLWEPackerOps<BE>
+            + GLWETrace<BE>
+            + GLWEPacking<BE>,
+        H: RAMKeysHelper<D, BE>,
+        D: DataRef,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        res.pack(
+            module,
+            self.read_prepare_write(module, &address, keys, scratch),
+            keys,
+            scratch,
+        );
+    }
+
     /// Read that prepares the [Ram] of a subsequent [Self::write].
     /// Outside of preparing the [Ram] for a write, the Bhavior and
     /// output format is identical to [Self::read].
-    pub fn read_prepare_write<DA: DataRef, K, H, BE: Backend>(
+    pub fn read_prepare_write<DA: DataRef, D, M, H, BE: Backend>(
         &mut self,
-        module: &Module<BE>,
+        module: &M,
         address: &Address<DA>,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) -> Vec<GLWE<Vec<u8>>>
     where
-        Module<BE>:
-            GGSWPreparedFactory<BE> + GLWEExternalProduct<BE> + GLWECopy + GLWEPackerOps<BE>,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        M: GGSWPreparedFactory<BE>
+            + GLWEExternalProduct<BE>
+            + GLWECopy
+            + GLWEPackerOps<BE>
+            + GLWETrace<BE>,
+        H: RAMKeysHelper<D, BE>,
+        D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         assert!(
