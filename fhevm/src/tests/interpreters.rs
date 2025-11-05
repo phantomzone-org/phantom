@@ -1,4 +1,4 @@
-use fhevm::{
+use crate::{
     keys::{RAMKeys, RAMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
     Instruction, InstructionsParser, Interpreter,

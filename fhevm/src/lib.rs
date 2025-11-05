@@ -6,11 +6,16 @@ pub mod interpreter;
 pub mod keys;
 pub mod load;
 pub mod parameters;
+pub mod pc_update;
 pub mod ram;
 pub mod store;
 
 // Re-export the main functionality
-pub use instructions::*;
+pub(crate) use instructions::*;
 pub use interpreter::*;
-pub use load::*;
-pub use ram::*;
+pub(crate) use load::*;
+pub(crate) use pc_update::*;
+pub(crate) use ram::*;
+
+#[cfg(test)]
+mod tests;
