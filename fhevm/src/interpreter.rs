@@ -23,7 +23,7 @@ use poulpy_core::{
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         Add, BDDKeyHelper, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
-        FheUintPrepared, FheUintPreparedEncryptSk, FheUintPreparedFactory, GLWEBlinSelection,
+        FheUintPrepared, FheUintPreparedFactory, GLWEBlinSelection,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -196,10 +196,11 @@ impl<BE: Backend> Interpreter<BE> {
         let mut data_ram_pcu: Vec<u32> = vec![0u32; max_addr_pcu];
 
         for i in 0..instructions.instructions.len() {
-            data_ram_rs1[i] = instructions.get_raw(i).get_rs1_or_zero() as u32;
-            data_ram_rs2[i] = instructions.get_raw(i).get_rs2_or_zero() as u32;
-            data_ram_rd[i] = instructions.get_raw(i).get_rd_or_zero() as u32;
             data_ram_imm[i] = instructions.get_raw(i).get_immediate() as u32;
+            let (rs1, rs2, rd) = instructions.get_raw(i).get_registers();
+            data_ram_rs1[i] = rs1 as u32;
+            data_ram_rs2[i] = rs2 as u32;
+            data_ram_rd[i] = rd as u32;
             let (rdu, mu, pcu) = instructions.get_raw(i).get_opid();
             data_ram_rdu[i] = rdu as u32;
             data_ram_mu[i] = mu as u32;

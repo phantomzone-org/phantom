@@ -133,8 +133,6 @@ impl<D: DataMut> Coordinate<D> {
         S: GLWESecretPreparedToRef<B> + GLWEInfos + GetDistribution,
         Scratch<B>: ScratchTakeCore<B>,
     {
-        println!("value: {value}");
-
         let n: usize = module.n();
 
         assert!(value.abs() < n as i64);
@@ -148,8 +146,6 @@ impl<D: DataMut> Coordinate<D> {
         let mut remain: usize = value.unsigned_abs() as usize;
         let mut tot_base: u8 = 0;
 
-        println!("remain: {remain}");
-
         for (coordinate, base) in izip!(self.value.iter_mut(), self.base1d.0.iter()) {
             let mask: usize = (1 << base) - 1;
 
@@ -160,8 +156,6 @@ impl<D: DataMut> Coordinate<D> {
             } else {
                 scalar.raw_mut()[chunk] = 1;
             }
-
-            println!("chunk: {chunk}");
 
             coordinate.encrypt_sk(module, &scalar, sk, source_xa, source_xe, scratch_1);
 

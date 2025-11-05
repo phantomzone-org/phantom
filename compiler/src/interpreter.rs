@@ -5,14 +5,12 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    Interpreter, instructions::{Instruction, InstructionsParser},
-    parameters::{CryptographicParameters, DECOMP_N}
+    instructions::{Instruction, InstructionsParser},
+    parameters::{CryptographicParameters, DECOMP_N},
+    Interpreter,
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
-use poulpy_core::layouts::{
-    prepared::GLWESecretPrepared, Degree, GLWEInfos, GLWESecret, GetDegree, LWELayout,
-    LWEPlaintextLayout, LWESecret,
-};
+use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
 use poulpy_hal::{
     api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
@@ -278,11 +276,32 @@ impl Phantom {
             GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_prepared.prepare(params.module(), &sk_glwe);
 
-        interpreter.pc_encrypt_sk(module, 0, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-        interpreter.instructions_encrypt_sk(module, &parser, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-        interpreter.init_registers(module, &vec![0u32; 32], &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-        interpreter.ram_encrypt_sk(module, &vec![0u32; self.boot_ram.size], &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-        interpreter.init_ram_offset(module, self.boot_ram.offset as u32, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.pc_fhe_uint_prepared.encrypt_sk(module, 0, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        interpreter.instructions_encrypt_sk(
+            module,
+            &parser,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        interpreter.init_registers(
+            module,
+            &vec![0u32; 32],
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        interpreter.ram_encrypt_sk(
+            module,
+            &vec![0u32; self.boot_ram.size],
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        // interpreter.init_ram_offset(module, self.boot_ram.offset as u32, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
 
         // interpreter.cycle();
 

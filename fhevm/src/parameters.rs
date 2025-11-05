@@ -101,7 +101,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GGSWLayout {
             n: self.module.n().into(),
             base2k: self.basek(),
-            k: self.k_ggsw_addr(),
+            k: self.k_ggsw_val(),
             rank: self.rank(),
             dnum: self.dnum_ct(),
             dsize: Dsize(1),
