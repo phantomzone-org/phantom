@@ -205,7 +205,7 @@ impl RAMKeys<Vec<u8>> {
         RAMKeys {
             atk_glwe,
             atk_ggsw_inv,
-            gglwe_to_ggsw_key: gglwe_to_ggsw_key,
+            gglwe_to_ggsw_key,
         }
     }
 }
