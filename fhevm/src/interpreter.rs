@@ -170,7 +170,7 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
         M: FheUintPreparedEncryptSk<u32, BE>,
     {
-        self.pcu_val_fhe_uint_prepared.encrypt_sk(
+        self.pc_val_fhe_uint_prepared.encrypt_sk(
             module,
             pc_value,
             sk_prepared,
@@ -384,14 +384,6 @@ impl<BE: Backend> Interpreter<BE> {
         module: &M,
         keys: &H,
         scratch: &mut Scratch<BE>,
-    ) -> (
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
-        &FheUint<Vec<u8>, u32>,
     )
     where
         M: FHEUintPreparedToAddress<u32, BE>
@@ -460,16 +452,6 @@ impl<BE: Backend> Interpreter<BE> {
             keys,
             scratch,
         );
-
-        (
-            &self.pcu_val_fhe_uint,
-            &self.imm_val_fhe_uint,
-            &self.rs2_addr_fhe_uint,
-            &self.rs1_val_fhe_uint,
-            &self.rdu_val_fhe_uint,
-            &self.rd_addr_fhe_uint,
-            &self.mu_val_fhe_uint,
-        )
     }
 
     pub fn prepare_arithmetic<D, M, BRA, K>(

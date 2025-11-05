@@ -67,7 +67,6 @@
 pub mod b_type;
 pub mod i_type;
 pub mod j_type;
-// pub mod memory;
 pub mod r_type;
 pub mod s_type;
 pub mod u_type;
