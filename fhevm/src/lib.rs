@@ -4,6 +4,7 @@ pub(crate) mod codegen;
 pub mod instructions;
 pub mod interpreter;
 pub mod keys;
+pub mod load;
 pub mod parameters;
 pub mod ram;
 pub mod store;
@@ -11,4 +12,5 @@ pub mod store;
 // Re-export the main functionality
 pub use instructions::*;
 pub use interpreter::*;
+pub use load::*;
 pub use ram::*;

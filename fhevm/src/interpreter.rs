@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 
 use crate::{
-    Address, Base2D, RD_RV32I_OP_LIST, Ram, address_conversion::FHEUintPreparedToAddress, arithmetic::Evaluate, get_base_2d, keys::RAMKeysHelper, parameters::CryptographicParameters
+    address_conversion::FHEUintPreparedToAddress, arithmetic::Evaluate, get_base_2d,
+    keys::RAMKeysHelper, parameters::CryptographicParameters, Address, Base2D, Load, Ram,
+    LOAD_OPS_LIST, RD_RV32I_OP_LIST,
 };
 
 use poulpy_hal::{
-    api::ModuleN,
+    api::{ModuleLogN, ModuleN},
     layouts::{Backend, DataRef, Module, Scratch},
     source::Source,
 };
@@ -13,14 +15,15 @@ use poulpy_hal::{
 use poulpy_core::{
     layouts::{
         GGLWEInfos, GGLWEPreparedToRef, GGSWLayout, GGSWPreparedFactory, GLWEInfos, GLWELayout,
-        GLWESecretPreparedFactory, GLWESecretPreparedToRef, GLWEToRef, GetGaloisElement,
+        GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
     },
-    GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
+    GGSWAutomorphism, GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize,
+    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         Add, BDDKeyHelper, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared,
-        FheUintPreparedEncryptSk, FheUintPreparedFactory,
+        FheUintPreparedEncryptSk, FheUintPreparedFactory, GLWEBlinSelection,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -46,6 +49,7 @@ pub struct Interpreter<BE: Backend> {
 
     // Registers
     pub registers: Ram,
+    pub rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
 
     // RAM
     pub ram: Ram,
@@ -128,6 +132,7 @@ impl<BE: Backend> Interpreter<BE> {
             pcu_rom,
             registers,
             ram: ram,
+            rd_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             ram_offset: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
             ram_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             pcu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
@@ -348,7 +353,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, u32, BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>,
+            + ExecuteBDDCircuit2WTo1W<u32, BE>
+            + GLWEBlinSelection<u32, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
@@ -361,31 +367,96 @@ impl<BE: Backend> Interpreter<BE> {
         self.derive_ram_addr(module, keys, scratch);
         self.read_ram(module, keys, scratch);
 
+        let mut ops: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
+
         // Arithmetic result, in hashmap indexed by OpID
-        let mut out: HashMap<usize, FheUint<Vec<u8>, u32>> = match self.instruction_set{
+        match self.instruction_set {
             InstructionSet::RV32 => unimplemented!(),
-            InstructionSet::RV32I => self.arithmetic(module, &RD_RV32I_OP_LIST, keys, scratch)
+            InstructionSet::RV32I => {
+                self.arithmetic(module, &mut ops, &RD_RV32I_OP_LIST, keys, scratch)
+            }
         };
 
-        // TODO (lb, lbu, lh, lhu, lw)
-        // TODO: pack out with (lb, lbu, lh, lhu, lw)
-        // TODO: select from (arithmetic..., lb, lbu, lh, lhu, lw)
+        self.load(module, &mut ops, &LOAD_OPS_LIST, keys, scratch);
+        self.select_rd(module, ops, scratch);
+
         // TODO: store in register
         // TODO: (SB, SH, SW) from RS2
         // TODO: store in memory from select(SB, SH, SW)
         // TODO: PC update
     }
 
+    pub fn store_rd<M, D, K>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
+    where
+        M: ModuleLogN
+            + GGSWPreparedFactory<BE>
+            + GGSWAutomorphism<BE>
+            + GLWENormalize<BE>
+            + GLWEAdd
+            + GLWESub
+            + GLWETrace<BE>
+            + GLWERotate<BE>
+            + GLWEExternalProduct<BE>,
+        K: RAMKeysHelper<D, BE>,
+        D: DataRef,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        self.registers
+            .write_fhe_uint(module, &self.rd_val_fhe_uint, &self.rd_addr, keys, scratch);
+    }
 
-    
+    pub fn load<M, K, L, D>(
+        &self,
+        module: &M,
+        res: &mut HashMap<usize, FheUint<Vec<u8>, u32>>,
+        ops: &[L],
+        keys: &K,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleLogN + GLWERotate<BE> + GLWETrace<BE> + GLWESub + GLWEAdd + GLWECopy,
+        D: DataRef,
+        K: RAMKeysHelper<D, BE>,
+        L: Load<u32, BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let ram_val: &FheUint<Vec<u8>, u32> = &self.ram_val_fhe_uint;
+        for op in ops {
+            let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
+            op.load(module, &mut tmp, ram_val, keys, scratch);
+            res.insert(op.id(), tmp);
+        }
+    }
+
+    pub fn select_rd<M>(
+        &mut self,
+        module: &M,
+        mut ops: HashMap<usize, FheUint<Vec<u8>, u32>>,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: GLWEBlinSelection<u32, BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+        for (key, object) in ops.iter_mut() {
+            ops_ref.insert(*key, object);
+        }
+
+        module.glwe_blind_selection(
+            &mut self.rd_val_fhe_uint,
+            ops_ref,
+            &self.rdu_val_fhe_uint_prepared,
+            0,
+            5,
+            scratch,
+        );
+    }
 
     pub fn read_instruction_components<M, D, H>(
         &mut self,
         module: &M,
         keys: &H,
         scratch: &mut Scratch<BE>,
-    )
-    where
+    ) where
         M: FHEUintPreparedToAddress<u32, BE>
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
@@ -583,11 +654,11 @@ impl<BE: Backend> Interpreter<BE> {
     pub fn arithmetic<M, H, O, D>(
         &mut self,
         module: &M,
+        res: &mut HashMap<usize, FheUint<Vec<u8>, u32>>,
         ops: &[O],
         keys: &H,
         scratch: &mut Scratch<BE>,
-    ) -> HashMap<usize, FheUint<Vec<u8>, u32>>
-    where
+    ) where
         M: ExecuteBDDCircuit2WTo1W<u32, BE>,
         H: RAMKeysHelper<D, BE>,
         D: DataRef,
@@ -599,13 +670,10 @@ impl<BE: Backend> Interpreter<BE> {
         let imm: &FheUintPrepared<Vec<u8>, u32, BE> = &self.imm_val_fhe_uint_prepared;
         let pc: &FheUintPrepared<Vec<u8>, u32, BE> = &self.pc_val_fhe_uint_prepared;
 
-        let mut res: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
         for op in ops {
             let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
             op.eval(module, &mut tmp, rs1, rs2, imm, pc, keys, scratch);
             res.insert(op.id(), tmp);
         }
-
-        res
     }
 }

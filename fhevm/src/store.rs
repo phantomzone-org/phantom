@@ -63,7 +63,7 @@ where
         // res * X^{op}
         self.glwe_blind_rotation_inplace(res, op, false, 0, 2, 0, scratch);
         // Clean other values
-        self.glwe_trace_inplace(res, T::LOG_BITS as usize, self.log_n(), keys, scratch);
+        self.glwe_trace_inplace(res, T::LOG_BITS as usize, keys, scratch);
     }
 
     fn construct_store_test_vector<R, D0, D1, H, K>(

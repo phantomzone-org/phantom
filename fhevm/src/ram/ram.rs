@@ -1,4 +1,4 @@
-use itertools::izip;
+use itertools::{izip, Itertools};
 use poulpy_core::{
     layouts::{
         GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWLayout, GGSWPreparedFactory,
@@ -9,8 +9,8 @@ use poulpy_core::{
     GLWEPacker, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
-    api::{ModuleN, ScratchOwnedBorrow, TakeSlice},
-    layouts::{Backend, DataMut, DataRef, Module, Scratch, ScratchOwned},
+    api::{ModuleLogN, ModuleN, TakeSlice},
+    layouts::{Backend, DataMut, DataRef, Module, Scratch},
     source::Source,
 };
 use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, ToBits, UnsignedInteger};
@@ -258,18 +258,18 @@ impl Ram {
             .collect()
     }
 
-    /// Writes w to the [Ram]. Requires that [Self::read_prepare_write] was
-    /// called Bforehand.
-    pub fn write<D: DataRef, DA: DataRef, DH, H, BE: Backend>(
+    pub fn write_fhe_uint<M, D, DA, DH, H, BE: Backend>(
         &mut self,
-        module: &Module<BE>,
-        w: &[GLWE<D>], // Must encrypt [w, 0, 0, ..., 0];
+        module: &M,
+        w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
         address: &Address<DA>,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        DH: DataRef,
-        Module<BE>: GGSWPreparedFactory<BE>
+        D: DataRef,
+        DA: DataRef,
+        M: ModuleLogN
+            + GGSWPreparedFactory<BE>
             + GGSWAutomorphism<BE>
             + GLWENormalize<BE>
             + GLWEAdd
@@ -277,7 +277,39 @@ impl Ram {
             + GLWETrace<BE>
             + GLWERotate<BE>
             + GLWEExternalProduct<BE>,
-        ScratchOwned<BE>: ScratchOwnedBorrow<BE>,
+        DH: DataRef,
+        H: RAMKeysHelper<DH, BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let bits = (0..32)
+            .map(|i| {
+                let mut bit = GLWE::alloc_from_infos(&self.subram(0).data()[0]);
+                w.get_bit_glwe(module, i, &mut bit, keys, scratch);
+                bit
+            })
+            .collect_vec();
+        self.write(module, &bits, address, keys, scratch);
+    }
+
+    /// Writes w to the [Ram]. Requires that [Self::read_prepare_write] was
+    /// called Bforehand.
+    pub fn write<D: DataRef, DA: DataRef, DH, M, H, BE: Backend>(
+        &mut self,
+        module: &M,
+        w: &[GLWE<D>], // Must encrypt [w, 0, 0, ..., 0];
+        address: &Address<DA>,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        DH: DataRef,
+        M: GGSWPreparedFactory<BE>
+            + GGSWAutomorphism<BE>
+            + GLWENormalize<BE>
+            + GLWEAdd
+            + GLWESub
+            + GLWETrace<BE>
+            + GLWERotate<BE>
+            + GLWEExternalProduct<BE>,
         H: RAMKeysHelper<DH, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
@@ -473,7 +505,7 @@ impl SubRam {
                 coordinate_prepared.product(module, &mut tmp_ct, &results[0], scratch_1);
             }
         }
-        tmp_ct.trace_inplace(module, 0, log_n, auto_keys, scratch);
+        tmp_ct.trace_inplace(module, 0, auto_keys, scratch);
         tmp_ct
     }
 
@@ -558,19 +590,19 @@ impl SubRam {
             module.glwe_copy(&mut res, &self.data[0]);
         }
 
-        res.trace_inplace(module, 0, log_n, auto_keys, scratch);
+        res.trace_inplace(module, 0, auto_keys, scratch);
         res
     }
 
-    fn write_first_step<DataW: DataRef, K, H, BE: Backend>(
+    fn write_first_step<DataW: DataRef, M, K, H, BE: Backend>(
         &mut self,
-        module: &Module<BE>,
+        module: &M,
         w: &GLWE<DataW>,
         n2: usize,
         auto_keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        Module<BE>: GLWENormalize<BE> + GLWEAdd + GLWESub + GLWETrace<BE>,
+        M: GLWENormalize<BE> + GLWEAdd + GLWESub + GLWETrace<BE>,
         H: GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
@@ -580,7 +612,6 @@ impl SubRam {
             "invalid call to Memory.write: internal state is false -> requires calling Memory.read_prepare_write"
         );
 
-        let log_n: usize = module.log_n();
         let (mut tmp_a, scratch_1) = scratch.take_glwe(&self.data[0]);
 
         let to_write_on: &mut GLWE<Vec<u8>> = if n2 != 1 {
@@ -589,22 +620,22 @@ impl SubRam {
             &mut self.data[0]
         };
 
-        tmp_a.trace(module, 0, log_n, to_write_on, auto_keys, scratch_1);
+        tmp_a.trace(module, 0, to_write_on, auto_keys, scratch_1);
 
         module.glwe_sub_inplace(to_write_on, &tmp_a);
         module.glwe_add_inplace(to_write_on, w);
         module.glwe_normalize_inplace(to_write_on, scratch_1);
     }
 
-    fn write_mid_step<DC: DataRef, K, H, BE: Backend>(
+    fn write_mid_step<DC: DataRef, M, K, H, BE: Backend>(
         &mut self,
         step: usize,
-        module: &Module<BE>,
+        module: &M,
         inv_coordinate: &CoordinatePrepared<DC, BE>,
         auto_keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        Module<BE>: GLWEExternalProduct<BE>
+        M: GLWEExternalProduct<BE>
             + GLWESub
             + GLWETrace<BE>
             + GLWEAdd
@@ -614,7 +645,6 @@ impl SubRam {
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let log_n: usize = module.log_n();
         let glwe_layout: &GLWELayout = &self.data[0].glwe_layout();
 
         // Top of the tree is not stored in results.
@@ -635,12 +665,12 @@ impl SubRam {
                 // Zeroes the first coefficient of ct_hi
                 // ct_hi = [a, b, c, d] - TRACE([a, b, c, d]) = [0, b, c, d]
                 let (mut tmp_a, scratch_1) = scratch.take_glwe(glwe_layout);
-                tmp_a.trace(module, 0, log_n, ct_hi, auto_keys, scratch_1);
+                tmp_a.trace(module, 0, ct_hi, auto_keys, scratch_1);
                 module.glwe_sub_inplace(ct_hi, &tmp_a);
 
                 // Extract the first coefficient ct_lo
                 // tmp_a = TRACE([a, b, c, d]) -> [a, 0, 0, 0]
-                tmp_a.trace(module, 0, log_n, ct_lo, auto_keys, scratch_1);
+                tmp_a.trace(module, 0, ct_lo, auto_keys, scratch_1);
 
                 // Adds extracted coefficient of ct_lo on ct_hi
                 // [a, 0, 0, 0] + [0, b, c, d]
@@ -653,14 +683,14 @@ impl SubRam {
         }
     }
 
-    fn write_last_step<DC: DataRef, BE: Backend>(
+    fn write_last_step<DC: DataRef, M, BE: Backend>(
         &mut self,
-        module: &Module<BE>,
+        module: &M,
         inv_coordinate: &CoordinatePrepared<DC, BE>,
         scratch: &mut Scratch<BE>,
     ) where
         Scratch<BE>: ScratchTakeCore<BE>,
-        Module<BE>: GLWEExternalProduct<BE>,
+        M: GLWEExternalProduct<BE>,
     {
         // Apply the last reverse shift to the top of the tree.
         for ct_lo in self.data.iter_mut() {
