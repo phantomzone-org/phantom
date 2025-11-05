@@ -13,21 +13,23 @@ use poulpy_schemes::tfhe::{
 
 const LOG_N: u32 = 11;
 const N_GLWE: u32 = 1 << LOG_N;
-const BASE2K: u32 = 17;
+const BASE2K: u32 = 13;
 const RANK: u32 = 1;
-const K_GLWE_PT: u32 = 2; //u8::BITS;
+const K_GLWE_PT: u32 = 2;
 const K_GLWE_CT: u32 = BASE2K * 3;
-const K_GGSW_ADDR: u32 = BASE2K * 4;
 const K_EVK_TRACE: u32 = BASE2K * 4;
+const K_GGSW_ADDR: u32 = BASE2K * 4;
+const K_GGSW_VAL: u32 = BASE2K * 5;
 const K_EVK_GGSW_INV: u32 = BASE2K * 5;
 pub const DECOMP_N: [u8; 2] = [6, 5];
 
 pub struct CryptographicParameters<B: Backend> {
-    module: Module<B>,              // FFT/NTT tables.
-    base2k: Base2K,                 // Torus 2^{-k} decomposition.
-    rank: Rank,                     // GLWE/GGLWE/GGSW rank.
-    k_glwe_pt: TorusPrecision,      // Ram plaintext (GLWE) Torus precision.
-    k_glwe_ct: TorusPrecision,      // Ram ciphertext (GLWE) Torus precision.
+    module: Module<B>,         // FFT/NTT tables.
+    base2k: Base2K,            // Torus 2^{-k} decomposition.
+    rank: Rank,                // GLWE/GGLWE/GGSW rank.
+    k_glwe_pt: TorusPrecision, // Ram plaintext (GLWE) Torus precision.
+    k_glwe_ct: TorusPrecision, // Ram ciphertext (GLWE) Torus precision.
+    k_ggsw_val: TorusPrecision,
     k_ggsw_addr: TorusPrecision,    // Ram address (GGSW) Torus precision.
     k_evk_trace: TorusPrecision,    // Ram trace evaluation key Torus precision
     k_evk_ggsw_inv: TorusPrecision, // Ram GGSW(X^i) -> GGSW(X^-i) evaluation key Torus precision
@@ -44,6 +46,7 @@ where
             rank: RANK.into(),
             k_glwe_ct: K_GLWE_CT.into(),
             k_glwe_pt: K_GLWE_PT.into(),
+            k_ggsw_val: K_GGSW_VAL.into(),
             k_ggsw_addr: K_GGSW_ADDR.into(),
             k_evk_trace: K_EVK_TRACE.into(),
             k_evk_ggsw_inv: K_EVK_GGSW_INV.into(),
@@ -94,7 +97,18 @@ impl<B: Backend> CryptographicParameters<B> {
         }
     }
 
-    pub fn ggsw_infos(&self) -> GGSWLayout {
+    pub fn ggsw_val_infos(&self) -> GGSWLayout {
+        GGSWLayout {
+            n: self.module.n().into(),
+            base2k: self.basek(),
+            k: self.k_ggsw_addr(),
+            rank: self.rank(),
+            dnum: self.dnum_ct(),
+            dsize: Dsize(1),
+        }
+    }
+
+    pub fn ggsw_addr_infos(&self) -> GGSWLayout {
         GGSWLayout {
             n: self.module.n().into(),
             base2k: self.basek(),
@@ -123,6 +137,10 @@ impl<B: Backend> CryptographicParameters<B> {
 
     pub fn k_ggsw_addr(&self) -> TorusPrecision {
         self.k_ggsw_addr
+    }
+
+    pub fn k_ggsw_val(&self) -> TorusPrecision {
+        self.k_ggsw_val
     }
 
     pub fn rank(&self) -> Rank {

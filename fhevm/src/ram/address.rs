@@ -1,12 +1,13 @@
 use itertools::izip;
 use poulpy_hal::{
+    api::ModuleN,
     layouts::{Backend, Data, DataMut, Module, Scratch},
     source::Source,
 };
 
 use poulpy_core::{
-    layouts::{GGSWInfos, GLWEInfos, GLWESecret, GLWESecretPreparedFactory, LWEInfos},
-    GGSWEncryptSk, ScratchTakeCore,
+    layouts::{GGSWInfos, GLWEInfos, GLWESecretPreparedFactory, GLWESecretPreparedToRef, LWEInfos},
+    GGSWEncryptSk, GetDistribution, ScratchTakeCore,
 };
 
 use crate::{parameters::CryptographicParameters, Base2D, Coordinate};
@@ -59,7 +60,7 @@ impl Address<Vec<u8>> {
         params: &CryptographicParameters<B>,
         base_2d: &Base2D,
     ) -> Self {
-        Self::alloc_from_infos(&params.ggsw_infos(), base_2d)
+        Self::alloc_from_infos(&params.ggsw_addr_infos(), base_2d)
     }
 
     pub fn alloc_from_infos<A>(infos: &A, base_2d: &Base2D) -> Self
@@ -86,21 +87,20 @@ impl Address<Vec<u8>> {
 
 impl<D: DataMut> Address<D> {
     /// Encrypts an u32 value into an [Address] under the provided secret.
-    pub fn encrypt_sk<B: Backend>(
+    pub fn encrypt_sk<M, S, BE: Backend>(
         &mut self,
-        params: &CryptographicParameters<B>,
+        module: &M,
         value: u32,
-        sk: &GLWESecret<Vec<u8>>,
+        sk: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<B>,
+        scratch: &mut Scratch<BE>,
     ) where
-        Module<B>: GGSWEncryptSk<B> + GLWESecretPreparedFactory<B>,
-        Scratch<B>: ScratchTakeCore<B>,
+        M: ModuleN + GGSWEncryptSk<BE> + GLWESecretPreparedFactory<BE>,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
+        Scratch<BE>: ScratchTakeCore<BE>,
     {
         debug_assert!(self.base2d.max() > value as usize);
-
-        let module: &Module<B> = params.module();
 
         let mut remain: usize = value as _;
         izip!(self.coordinates.iter_mut(), self.base2d.0.iter()).for_each(|(coordinate, base1d)| {

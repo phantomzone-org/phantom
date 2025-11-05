@@ -8,7 +8,7 @@ use poulpy_hal::{
 use poulpy_core::{
     layouts::{
         GGLWELayout, GGSWInfos, GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPrepared,
-        GLWESecretPreparedFactory, GLWESecretToRef, LWEInfos, GGSW, GLWE,
+        GLWESecretPreparedFactory, GLWESecretPreparedToRef, LWEInfos, GGSW, GLWE,
     },
     GGSWAutomorphism, GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
 };
@@ -79,7 +79,7 @@ impl Coordinate<Vec<u8>> {
         Module<B>: GGSWAutomorphism<B>,
     {
         let module: &Module<B> = params.module();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
         let evk_infos: &GGLWELayout = &params.evk_ggsw_infos();
 
         GGSW::automorphism_tmp_bytes(module, ggsw_infos, ggsw_infos, evk_infos, evk_infos)
@@ -93,7 +93,7 @@ impl Coordinate<Vec<u8>> {
     {
         let module: &Module<B> = params.module();
         let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
         GLWE::external_product_tmp_bytes(module, glwe_infos, glwe_infos, ggsw_infos)
     }
 
@@ -101,7 +101,7 @@ impl Coordinate<Vec<u8>> {
     where
         Module<B>: GLWESecretPreparedFactory<B> + GGSWEncryptSk<B>,
     {
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
         ScalarZnx::bytes_of(ggsw_infos.n().into(), 1)
             + GLWESecretPrepared::bytes_of(params.module(), ggsw_infos.rank())
             + GGSW::encrypt_sk_tmp_bytes(params.module(), ggsw_infos)
@@ -130,25 +130,25 @@ impl<D: DataMut> Coordinate<D> {
         scratch: &mut Scratch<B>,
     ) where
         M: GLWESecretPreparedFactory<B> + ModuleN + GGSWEncryptSk<B>,
-        S: GLWESecretToRef + GLWEInfos + GetDistribution,
+        S: GLWESecretPreparedToRef<B> + GLWEInfos + GetDistribution,
         Scratch<B>: ScratchTakeCore<B>,
     {
+        println!("value: {value}");
+
         let n: usize = module.n();
 
         assert!(value.abs() < n as i64);
 
-        let (mut scalar, scratch1) = scratch.take_scalar_znx(module.n(), 1);
+        let (mut scalar, scratch_1) = scratch.take_scalar_znx(module.n(), 1);
         scalar.zero();
-
-        let (mut sk_glwe_prepared, scratch_2) =
-            scratch1.take_glwe_secret_prepared(module, sk.rank());
-        sk_glwe_prepared.prepare(module, sk);
 
         let sign: i64 = value.signum();
         let gap: usize = 1; // self.base1d.gap(module.log_n());
 
         let mut remain: usize = value.unsigned_abs() as usize;
         let mut tot_base: u8 = 0;
+
+        println!("remain: {remain}");
 
         for (coordinate, base) in izip!(self.value.iter_mut(), self.base1d.0.iter()) {
             let mask: usize = (1 << base) - 1;
@@ -161,14 +161,9 @@ impl<D: DataMut> Coordinate<D> {
                 scalar.raw_mut()[chunk] = 1;
             }
 
-            coordinate.encrypt_sk(
-                module,
-                &scalar,
-                &sk_glwe_prepared,
-                source_xa,
-                source_xe,
-                scratch_2,
-            );
+            println!("chunk: {chunk}");
+
+            coordinate.encrypt_sk(module, &scalar, sk, source_xa, source_xe, scratch_1);
 
             if sign < 0 && chunk != 0 {
                 scalar.raw_mut()[n - chunk] = 0;

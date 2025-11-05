@@ -111,7 +111,7 @@ fn test_fhe_uint_blocks_to_address() {
 
             let rot: i64 = (((k >> bit_rsh) & mask) << bit_lsh) as i64;
 
-            module.vec_znx_rotate_inplace(rot, &mut pt.as_vec_znx_mut(), 0, scratch.borrow());
+            module.vec_znx_rotate_inplace(-rot, &mut pt.as_vec_znx_mut(), 0, scratch.borrow());
 
             ggsw.assert_noise(&module, &sk_glwe_prep, &pt, &max_noise);
             bit_lsh += bit_mask as usize;

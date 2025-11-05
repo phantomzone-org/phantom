@@ -91,9 +91,9 @@ fn test_fhe_ram() {
 
     // Encrypts random index
     addr.encrypt_sk(
-        &params,
+        params.module(),
         idx,
-        &sk,
+        &sk_prep,
         &mut source_xa,
         &mut source_xe,
         scratch.borrow(),
@@ -251,9 +251,9 @@ fn test_fhe_ram_read_to_fheuint() {
 
     // Encrypts random index
     addr.encrypt_sk(
-        &params,
+        params.module(),
         idx,
-        &sk,
+        &sk_prep,
         &mut source_xa,
         &mut source_xe,
         scratch.borrow(),

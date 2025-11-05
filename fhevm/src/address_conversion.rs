@@ -58,7 +58,7 @@ where
                     ggsw,
                     &test_vector,
                     fheuint,
-                    true,
+                    false,
                     bit_rsh,
                     bit_mask as usize,
                     bit_lsh,
