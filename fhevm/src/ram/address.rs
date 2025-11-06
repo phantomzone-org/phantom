@@ -60,7 +60,7 @@ impl Address<Vec<u8>> {
         params: &CryptographicParameters<B>,
         base_2d: &Base2D,
     ) -> Self {
-        Self::alloc_from_infos(&params.ggsw_addr_infos(), base_2d)
+        Self::alloc_from_infos(&params.ggsw_infos(), base_2d)
     }
 
     pub fn alloc_from_infos<A>(infos: &A, base_2d: &Base2D) -> Self

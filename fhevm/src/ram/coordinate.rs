@@ -79,7 +79,7 @@ impl Coordinate<Vec<u8>> {
         Module<B>: GGSWAutomorphism<B>,
     {
         let module: &Module<B> = params.module();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
         let evk_infos: &GGLWELayout = &params.evk_ggsw_infos();
 
         GGSW::automorphism_tmp_bytes(module, ggsw_infos, ggsw_infos, evk_infos, evk_infos)
@@ -93,7 +93,7 @@ impl Coordinate<Vec<u8>> {
     {
         let module: &Module<B> = params.module();
         let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
         GLWE::external_product_tmp_bytes(module, glwe_infos, glwe_infos, ggsw_infos)
     }
 
@@ -101,7 +101,7 @@ impl Coordinate<Vec<u8>> {
     where
         Module<B>: GLWESecretPreparedFactory<B> + GGSWEncryptSk<B>,
     {
-        let ggsw_infos: &GGSWLayout = &params.ggsw_addr_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
         ScalarZnx::bytes_of(ggsw_infos.n().into(), 1)
             + GLWESecretPrepared::bytes_of(params.module(), ggsw_infos.rank())
             + GGSW::encrypt_sk_tmp_bytes(params.module(), ggsw_infos)

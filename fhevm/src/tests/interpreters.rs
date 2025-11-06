@@ -1,5 +1,5 @@
 use crate::{
-    keys::{RAMKeys, RAMKeysPrepared},
+    keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
     Instruction, InstructionsParser, Interpreter,
 };
@@ -31,8 +31,8 @@ pub fn test_interpreter_init_one_instruction() {
 
     let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
-    sk_lwe.fill_binary_block(8, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, FFT64Ref> =
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
@@ -74,10 +74,10 @@ pub fn test_interpreter_init_one_instruction() {
         scratch.borrow(),
     );
 
-    let key: RAMKeys<Vec<u8>, CGGI> =
-        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let key: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
@@ -179,10 +179,10 @@ pub fn test_interpreter_init_many_instructions() {
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
-    let key: RAMKeys<Vec<u8>, CGGI> =
-        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let key: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
     for idx in 0..instructions_u32.len() {
@@ -319,18 +319,19 @@ pub fn test_interpreter_cycle_single_instruction_noop() {
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
-    let key: RAMKeys<Vec<u8>, CGGI> =
-        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let key: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
     println!("Cycle");
     interpreter.cycle(module, &key_prepared, scratch.borrow());
     println!("Cycle done");
 
-    let pc = interpreter.pc_fhe_uint.decrypt(module, &sk_glwe_prepared, scratch.borrow());
+    let pc = interpreter
+        .pc_fhe_uint
+        .decrypt(module, &sk_glwe_prepared, scratch.borrow());
     println!("PC: {}", pc);
     assert_eq!(pc, 4);
-
 }

@@ -33,7 +33,7 @@ where
         self.scalar_to_ggsw_blind_rotation_tmp_bytes(res_infos, fheuint_infos)
     }
 
-    fn fhe_uint_blocks_to_address<DM, DR>(
+    fn fhe_uint_prepared_to_address<DM, DR>(
         &self,
         res: &mut Address<DM>,
         fheuint: &FheUintPrepared<DR, T, BE>,
@@ -83,7 +83,7 @@ impl<D: DataMut> Address<D> {
         M: FHEUintPreparedToAddress<T, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        module.fhe_uint_blocks_to_address(self, fheuint_prepared, scratch);
+        module.fhe_uint_prepared_to_address(self, fheuint_prepared, scratch);
     }
 
     pub fn set_from_fheuint<F, T, M, DK, BRA: BlindRotationAlgo, K, BE: Backend>(

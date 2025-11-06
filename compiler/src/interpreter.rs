@@ -5,7 +5,7 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    Interpreter, instructions::{Instruction, InstructionsParser}, keys::{RAMKeys, RAMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}
+    Interpreter, instructions::{Instruction, InstructionsParser}, keys::{VMKeys, VMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
@@ -281,10 +281,10 @@ impl Phantom {
             &mut source_xe,
             scratch.borrow(),
         );
-        let key: RAMKeys<Vec<u8>, CGGI> =
-        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+        let key: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-        let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, BackendImpl> = RAMKeysPrepared::alloc(&params);
+        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> = VMKeysPrepared::alloc(&params);
         key_prepared.prepare(module, &key, scratch.borrow());
 
         interpreter.cycle(module, &key_prepared, scratch.borrow());

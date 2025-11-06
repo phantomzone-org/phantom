@@ -115,10 +115,10 @@ impl<BE: Backend> Interpreter<BE> {
         let registers: Ram = Ram::new(params, 32, &[5].into(), 32);
         let ram: Ram = Ram::new(params, 32, &decomp_n, ram_size);
 
+        let base_2d_ram: Base2D = get_base_2d(rom_size as u32, &decomp_n);
         let base_2d_register: Base2D = get_base_2d(32, &[5].to_vec());
         let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
-        let ggsw_val_infos: &GGSWLayout = &params.ggsw_val_infos();
-        let ggsw_addr_infos: &GGSWLayout = &params.ggsw_addr_infos();
+        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
 
         let module: &Module<BE> = params.module();
 
@@ -136,21 +136,18 @@ impl<BE: Backend> Interpreter<BE> {
             ram_bit_size: (usize::BITS - (ram_size - 1).leading_zeros()) as usize,
             rd_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             ram_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
-            pcu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            mu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            rdu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
+            pcu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            mu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            rdu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
             pc_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs1_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs2_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rd_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
-            pc_addr: Address::alloc_from_infos(
-                ggsw_addr_infos,
-                &get_base_2d(rom_size as u32, &decomp_n),
-            ),
-            rd_addr: Address::alloc_from_infos(ggsw_addr_infos, &base_2d_register),
-            rs1_addr: Address::alloc_from_infos(ggsw_addr_infos, &base_2d_register),
-            rs2_addr: Address::alloc_from_infos(ggsw_addr_infos, &base_2d_register),
-            ram_addr: Address::alloc_from_infos(ggsw_addr_infos, &base_2d_register),
+            pc_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_ram),
+            rd_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
+            rs1_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
+            rs2_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
+            ram_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_ram),
             rdu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             mu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             pcu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
@@ -158,11 +155,11 @@ impl<BE: Backend> Interpreter<BE> {
             rs2_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             imm_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             ram_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
-            rs1_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            rs2_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            imm_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            pc_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
-            ram_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_val_infos),
+            rs1_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            rs2_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            imm_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            pc_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
+            ram_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
         }
     }
 
@@ -426,7 +423,8 @@ impl<BE: Backend> Interpreter<BE> {
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.ram.read_prepare_write(module, &self.ram_addr, keys, scratch);
+        self.ram
+            .read_prepare_write(module, &self.ram_addr, keys, scratch);
         self.ram.write_fhe_uint(
             module,
             &self.ram_val_fhe_uint,
@@ -502,7 +500,8 @@ impl<BE: Backend> Interpreter<BE> {
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.registers.read_prepare_write(module, &self.rd_addr, keys, scratch);
+        self.registers
+            .read_prepare_write(module, &self.rd_addr, keys, scratch);
         self.registers
             .write_fhe_uint(module, &self.rd_val_fhe_uint, &self.rd_addr, keys, scratch);
     }

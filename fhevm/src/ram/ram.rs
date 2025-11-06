@@ -80,7 +80,7 @@ impl Ram {
     {
         let module: &Module<BE> = params.module();
         let glwe_infos: GLWELayout = params.glwe_ct_infos();
-        let ggsw_infos: GGSWLayout = params.ggsw_addr_infos();
+        let ggsw_infos: GGSWLayout = params.ggsw_infos();
         let evk_glwe_infos: GGLWELayout = params.evk_glwe_infos();
 
         let enc_sk: usize = GLWE::encrypt_sk_tmp_bytes(module, &glwe_infos);

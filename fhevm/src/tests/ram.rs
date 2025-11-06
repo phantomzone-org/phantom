@@ -3,9 +3,11 @@ use std::time::Instant;
 use itertools::Itertools;
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
-    GLWEDecrypt, GLWEEncryptSk, ScratchTakeCore, layouts::{
-        GLWE, GLWEInfos, GLWELayout, GLWEPlaintext, GLWESecret, LWEInfos, LWESecret, prepared::GLWESecretPrepared
-    }
+    layouts::{
+        prepared::GLWESecretPrepared, GLWEInfos, GLWELayout, GLWEPlaintext, GLWESecret, LWEInfos,
+        LWESecret, GLWE,
+    },
+    GLWEDecrypt, GLWEEncryptSk, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ScratchOwnedAlloc, ScratchOwnedBorrow, ScratchTakeBasic},
@@ -14,12 +16,15 @@ use poulpy_hal::{
 };
 
 use crate::{
-    keys::{RAMKeys, RAMKeysPrepared},
+    keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
     Address, Ram,
 };
 
-use poulpy_schemes::tfhe::{bdd_arithmetic::{FheUint, FheUintPrepared, ToBits}, blind_rotation::CGGI};
+use poulpy_schemes::tfhe::{
+    bdd_arithmetic::{FheUint, FheUintPrepared, ToBits},
+    blind_rotation::CGGI,
+};
 use rand_core::RngCore;
 
 #[test]
@@ -42,9 +47,10 @@ fn test_fhe_ram() {
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     // Generates a new secret-key along with the public evaluation keys.
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
-    sk_lwe.fill_binary_block(8, &mut source_xs);    
+    sk_lwe.fill_binary_block(8, &mut source_xs);
 
-    let keys: RAMKeys<Vec<u8>, CGGI> = RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let keys: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
@@ -52,7 +58,7 @@ fn test_fhe_ram() {
         GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
     sk_prep.prepare(params.module(), &sk_glwe);
 
-    let mut keys_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut keys_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
     // Some deterministic randomness
@@ -206,7 +212,8 @@ fn test_fhe_ram_read_from_fheuint() {
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
     sk_lwe.fill_binary_block(8, &mut source_xs);
 
-    let keys: RAMKeys<Vec<u8>, CGGI> = RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let keys: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
@@ -214,7 +221,7 @@ fn test_fhe_ram_read_from_fheuint() {
         GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
     sk_prep.prepare(params.module(), &sk_glwe);
 
-    let mut keys_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut keys_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
     // Some deterministic randomness
@@ -251,11 +258,11 @@ fn test_fhe_ram_read_from_fheuint() {
 
     // Random index
     let idx: u32 = source.next_u32() % max_addr as u32;
-    
+
     let mut fheuint: FheUintPrepared<Vec<u8>, u32, FFT64Ref> =
         FheUintPrepared::<Vec<u8>, u32, FFT64Ref>::alloc_from_infos(
             params.module(),
-            &params.ggsw_val_infos(),
+            &params.ggsw_infos(),
         );
     fheuint.encrypt_sk(
         params.module(),
@@ -316,7 +323,8 @@ fn test_fhe_ram_read_to_fheuint() {
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
     sk_lwe.fill_binary_block(8, &mut source_xs);
 
-    let keys: RAMKeys<Vec<u8>, CGGI> = RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let keys: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
@@ -324,7 +332,7 @@ fn test_fhe_ram_read_to_fheuint() {
         GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
     sk_prep.prepare(params.module(), &sk_glwe);
 
-    let mut keys_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut keys_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
     // Some deterministic randomness
@@ -419,7 +427,8 @@ fn test_fheuint_pack() {
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
     sk_lwe.fill_binary_block(8, &mut source_xs);
 
-    let keys: RAMKeys<Vec<u8>, CGGI> = RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let keys: VMKeys<Vec<u8>, CGGI> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
@@ -427,7 +436,7 @@ fn test_fheuint_pack() {
         GLWESecretPrepared::alloc(params.module(), sk_glwe.rank());
     sk_prep.prepare(params.module(), &sk_glwe);
 
-    let mut keys_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut keys_prepared: VMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = VMKeysPrepared::alloc(&params);
     keys_prepared.prepare(params.module(), &keys, scratch.borrow());
 
     let mut ct: Vec<GLWE<Vec<u8>>> = Vec::new();
