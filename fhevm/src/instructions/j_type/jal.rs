@@ -17,10 +17,20 @@ use crate::instructions::{decompose, reconstruct};
 pub struct Jal();
 
 impl Jal {
-    pub fn apply_pc(imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> [u8; 8] {
+    pub fn apply_pc(
+        imm: &[u32; 8],
+        _x_rs1: &[u32; 8],
+        _x_rs2: &[u32; 8],
+        pc: &[u32; 8],
+    ) -> [u32; 8] {
         decompose(reconstruct(pc).wrapping_add(reconstruct(imm)))
     }
-    pub fn apply_rd(_imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> [u8; 8] {
+    pub fn apply_rd(
+        _imm: &[u32; 8],
+        _x_rs1: &[u32; 8],
+        _x_rs2: &[u32; 8],
+        pc: &[u32; 8],
+    ) -> [u32; 8] {
         decompose(reconstruct(pc) + 4)
     }
 }

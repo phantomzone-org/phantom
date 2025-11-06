@@ -19,7 +19,7 @@ use crate::instructions::{decompose, reconstruct};
 pub struct Auipc();
 
 impl Auipc {
-    pub fn apply(imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> [u8; 8] {
+    pub fn apply(imm: &[u32; 8], _x_rs1: &[u32; 8], _x_rs2: &[u32; 8], pc: &[u32; 8]) -> [u32; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let pc_u32: u32 = reconstruct(pc);
         decompose(pc_u32.wrapping_add(imm_u32))

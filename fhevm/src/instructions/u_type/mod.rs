@@ -17,7 +17,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instructions::OpID;
+    use crate::{OpIDPCUpdate, OpIDRd, OpIDStore};
 
     #[test]
     fn imm_encoding() {
@@ -31,22 +31,28 @@ mod tests {
 
     #[test]
     fn lui() {
-        test_instruction(0b0110111, OpID::LUI)
+        test_instruction(
+            0b0110111,
+            (OpIDRd::LUI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn auipc() {
-        test_instruction(0b0010111, OpID::AUIPC)
+        test_instruction(
+            0b0010111,
+            (OpIDRd::AUIPC, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 }
 
 use crate::instructions::{Instruction, InstructionsParser};
 #[allow(dead_code)]
-fn test_instruction(op_code: u8, op_id: (u8, u8, u8)) {
+fn test_instruction(op_code: u32, op_id: (u32, u32, u32)) {
     let imm: u32 = 0xABCD_E000;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = 0b01011;
+    let rs2: u32 = 0;
+    let rs1: u32 = 0;
+    let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
     instruction.set_immediate(imm);
     instruction.set_rd(rd);

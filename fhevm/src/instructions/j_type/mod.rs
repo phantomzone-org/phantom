@@ -33,7 +33,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instructions::{sext, OpID};
+    use crate::{instructions::sext, OpIDPCUpdate, OpIDRd, OpIDStore};
     #[test]
     fn imm_encoding() {
         (1..21).for_each(|i| {
@@ -46,17 +46,17 @@ mod tests {
 
     #[test]
     fn jal() {
-        test_instruction(0b1101111, OpID::JAL)
+        test_instruction(0b1101111, (OpIDRd::JAL, OpIDStore::NONE, OpIDPCUpdate::JAL))
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
-fn test_instruction(op_code: u8, op_id: (u8, u8, u8)) {
+fn test_instruction(op_code: u32, op_id: (u32, u32, u32)) {
     let imm: u32 = 0xABCDE << 1;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0;
-    let rd: u8 = 0b01011;
+    let rs2: u32 = 0;
+    let rs1: u32 = 0;
+    let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
     instruction.set_immediate(imm);
     instruction.set_rd(rd);

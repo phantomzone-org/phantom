@@ -9,7 +9,7 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     FheUint, FheUintPrepared, GLWEBlinSelection, UnsignedInteger,
 };
 
-use crate::{keys::RAMKeysHelper, OpID, StoreOps};
+use crate::{keys::RAMKeysHelper, OpIDStore, StoreOps};
 
 pub trait Store<T: UnsignedInteger, BE: Backend> {
     fn id(&self) -> usize;
@@ -42,10 +42,10 @@ pub trait Store<T: UnsignedInteger, BE: Backend> {
 impl<BE: Backend> Store<u32, BE> for StoreOps {
     fn id(&self) -> usize {
         match self {
-            Self::None => OpID::NONE.1 as usize,
-            Self::Sb => OpID::SB.1 as usize,
-            Self::Sh => OpID::SH.1 as usize,
-            Self::Sw => OpID::SW.1 as usize,
+            Self::None => OpIDStore::NONE as usize,
+            Self::Sb => OpIDStore::SB as usize,
+            Self::Sh => OpIDStore::SH as usize,
+            Self::Sw => OpIDStore::SW as usize,
         }
     }
 

@@ -108,7 +108,7 @@ where
     let correct_mu: u32 = mu as u32;
     let correct_pcu: u32 = pcu as u32;
 
-    interpreter.pc_fhe_uint_prepared.encrypt_sk(
+    interpreter.pc_fhe_uint.encrypt_sk(
         module,
         idx as u32,
         &sk_glwe_prepared,
@@ -272,7 +272,7 @@ where
 
         interpreter.pc_fhe_uint.encrypt_sk(
             module,
-            idx as u32,
+            (idx << 2) as u32,
             &sk_glwe_prepared,
             &mut source_xa,
             &mut source_xe,
@@ -407,6 +407,15 @@ where
     interpreter.instructions_encrypt_sk(
         module,
         &instructions,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+
+    interpreter.pc_fhe_uint.encrypt_sk(
+        module,
+        0,
         &sk_glwe_prepared,
         &mut source_xa,
         &mut source_xe,

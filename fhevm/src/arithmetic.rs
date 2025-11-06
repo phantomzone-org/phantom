@@ -11,7 +11,7 @@ use poulpy_schemes::{
     },
 };
 
-use crate::{OpID, RdOps};
+use crate::{OpIDRd, RdOps};
 
 define_bdd_2w_to_1w_trait!(pub Auipc, auipc);
 impl_bdd_2w_to_1w_trait!(
@@ -41,7 +41,7 @@ impl_bdd_2w_to_1w_trait!(
 );
 
 pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
-    fn id(&self) -> usize;
+    fn id(&self) -> u32;
 
     fn eval<R, A, B, I, P, H, K, M>(
         &self,
@@ -66,32 +66,32 @@ pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
 }
 
 impl<BE: Backend> Evaluate<u32, BE> for RdOps {
-    fn id(&self) -> usize {
+    fn id(&self) -> u32 {
         match self {
-            Self::None => OpID::NONE.0 as usize,
-            Self::Auipc => OpID::AUIPC.0 as usize,
-            Self::Jal => OpID::JAL.0 as usize,
-            Self::Jalr => OpID::JALR.0 as usize,
-            Self::Lui => OpID::LUI.0 as usize,
-            Self::Add => OpID::ADD.0 as usize,
-            Self::Sub => OpID::SUB.0 as usize,
-            Self::Sll => OpID::SLL.0 as usize,
-            Self::Slt => OpID::SLT.0 as usize,
-            Self::Sltu => OpID::SLTU.0 as usize,
-            Self::Xor => OpID::XOR.0 as usize,
-            Self::Srl => OpID::SRL.0 as usize,
-            Self::Sra => OpID::SRA.0 as usize,
-            Self::Or => OpID::OR.0 as usize,
-            Self::Addi => OpID::ADDI.0 as usize,
-            Self::And => OpID::AND.0 as usize,
-            Self::Sltiu => OpID::SLTIU.0 as usize,
-            Self::Xori => OpID::XORI.0 as usize,
-            Self::Ori => OpID::ORI.0 as usize,
-            Self::Andi => OpID::ANDI.0 as usize,
-            Self::Slli => OpID::SLLI.0 as usize,
-            Self::Srli => OpID::SRLI.0 as usize,
-            Self::Srai => OpID::SRAI.0 as usize,
-            Self::Slti => OpID::SLTI.0 as usize,
+            Self::None => OpIDRd::NONE,
+            Self::Auipc => OpIDRd::AUIPC,
+            Self::Jal => OpIDRd::JAL,
+            Self::Jalr => OpIDRd::JALR,
+            Self::Lui => OpIDRd::LUI,
+            Self::Add => OpIDRd::ADD,
+            Self::Sub => OpIDRd::SUB,
+            Self::Sll => OpIDRd::SLL,
+            Self::Slt => OpIDRd::SLT,
+            Self::Sltu => OpIDRd::SLTU,
+            Self::Xor => OpIDRd::XOR,
+            Self::Srl => OpIDRd::SRL,
+            Self::Sra => OpIDRd::SRA,
+            Self::Or => OpIDRd::OR,
+            Self::Addi => OpIDRd::ADDI,
+            Self::And => OpIDRd::AND,
+            Self::Sltiu => OpIDRd::SLTIU,
+            Self::Xori => OpIDRd::XORI,
+            Self::Ori => OpIDRd::ORI,
+            Self::Andi => OpIDRd::ANDI,
+            Self::Slli => OpIDRd::SLLI,
+            Self::Srli => OpIDRd::SRLI,
+            Self::Srai => OpIDRd::SRAI,
+            Self::Slti => OpIDRd::SLTI,
             _ => {
                 unimplemented!()
             }

@@ -19,7 +19,7 @@ use crate::instructions::{decompose, reconstruct};
 pub struct Andi();
 
 impl Andi {
-    pub fn apply(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8]) -> [u8; 8] {
+    pub fn apply(imm: &[u32; 8], x_rs1: &[u32; 8], _x_rs2: &[u32; 8]) -> [u32; 8] {
         let imm_u32: u32 = reconstruct(imm);
         let x_rs1_u32: u32 = reconstruct(x_rs1);
         decompose(x_rs1_u32 & imm_u32)
@@ -34,7 +34,7 @@ mod tests {
     pub fn apply() {
         let imm: u32 = sext(0xFFF, 11);
         let x_rs1: u32 = 0x0FFF_FFFF;
-        let rd_w_decomp: [u8; 8] = Andi::apply(&decompose(imm), &decompose(x_rs1), &[0u8; 8]);
+        let rd_w_decomp: [u32; 8] = Andi::apply(&decompose(imm), &decompose(x_rs1), &[0u32; 8]);
         assert_eq!(reconstruct(&rd_w_decomp), x_rs1 & imm)
     }
 }

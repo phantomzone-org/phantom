@@ -5,10 +5,10 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, UnsignedInteger};
 
-use crate::{keys::RAMKeysHelper, LoadOps, OpID};
+use crate::{keys::RAMKeysHelper, LoadOps, OpIDRd};
 
 pub trait Load<T: UnsignedInteger, BE: Backend> {
-    fn id(&self) -> usize;
+    fn id(&self) -> u32;
 
     fn load<R, A, H, K, M>(
         &self,
@@ -27,13 +27,13 @@ pub trait Load<T: UnsignedInteger, BE: Backend> {
 }
 
 impl<BE: Backend> Load<u32, BE> for LoadOps {
-    fn id(&self) -> usize {
+    fn id(&self) -> u32 {
         match self {
-            Self::Lb => OpID::LB.0 as usize,
-            Self::Lbu => OpID::LBU.0 as usize,
-            Self::Lh => OpID::LH.0 as usize,
-            Self::Lhu => OpID::LHU.0 as usize,
-            Self::Lw => OpID::LW.0 as usize,
+            Self::Lb => OpIDRd::LB,
+            Self::Lbu => OpIDRd::LBU,
+            Self::Lh => OpIDRd::LH,
+            Self::Lhu => OpIDRd::LHU,
+            Self::Lw => OpIDRd::LW,
         }
     }
 

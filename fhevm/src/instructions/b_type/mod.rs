@@ -41,7 +41,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 mod tests {
 
     use super::*;
-    use crate::instructions::{sext, OpID};
+    use crate::{instructions::sext, OpIDPCUpdate, OpIDRd, OpIDStore};
 
     #[test]
     fn imm_encoding() {
@@ -55,42 +55,66 @@ mod tests {
 
     #[test]
     fn beq() {
-        test_instruction(0b000, 0b1100011, OpID::BEQ)
+        test_instruction(
+            0b000,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BEQ),
+        )
     }
 
     #[test]
     fn bge() {
-        test_instruction(0b101, 0b1100011, OpID::BGE)
+        test_instruction(
+            0b101,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGE),
+        )
     }
 
     #[test]
     fn bgeu() {
-        test_instruction(0b111, 0b1100011, OpID::BGEU)
+        test_instruction(
+            0b111,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGEU),
+        )
     }
 
     #[test]
     fn blt() {
-        test_instruction(0b100, 0b1100011, OpID::BLT)
+        test_instruction(
+            0b100,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLT),
+        )
     }
 
     #[test]
     fn bltu() {
-        test_instruction(0b110, 0b1100011, OpID::BLTU)
+        test_instruction(
+            0b110,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLTU),
+        )
     }
 
     #[test]
     fn bne() {
-        test_instruction(0b001, 0b1100011, OpID::BNE)
+        test_instruction(
+            0b001,
+            0b1100011,
+            (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BNE),
+        )
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
-fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
+fn test_instruction(funct3: u32, op_code: u32, op_id: (u32, u32, u32)) {
     let imm: u32 = 0xABC << 1;
-    let rs2: u8 = 0b11011;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0;
+    let rs2: u32 = 0b11011;
+    let rs1: u32 = 0b10011;
+    let rd: u32 = 0;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
     instruction.set_immediate(imm);
     instruction.set_funct3(funct3);

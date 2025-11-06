@@ -71,7 +71,7 @@ pub mod r_type;
 pub mod s_type;
 pub mod u_type;
 
-pub fn reconstruct(x: &[u8; 8]) -> u32 {
+pub fn reconstruct(x: &[u32; 8]) -> u32 {
     let mut y: u32 = 0;
     y |= (x[7] as u32) << 28;
     y |= (x[6] as u32) << 24;
@@ -84,20 +84,20 @@ pub fn reconstruct(x: &[u8; 8]) -> u32 {
     y
 }
 
-pub fn decompose(x: u32) -> [u8; 8] {
-    let mut y: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-    y[0] = ((x >> 0) & 0xF) as u8;
-    y[1] = ((x >> 4) & 0xF) as u8;
-    y[2] = ((x >> 8) & 0xF) as u8;
-    y[3] = ((x >> 12) & 0xF) as u8;
-    y[4] = ((x >> 16) & 0xF) as u8;
-    y[5] = ((x >> 20) & 0xF) as u8;
-    y[6] = ((x >> 24) & 0xF) as u8;
-    y[7] = ((x >> 28) & 0xF) as u8;
+pub fn decompose(x: u32) -> [u32; 8] {
+    let mut y: [u32; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
+    y[0] = ((x >> 0) & 0xF) as u32;
+    y[1] = ((x >> 4) & 0xF) as u32;
+    y[2] = ((x >> 8) & 0xF) as u32;
+    y[3] = ((x >> 12) & 0xF) as u32;
+    y[4] = ((x >> 16) & 0xF) as u32;
+    y[5] = ((x >> 20) & 0xF) as u32;
+    y[6] = ((x >> 24) & 0xF) as u32;
+    y[7] = ((x >> 28) & 0xF) as u32;
     y
 }
 
-pub fn sext(x: u32, bits: usize) -> u32 {
+pub fn sext(x: u32, bits: u32) -> u32 {
     x | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
 }
 
@@ -109,15 +109,15 @@ pub enum StoreOps {
 }
 
 impl StoreOps {
-    pub fn apply(&self, value: &[u8; 8]) -> (usize, [u8; 8]) {
+    pub fn apply(&self, value: &[u32; 8]) -> (u32, [u32; 8]) {
         match self {
             StoreOps::None => (0, *value),
-            StoreOps::Sb => (OpID::SB.1 as usize, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
+            StoreOps::Sb => (OpIDStore::SB, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
             StoreOps::Sh => (
-                OpID::SH.1 as usize,
+                OpIDStore::SH,
                 [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
             ),
-            StoreOps::Sw => (OpID::SW.1 as usize, *value),
+            StoreOps::Sw => (OpIDStore::SW, *value),
         }
     }
 }
@@ -140,43 +140,43 @@ pub enum PcOps {
 impl PcOps {
     pub fn apply(
         &self,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        x_rs2: &[u8; 8],
-        pc: &[u8; 8],
-    ) -> (usize, [u8; 8]) {
+        imm: &[u32; 8],
+        x_rs1: &[u32; 8],
+        x_rs2: &[u32; 8],
+        pc: &[u32; 8],
+    ) -> (u32, [u32; 8]) {
         match self {
             PcOps::One => (0, decompose(reconstruct(pc).wrapping_add(4))),
             PcOps::Beq => (
-                OpID::BEQ.2 as usize,
+                OpIDPCUpdate::BEQ,
                 b_type::beq::Beq::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Bge => (
-                OpID::BGE.2 as usize,
+                OpIDPCUpdate::BGE,
                 b_type::bge::Bge::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Bgeu => (
-                OpID::BGEU.2 as usize,
+                OpIDPCUpdate::BGEU,
                 b_type::bgeu::Bgeu::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Blt => (
-                OpID::BLT.2 as usize,
+                OpIDPCUpdate::BLT,
                 b_type::blt::Blt::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Bltu => (
-                OpID::BLTU.2 as usize,
+                OpIDPCUpdate::BLTU,
                 b_type::bltu::Bltu::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Bne => (
-                OpID::BNE.2 as usize,
+                OpIDPCUpdate::BNE,
                 b_type::bne::Bne::apply(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Jal => (
-                OpID::JAL.2 as usize,
+                OpIDPCUpdate::JAL,
                 j_type::jal::Jal::apply_pc(imm, x_rs1, x_rs2, pc),
             ),
             PcOps::Jalr => (
-                OpID::JALR.2 as usize,
+                OpIDPCUpdate::JALR,
                 i_type::jalr::Jalr::apply_pc(imm, x_rs1, x_rs2, pc),
             ),
         }
@@ -233,137 +233,62 @@ pub enum RdOps {
 impl RdOps {
     pub fn apply(
         &self,
-        imm: &[u8; 8],
-        x_rs1: &[u8; 8],
-        x_rs2: &[u8; 8],
-        pc: &[u8; 8],
-    ) -> (usize, [u8; 8]) {
+        imm: &[u32; 8],
+        x_rs1: &[u32; 8],
+        x_rs2: &[u32; 8],
+        pc: &[u32; 8],
+    ) -> (u32, [u32; 8]) {
         match self {
-            RdOps::None => (0, [0u8; 8]),
-            RdOps::Lui => (
-                OpID::LUI.0 as usize,
-                u_type::lui::Lui::apply(imm, x_rs1, x_rs2),
-            ),
+            RdOps::None => (0, [0u32; 8]),
+            RdOps::Lui => (OpIDRd::LUI, u_type::lui::Lui::apply(imm, x_rs1, x_rs2)),
             RdOps::Auipc => (
-                OpID::AUIPC.0 as usize,
+                OpIDRd::AUIPC,
                 u_type::auipc::Auipc::apply(imm, x_rs1, x_rs2, pc),
             ),
-            RdOps::Addi => (
-                OpID::ADDI.0 as usize,
-                i_type::addi::Addi::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Slti => (
-                OpID::SLTI.0 as usize,
-                i_type::slti::Slti::apply(imm, x_rs1, x_rs2),
-            ),
+            RdOps::Addi => (OpIDRd::ADDI, i_type::addi::Addi::apply(imm, x_rs1, x_rs2)),
+            RdOps::Slti => (OpIDRd::SLTI, i_type::slti::Slti::apply(imm, x_rs1, x_rs2)),
             RdOps::Sltiu => (
-                OpID::SLTIU.0 as usize,
+                OpIDRd::SLTIU,
                 i_type::sltiu::Sltiu::apply(imm, x_rs1, x_rs2),
             ),
-            RdOps::Xori => (
-                OpID::XORI.0 as usize,
-                i_type::xori::Xori::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Ori => (
-                OpID::ORI.0 as usize,
-                i_type::ori::Ori::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Andi => (
-                OpID::ANDI.0 as usize,
-                i_type::andi::Andi::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Slli => (
-                OpID::SLLI.0 as usize,
-                i_type::slli::Slli::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Srli => (
-                OpID::SRLI.0 as usize,
-                i_type::srli::Srli::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Srai => (
-                OpID::SRAI.0 as usize,
-                i_type::srai::Srai::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Add => (
-                OpID::ADD.0 as usize,
-                r_type::add::Add::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Sub => (
-                OpID::SUB.0 as usize,
-                r_type::sub::Sub::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Sll => (
-                OpID::SLL.0 as usize,
-                r_type::sll::Sll::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Slt => (
-                OpID::SLT.0 as usize,
-                r_type::slt::Slt::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Sltu => (
-                OpID::SLTU.0 as usize,
-                r_type::sltu::Sltu::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Xor => (
-                OpID::XOR.0 as usize,
-                r_type::xor::Xor::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Srl => (
-                OpID::SRL.0 as usize,
-                r_type::srl::Srl::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Sra => (
-                OpID::SRA.0 as usize,
-                r_type::sra::Sra::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Or => (
-                OpID::OR.0 as usize,
-                r_type::or::Or::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::And => (
-                OpID::AND.0 as usize,
-                r_type::and::And::apply(imm, x_rs1, x_rs2),
-            ),
+            RdOps::Xori => (OpIDRd::XORI, i_type::xori::Xori::apply(imm, x_rs1, x_rs2)),
+            RdOps::Ori => (OpIDRd::ORI, i_type::ori::Ori::apply(imm, x_rs1, x_rs2)),
+            RdOps::Andi => (OpIDRd::ANDI, i_type::andi::Andi::apply(imm, x_rs1, x_rs2)),
+            RdOps::Slli => (OpIDRd::SLLI, i_type::slli::Slli::apply(imm, x_rs1, x_rs2)),
+            RdOps::Srli => (OpIDRd::SRLI, i_type::srli::Srli::apply(imm, x_rs1, x_rs2)),
+            RdOps::Srai => (OpIDRd::SRAI, i_type::srai::Srai::apply(imm, x_rs1, x_rs2)),
+            RdOps::Add => (OpIDRd::ADD, r_type::add::Add::apply(imm, x_rs1, x_rs2)),
+            RdOps::Sub => (OpIDRd::SUB, r_type::sub::Sub::apply(imm, x_rs1, x_rs2)),
+            RdOps::Sll => (OpIDRd::SLL, r_type::sll::Sll::apply(imm, x_rs1, x_rs2)),
+            RdOps::Slt => (OpIDRd::SLT, r_type::slt::Slt::apply(imm, x_rs1, x_rs2)),
+            RdOps::Sltu => (OpIDRd::SLTU, r_type::sltu::Sltu::apply(imm, x_rs1, x_rs2)),
+            RdOps::Xor => (OpIDRd::XOR, r_type::xor::Xor::apply(imm, x_rs1, x_rs2)),
+            RdOps::Srl => (OpIDRd::SRL, r_type::srl::Srl::apply(imm, x_rs1, x_rs2)),
+            RdOps::Sra => (OpIDRd::SRA, r_type::sra::Sra::apply(imm, x_rs1, x_rs2)),
+            RdOps::Or => (OpIDRd::OR, r_type::or::Or::apply(imm, x_rs1, x_rs2)),
+            RdOps::And => (OpIDRd::AND, r_type::and::And::apply(imm, x_rs1, x_rs2)),
             RdOps::Jal => (
-                OpID::JAL.0 as usize,
+                OpIDRd::JAL,
                 j_type::jal::Jal::apply_rd(imm, x_rs1, x_rs2, pc),
             ),
             RdOps::Jalr => (
-                OpID::JALR.0 as usize,
+                OpIDRd::JALR,
                 i_type::jalr::Jalr::apply_rd(imm, x_rs1, x_rs2, pc),
             ),
-            RdOps::Mul => (
-                OpID::MUL.0 as usize,
-                r_type::mul::Mul::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Mulh => (
-                OpID::MULH.0 as usize,
-                r_type::mulh::Mulh::apply(imm, x_rs1, x_rs2),
-            ),
+            RdOps::Mul => (OpIDRd::MUL, r_type::mul::Mul::apply(imm, x_rs1, x_rs2)),
+            RdOps::Mulh => (OpIDRd::MULH, r_type::mulh::Mulh::apply(imm, x_rs1, x_rs2)),
             RdOps::Mulhsu => (
-                OpID::MULHSU.0 as usize,
+                OpIDRd::MULHSU,
                 r_type::mulhsu::Mulhsu::apply(imm, x_rs1, x_rs2),
             ),
             RdOps::Mulhu => (
-                OpID::MULHU.0 as usize,
+                OpIDRd::MULHU,
                 r_type::mulhu::Mulhu::apply(imm, x_rs1, x_rs2),
             ),
-            RdOps::Div => (
-                OpID::DIV.0 as usize,
-                r_type::div::Div::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Divu => (
-                OpID::DIVU.0 as usize,
-                r_type::divu::Divu::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Rem => (
-                OpID::REM.0 as usize,
-                r_type::rem::Rem::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Remu => (
-                OpID::REMU.0 as usize,
-                r_type::remu::Remu::apply(imm, x_rs1, x_rs2),
-            ),
+            RdOps::Div => (OpIDRd::DIV, r_type::div::Div::apply(imm, x_rs1, x_rs2)),
+            RdOps::Divu => (OpIDRd::DIVU, r_type::divu::Divu::apply(imm, x_rs1, x_rs2)),
+            RdOps::Rem => (OpIDRd::REM, r_type::rem::Rem::apply(imm, x_rs1, x_rs2)),
+            RdOps::Remu => (OpIDRd::REMU, r_type::remu::Remu::apply(imm, x_rs1, x_rs2)),
         }
     }
 }
@@ -447,26 +372,26 @@ pub static LOAD_OPS_LIST: &[LoadOps] = &[
 ];
 
 impl LoadOps {
-    pub fn apply(&self, value: &[u8; 8]) -> (usize, [u8; 8]) {
+    pub fn apply(&self, value: &[u32; 8]) -> (u32, [u32; 8]) {
         match self {
             LoadOps::Lb => (
-                OpID::LB.0 as usize,
+                OpIDRd::LB,
                 decompose(sext(
                     reconstruct(&[value[0], value[1], 0, 0, 0, 0, 0, 0]),
                     7,
                 )),
             ),
             LoadOps::Lh => (
-                OpID::LH.0 as usize,
+                OpIDRd::LH,
                 decompose(sext(
                     reconstruct(&[value[0], value[1], value[2], value[3], 0, 0, 0, 0]),
                     15,
                 )),
             ),
-            LoadOps::Lw => (OpID::LW.0 as usize, *value),
-            LoadOps::Lbu => (OpID::LBU.0 as usize, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
+            LoadOps::Lw => (OpIDRd::LW, *value),
+            LoadOps::Lbu => (OpIDRd::LBU, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
             LoadOps::Lhu => (
-                OpID::LHU.0 as usize,
+                OpIDRd::LHU,
                 [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
             ),
         }
@@ -474,55 +399,71 @@ impl LoadOps {
 }
 
 #[non_exhaustive]
-pub struct OpID;
+pub struct OpIDRd;
 
-impl OpID {
-    pub const NONE: (u8, u8, u8) = (0, 0, 0);
-    pub const LUI: (u8, u8, u8) = (1, 0, 0);
-    pub const AUIPC: (u8, u8, u8) = (2, 0, 0);
-    pub const ADDI: (u8, u8, u8) = (3, 0, 0);
-    pub const SLTI: (u8, u8, u8) = (4, 0, 0);
-    pub const SLTIU: (u8, u8, u8) = (5, 0, 0);
-    pub const XORI: (u8, u8, u8) = (6, 0, 0);
-    pub const ORI: (u8, u8, u8) = (7, 0, 0);
-    pub const ANDI: (u8, u8, u8) = (8, 0, 0);
-    pub const SLLI: (u8, u8, u8) = (9, 0, 0);
-    pub const SRLI: (u8, u8, u8) = (10, 0, 0);
-    pub const SRAI: (u8, u8, u8) = (11, 0, 0);
-    pub const ADD: (u8, u8, u8) = (12, 0, 0);
-    pub const SUB: (u8, u8, u8) = (13, 0, 0);
-    pub const SLL: (u8, u8, u8) = (14, 0, 0);
-    pub const SLT: (u8, u8, u8) = (15, 0, 0);
-    pub const SLTU: (u8, u8, u8) = (16, 0, 0);
-    pub const XOR: (u8, u8, u8) = (17, 0, 0);
-    pub const SRL: (u8, u8, u8) = (18, 0, 0);
-    pub const SRA: (u8, u8, u8) = (19, 0, 0);
-    pub const OR: (u8, u8, u8) = (20, 0, 0);
-    pub const AND: (u8, u8, u8) = (21, 0, 0);
-    pub const LB: (u8, u8, u8) = (22, 0, 0);
-    pub const LH: (u8, u8, u8) = (23, 0, 0);
-    pub const LW: (u8, u8, u8) = (24, 0, 0);
-    pub const LBU: (u8, u8, u8) = (25, 0, 0);
-    pub const LHU: (u8, u8, u8) = (26, 0, 0);
-    pub const MUL: (u8, u8, u8) = (29, 0, 0);
-    pub const MULH: (u8, u8, u8) = (30, 0, 0);
-    pub const MULHSU: (u8, u8, u8) = (31, 0, 0);
-    pub const MULHU: (u8, u8, u8) = (32, 0, 0);
-    pub const DIV: (u8, u8, u8) = (33, 0, 0);
-    pub const DIVU: (u8, u8, u8) = (34, 0, 0);
-    pub const REM: (u8, u8, u8) = (35, 0, 0);
-    pub const REMU: (u8, u8, u8) = (36, 0, 0);
-    pub const SB: (u8, u8, u8) = (0, 1, 0);
-    pub const SH: (u8, u8, u8) = (0, 2, 0);
-    pub const SW: (u8, u8, u8) = (0, 3, 0);
-    pub const JAL: (u8, u8, u8) = (27, 0, 1);
-    pub const JALR: (u8, u8, u8) = (28, 0, 2);
-    pub const BEQ: (u8, u8, u8) = (0, 0, 3);
-    pub const BNE: (u8, u8, u8) = (0, 0, 4);
-    pub const BLT: (u8, u8, u8) = (0, 0, 5);
-    pub const BGE: (u8, u8, u8) = (0, 0, 6);
-    pub const BLTU: (u8, u8, u8) = (0, 0, 7);
-    pub const BGEU: (u8, u8, u8) = (0, 0, 8);
+impl OpIDRd {
+    pub const NONE: u32 = 0;
+    pub const LUI: u32 = 1;
+    pub const AUIPC: u32 = 2;
+    pub const ADDI: u32 = 3;
+    pub const SLTI: u32 = 4;
+    pub const SLTIU: u32 = 5;
+    pub const XORI: u32 = 6;
+    pub const ORI: u32 = 7;
+    pub const ANDI: u32 = 8;
+    pub const SLLI: u32 = 9;
+    pub const SRLI: u32 = 10;
+    pub const SRAI: u32 = 11;
+    pub const ADD: u32 = 12;
+    pub const SUB: u32 = 13;
+    pub const SLL: u32 = 14;
+    pub const SLT: u32 = 15;
+    pub const SLTU: u32 = 16;
+    pub const XOR: u32 = 17;
+    pub const SRL: u32 = 18;
+    pub const SRA: u32 = 19;
+    pub const OR: u32 = 20;
+    pub const AND: u32 = 21;
+    pub const LB: u32 = 22;
+    pub const LH: u32 = 23;
+    pub const LW: u32 = 24;
+    pub const LBU: u32 = 25;
+    pub const LHU: u32 = 26;
+    pub const MUL: u32 = 29;
+    pub const MULH: u32 = 30;
+    pub const MULHSU: u32 = 31;
+    pub const MULHU: u32 = 32;
+    pub const DIV: u32 = 33;
+    pub const DIVU: u32 = 34;
+    pub const REM: u32 = 35;
+    pub const REMU: u32 = 36;
+    pub const JAL: u32 = 27;
+    pub const JALR: u32 = 28;
+}
+
+#[non_exhaustive]
+pub struct OpIDStore;
+
+impl OpIDStore {
+    pub const NONE: u32 = 0b00;
+    pub const SB: u32 = 0b01;
+    pub const SH: u32 = 0b10;
+    pub const SW: u32 = 0b11;
+}
+
+#[non_exhaustive]
+pub struct OpIDPCUpdate;
+
+impl OpIDPCUpdate {
+    pub const NONE: u32 = 0b1000;
+    pub const JAL: u32 = 0b1100;
+    pub const JALR: u32 = 0b1110;
+    pub const BNE: u32 = 0b0010;
+    pub const BEQ: u32 = 0b0000;
+    pub const BLT: u32 = 0b0110;
+    pub const BGE: u32 = 0b0111;
+    pub const BLTU: u32 = 0b0100;
+    pub const BGEU: u32 = 0b0101;
 }
 
 pub struct InstructionsParser {
@@ -673,7 +614,7 @@ impl Instruction {
 
     #[inline(always)]
     pub fn get_type(&self) -> Type {
-        let opcode: u8 = self.get_opcode();
+        let opcode: u32 = self.get_opcode();
         match opcode {
             0b0110111 | 0b0010111 => Type::U,
             0b0010011 | 0b0000011 | 0b1100111 => Type::I,
@@ -687,7 +628,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_funct3(&self) -> u8 {
+    pub fn get_funct3(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -698,11 +639,11 @@ impl Instruction {
                 _ => {}
             }
         }
-        ((self.0 & FUNCT3MASK) >> FUNCT3SHIFT) as u8
+        ((self.0 & FUNCT3MASK) >> FUNCT3SHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn set_funct3(&mut self, funct3: u8) {
+    pub fn set_funct3(&mut self, funct3: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -718,7 +659,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_funct7(&self) -> u8 {
+    pub fn get_funct7(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -729,11 +670,11 @@ impl Instruction {
                 ),
             }
         }
-        ((self.0 & FUNCT7MASK) >> FUNCT7SHIFT) as u8
+        ((self.0 & FUNCT7MASK) >> FUNCT7SHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn set_funct7(&mut self, funct7: u8) {
+    pub fn set_funct7(&mut self, funct7: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -749,7 +690,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs1(&self) -> u8 {
+    pub fn get_rs1(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -760,11 +701,11 @@ impl Instruction {
                 ),
             }
         }
-        ((self.0 & RS1MASK) >> RS1SHIFT) as u8
+        ((self.0 & RS1MASK) >> RS1SHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn get_rs1_or_zero(&self) -> u8 {
+    pub fn get_rs1_or_zero(&self) -> u32 {
         match self.get_type() {
             Type::R | Type::I | Type::S | Type::B => self.get_rs1(),
             _ => 0,
@@ -772,7 +713,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_rs1(&mut self, rs1: u8) {
+    pub fn set_rs1(&mut self, rs1: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -787,7 +728,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs2(&self) -> u8 {
+    pub fn get_rs2(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -798,11 +739,11 @@ impl Instruction {
                 ),
             }
         }
-        ((self.0 & RS2MASK) >> RS2SHIFT) as u8
+        ((self.0 & RS2MASK) >> RS2SHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn get_rs2_or_zero(&self) -> u8 {
+    pub fn get_rs2_or_zero(&self) -> u32 {
         match self.get_type() {
             Type::R | Type::S | Type::B => self.get_rs2(),
             _ => 0,
@@ -810,7 +751,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_rs2(&mut self, rs2: u8) {
+    pub fn set_rs2(&mut self, rs2: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -825,7 +766,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rd(&self) -> u8 {
+    pub fn get_rd(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -836,11 +777,11 @@ impl Instruction {
                 ),
             }
         }
-        ((self.0 & RDMASK) >> RDSHIFT) as u8
+        ((self.0 & RDMASK) >> RDSHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn get_rd_or_zero(&self) -> u8 {
+    pub fn get_rd_or_zero(&self) -> u32 {
         match self.get_type() {
             Type::R | Type::I | Type::U | Type::J => self.get_rd(),
             _ => 0,
@@ -848,7 +789,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_rd(&mut self, rd: u8) {
+    pub fn set_rd(&mut self, rd: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -863,7 +804,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_shamt(&self) -> u8 {
+    pub fn get_shamt(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -874,11 +815,11 @@ impl Instruction {
                 ),
             }
         }
-        ((self.0 & SHAMTMASK) >> SHAMTSHIFT) as u8
+        ((self.0 & SHAMTMASK) >> SHAMTSHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn set_shamt(&mut self, shamt: u8) {
+    pub fn set_shamt(&mut self, shamt: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -898,12 +839,12 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_opcode(&self) -> u8 {
-        ((self.0 & OPCODEMASK) >> OPCODESHIFT) as u8
+    pub fn get_opcode(&self) -> u32 {
+        ((self.0 & OPCODEMASK) >> OPCODESHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn set_opcode(&mut self, opcode: u8) {
+    pub fn set_opcode(&mut self, opcode: u32) {
         self.0 =
             (self.0 & (0xFFFF_FFFF ^ OPCODEMASK)) | ((opcode as u32) << OPCODESHIFT) & OPCODEMASK
     }
@@ -913,7 +854,7 @@ impl Instruction {
         match self.get_type() {
             Type::R => panic!("cannot encode immediate on type R instruction"),
             Type::I => match (self.get_funct3(), self.get_opcode()) {
-                (0b001, 0b0010011) | (0b101, 0b0010011) => self.set_shamt(immediate as u8),
+                (0b001, 0b0010011) | (0b101, 0b0010011) => self.set_shamt(immediate as u32),
                 _ => i_type::set_immediate(&mut self.0, immediate),
             },
             Type::S => s_type::set_immediate(&mut self.0, immediate),
@@ -943,7 +884,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_registers(&self) -> (u8, u8, u8) {
+    pub fn get_registers(&self) -> (u32, u32, u32) {
         match self.get_type() {
             Type::R => (self.get_rs2(), self.get_rs1(), self.get_rd()),
             Type::I => (0, self.get_rs1(), self.get_rd()),
@@ -954,28 +895,28 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_opid(&self) -> (u8, u8, u8) {
-        let opcode: u8 = self.get_opcode();
+    pub fn get_opid(&self) -> (u32, u32, u32) {
+        let opcode: u32 = self.get_opcode();
         match self.get_type() {
             Type::R => match (self.get_funct7(), self.get_funct3()) {
-                (0b0000000, 0b000) => OpID::ADD,
-                (0b0100000, 0b000) => OpID::SUB,
-                (0b0000000, 0b001) => OpID::SLL,
-                (0b0000000, 0b010) => OpID::SLT,
-                (0b0000000, 0b011) => OpID::SLTU,
-                (0b0000000, 0b100) => OpID::XOR,
-                (0b0000000, 0b101) => OpID::SRL,
-                (0b0100000, 0b101) => OpID::SRA,
-                (0b0000000, 0b110) => OpID::OR,
-                (0b0000000, 0b111) => OpID::AND,
-                (0b0000001, 0b000) => OpID::MUL,
-                (0b0000001, 0b001) => OpID::MULH,
-                (0b0000001, 0b010) => OpID::MULHSU,
-                (0b0000001, 0b011) => OpID::MULHU,
-                (0b0000001, 0b100) => OpID::DIV,
-                (0b0000001, 0b101) => OpID::DIVU,
-                (0b0000001, 0b110) => OpID::REM,
-                (0b0000001, 0b111) => OpID::REMU,
+                (0b0000000, 0b000) => (OpIDRd::ADD, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0100000, 0b000) => (OpIDRd::SUB, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b001) => (OpIDRd::SLL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b010) => (OpIDRd::SLT, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b011) => (OpIDRd::SLTU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b100) => (OpIDRd::XOR, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b101) => (OpIDRd::SRL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0100000, 0b101) => (OpIDRd::SRA, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b110) => (OpIDRd::OR, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b111) => (OpIDRd::AND, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b000) => (OpIDRd::MUL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b001) => (OpIDRd::MULH, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b010) => (OpIDRd::MULHSU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b011) => (OpIDRd::MULHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b100) => (OpIDRd::DIV, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b101) => (OpIDRd::DIVU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b110) => (OpIDRd::REM, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000001, 0b111) => (OpIDRd::REMU, OpIDStore::NONE, OpIDPCUpdate::NONE),
                 _ => panic!(
                     "invalid funct3 {:03b} or funct7 {:07b}: {:032b}",
                     self.get_funct3(),
@@ -984,57 +925,57 @@ impl Instruction {
                 ),
             },
             Type::I => {
-                let funct3: u8 = self.get_funct3();
+                let funct3: u32 = self.get_funct3();
                 match opcode {
                     0b0010011 => match funct3 {
-                        0b000 => OpID::ADDI,
-                        0b010 => OpID::SLTI,
-                        0b011 => OpID::SLTIU,
-                        0b100 => OpID::XORI,
-                        0b110 => OpID::ORI,
-                        0b111 => OpID::ANDI,
-                        0b001 => OpID::SLLI,
+                        0b000 => (OpIDRd::ADDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b010 => (OpIDRd::SLTI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b011 => (OpIDRd::SLTIU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b100 => (OpIDRd::XORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b110 => (OpIDRd::ORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b111 => (OpIDRd::ANDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b001 => (OpIDRd::SLLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
                         0b101 => match self.get_funct7() {
-                            0b0000000 => OpID::SRLI,
-                            0b0100000 => OpID::SRAI,
+                            0b0000000 => (OpIDRd::SRLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                            0b0100000 => (OpIDRd::SRAI, OpIDStore::NONE, OpIDPCUpdate::NONE),
                             _ => panic!("invalid funct7: {:032b}", self.0),
                         },
                         _ => panic!("invalid funct3: {:032b}", self.0),
                     },
                     0b0000011 => match funct3 {
-                        0b000 => OpID::LB,
-                        0b001 => OpID::LH,
-                        0b010 => OpID::LW,
-                        0b100 => OpID::LBU,
-                        0b101 => OpID::LHU,
+                        0b000 => (OpIDRd::LB, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b001 => (OpIDRd::LH, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b010 => (OpIDRd::LW, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b100 => (OpIDRd::LBU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b101 => (OpIDRd::LHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
                         _ => panic!("invalid funct3: {:032b}", self.0),
                     },
-                    0b1100111 => OpID::JALR,
+                    0b1100111 => (OpIDRd::JALR, OpIDStore::NONE, OpIDPCUpdate::JALR),
                     _ => panic!("invalid instruction: {:032b}", self.0),
                 }
             }
             Type::S => match self.get_funct3() {
-                0b000 => OpID::SB,
-                0b001 => OpID::SH,
-                0b010 => OpID::SW,
+                0b000 => (OpIDRd::NONE, OpIDStore::SB, OpIDPCUpdate::NONE),
+                0b001 => (OpIDRd::NONE, OpIDStore::SH, OpIDPCUpdate::NONE),
+                0b010 => (OpIDRd::NONE, OpIDStore::SW, OpIDPCUpdate::NONE),
                 _ => panic!("invalid funct3: {:032b}", self.0),
             },
             Type::B => match self.get_funct3() {
-                0b000 => OpID::BEQ,
-                0b001 => OpID::BNE,
-                0b100 => OpID::BLT,
-                0b101 => OpID::BGE,
-                0b110 => OpID::BLTU,
-                0b111 => OpID::BGEU,
+                0b000 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BEQ),
+                0b001 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BNE),
+                0b100 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLT),
+                0b101 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGE),
+                0b110 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLTU),
+                0b111 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGEU),
                 _ => panic!("invalid funct3: {:032b}", self.0),
             },
             Type::U => match opcode {
-                0b0110111 => OpID::LUI,
-                0b0010111 => OpID::AUIPC,
+                0b0110111 => (OpIDRd::LUI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                0b0010111 => (OpIDRd::AUIPC, OpIDStore::NONE, OpIDPCUpdate::NONE),
                 _ => panic!("invalid instruction: {:032b}", self.0),
             },
-            Type::J => OpID::JAL,
-            Type::NONE => OpID::NONE,
+            Type::J => (OpIDRd::JAL, OpIDStore::NONE, OpIDPCUpdate::JAL),
+            Type::NONE => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::NONE),
         }
     }
 }

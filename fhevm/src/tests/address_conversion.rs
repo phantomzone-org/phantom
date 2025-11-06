@@ -69,9 +69,9 @@ fn test_fhe_uint_prepared_to_address_read() {
     let mut address: AddressRead<Vec<u8>, FFT64Ref> =
         AddressRead::alloc_from_infos(params.module(), ggsw_infos, &base_2d_ram);
 
-    address.set_from_fhe_uint_prepared(params.module(), &fheuint, scratch.borrow());
+    address.set_from_fhe_uint_prepared(params.module(), &fheuint, 2, scratch.borrow());
 
-    let mut bit_rsh: usize = 0;
+    let mut bit_rsh: usize = 2;
     for coordinate in address.coordinates.iter_mut() {
         let mut bit_lsh: usize = 0;
         let base1d: Base1D = coordinate.base1d.clone();

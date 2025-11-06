@@ -21,7 +21,7 @@ use poulpy_hal::{
 use poulpy_core::{
     layouts::{
         GGSWLayout, GGSWPreparedFactory, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
-        GLWESecretPreparedToRef,
+        GLWESecretPreparedToRef, GLWEToRef,
     },
     GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPackerOps,
     GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
@@ -343,7 +343,7 @@ impl<BE: Backend> Interpreter<BE> {
 
         // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
         println!("Deriving rd arithmetic");
-        let mut ops: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
+        let mut ops: HashMap<u32, FheUint<Vec<u8>, u32>> = HashMap::new();
 
         match self.instruction_set {
             InstructionSet::RV32 => unimplemented!(),
@@ -392,6 +392,9 @@ impl<BE: Backend> Interpreter<BE> {
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
+        self.pcu_val_fhe_uint_prepared
+            .prepare(module, &self.pcu_val_fhe_uint, keys, scratch);
+
         update_pc(
             module,
             &mut self.pc_fhe_uint,
@@ -404,8 +407,7 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        self.pc_fhe_uint_prepared
-            .prepare(module, &self.pc_fhe_uint, keys, scratch);
+        println!("pc_fhe_uint: {}", self.pc_fhe_uint.to_ref());
     }
 
     pub fn store_ram<M, K, D, BRA>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
@@ -515,7 +517,7 @@ impl<BE: Backend> Interpreter<BE> {
     pub fn derive_rd_load<M, K, L, D>(
         &self,
         module: &M,
-        res: &mut HashMap<usize, FheUint<Vec<u8>, u32>>,
+        res: &mut HashMap<u32, FheUint<Vec<u8>, u32>>,
         ops: &[L],
         keys: &K,
         scratch: &mut Scratch<BE>,
@@ -537,7 +539,7 @@ impl<BE: Backend> Interpreter<BE> {
     pub fn select_rd<M>(
         &mut self,
         module: &M,
-        mut ops: HashMap<usize, FheUint<Vec<u8>, u32>>,
+        mut ops: HashMap<u32, FheUint<Vec<u8>, u32>>,
         scratch: &mut Scratch<BE>,
     ) where
         M: GLWEBlinSelection<u32, BE>,
@@ -545,7 +547,7 @@ impl<BE: Backend> Interpreter<BE> {
     {
         let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
         for (key, object) in ops.iter_mut() {
-            ops_ref.insert(*key, object);
+            ops_ref.insert(*key as usize, object);
         }
 
         module.glwe_blind_selection(
@@ -583,7 +585,7 @@ impl<BE: Backend> Interpreter<BE> {
 
         let mut address =
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
-        address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, scratch);
+        address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, 2, scratch);
 
         self.imm_rom
             .read(module, &mut self.imm_val_fhe_uint, &address, keys, scratch);
@@ -670,7 +672,7 @@ impl<BE: Backend> Interpreter<BE> {
     {
         let mut address: AddressRead<Vec<u8>, BE> =
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
-        address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, scratch);
+        address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
 
         self.ram
             .read_prepare_write(module, &mut self.ram_val_fhe_uint, &address, keys, scratch)
@@ -702,12 +704,12 @@ impl<BE: Backend> Interpreter<BE> {
         let mut address =
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
 
-        address.set_from_fheuint(module, &self.rs1_addr_fhe_uint, keys, scratch);
+        address.set_from_fheuint(module, &self.rs1_addr_fhe_uint, 2, keys, scratch);
 
         self.registers
             .read(module, &mut self.rs1_val_fhe_uint, &address, keys, scratch);
 
-        address.set_from_fheuint(module, &self.rs2_addr_fhe_uint, keys, scratch);
+        address.set_from_fheuint(module, &self.rs2_addr_fhe_uint, 2, keys, scratch);
 
         self.registers.read_prepare_write(
             module,
@@ -723,7 +725,7 @@ impl<BE: Backend> Interpreter<BE> {
     pub fn derive_rd_arithmetic<M, H, O, D>(
         &mut self,
         module: &M,
-        res: &mut HashMap<usize, FheUint<Vec<u8>, u32>>,
+        res: &mut HashMap<u32, FheUint<Vec<u8>, u32>>,
         ops: &[O],
         keys: &H,
         scratch: &mut Scratch<BE>,

@@ -27,7 +27,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 mod tests {
 
     use super::*;
-    use crate::instructions::{sext, OpID};
+    use crate::{instructions::sext, OpIDPCUpdate, OpIDRd, OpIDStore};
 
     #[test]
     fn imm_encoding() {
@@ -41,90 +41,150 @@ mod tests {
 
     #[test]
     fn addi() {
-        test_instruction(0b000, 0b0010011, OpID::ADDI)
+        test_instruction(
+            0b000,
+            0b0010011,
+            (OpIDRd::ADDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn slti() {
-        test_instruction(0b010, 0b0010011, OpID::SLTI)
+        test_instruction(
+            0b010,
+            0b0010011,
+            (OpIDRd::SLTI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn sltiu() {
-        test_instruction(0b011, 0b0010011, OpID::SLTIU)
+        test_instruction(
+            0b011,
+            0b0010011,
+            (OpIDRd::SLTIU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn xori() {
-        test_instruction(0b100, 0b0010011, OpID::XORI)
+        test_instruction(
+            0b100,
+            0b0010011,
+            (OpIDRd::XORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn ori() {
-        test_instruction(0b110, 0b0010011, OpID::ORI)
+        test_instruction(
+            0b110,
+            0b0010011,
+            (OpIDRd::ORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn andi() {
-        test_instruction(0b111, 0b0010011, OpID::ANDI)
+        test_instruction(
+            0b111,
+            0b0010011,
+            (OpIDRd::ANDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn slli() {
-        test_instruction_shamt(0b000000011111, 0b001, OpID::SLLI)
+        test_instruction_shamt(
+            0b000000011111,
+            0b001,
+            (OpIDRd::SLLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn srli() {
-        test_instruction_shamt(0b000000011111, 0b101, OpID::SRLI)
+        test_instruction_shamt(
+            0b000000011111,
+            0b101,
+            (OpIDRd::SRLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn srai() {
-        test_instruction_shamt(0b010000011111, 0b101, OpID::SRAI)
+        test_instruction_shamt(
+            0b010000011111,
+            0b101,
+            (OpIDRd::SRAI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn jalr() {
-        test_instruction(0b000, 0b1100111, OpID::JALR)
+        test_instruction(
+            0b000,
+            0b1100111,
+            (OpIDRd::JALR, OpIDStore::NONE, OpIDPCUpdate::JALR),
+        )
     }
 
     #[test]
     fn lb() {
-        test_instruction(0, 0b0000011, OpID::LB)
+        test_instruction(
+            0,
+            0b0000011,
+            (OpIDRd::LB, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn lh() {
-        test_instruction(0b001, 0b0000011, OpID::LH)
+        test_instruction(
+            0b001,
+            0b0000011,
+            (OpIDRd::LH, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn lw() {
-        test_instruction(0b010, 0b0000011, OpID::LW)
+        test_instruction(
+            0b010,
+            0b0000011,
+            (OpIDRd::LW, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn lbu() {
-        test_instruction(0b100, 0b0000011, OpID::LBU)
+        test_instruction(
+            0b100,
+            0b0000011,
+            (OpIDRd::LBU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn lhu() {
-        test_instruction(0b101, 0b0000011, OpID::LHU)
+        test_instruction(
+            0b101,
+            0b0000011,
+            (OpIDRd::LHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+        )
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
-fn test_instruction(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
+fn test_instruction(funct3: u32, op_code: u32, opid: (u32, u32, u32)) {
     // imm[31:20] | rs1[19:15] | funct3 | rd[11:7] | op_code
     // imm[11: 0]
-    let funct3: u8 = funct3;
+    let funct3: u32 = funct3;
     let imm: u32 = 0xABC;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
+    let rs2: u32 = 0;
+    let rs1: u32 = 0b10011;
+    let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
     instruction.set_immediate(imm);
     instruction.set_funct3(funct3);
@@ -146,13 +206,13 @@ fn test_instruction(funct3: u8, op_code: u8, opid: (u8, u8, u8)) {
 }
 
 #[allow(dead_code)]
-fn test_instruction_shamt(imm: u32, funct3: u8, opid: (u8, u8, u8)) {
+fn test_instruction_shamt(imm: u32, funct3: u32, opid: (u32, u32, u32)) {
     // 0000000 | shamt[24:20] | rs1[19:15] | funct3 | rd[11:7] | 0010011
-    let op_code: u8 = 0b0010011;
-    let funct3: u8 = funct3;
-    let rs2: u8 = 0;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0b01011;
+    let op_code: u32 = 0b0010011;
+    let funct3: u32 = funct3;
+    let rs2: u32 = 0;
+    let rs1: u32 = 0b10011;
+    let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
     instruction.set_immediate(imm);
     instruction.set_funct3(funct3);

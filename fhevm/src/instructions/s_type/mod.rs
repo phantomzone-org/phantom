@@ -22,7 +22,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::instructions::{sext, OpID};
+    use crate::{OpIDPCUpdate, OpIDRd, OpIDStore, instructions::sext};
 
     #[test]
     fn imm_encoding() {
@@ -36,29 +36,43 @@ mod tests {
 
     #[test]
     fn sb() {
-        test_instruction(0b000, 0b0100011, OpID::SB)
+        test_instruction(
+            0b000,
+            0b0100011,
+            (OpIDRd::NONE, OpIDStore::SB, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn sh() {
-        test_instruction(0b001, 0b0100011, OpID::SH)
+        test_instruction(
+            0b001,
+            0b0100011,
+            (OpIDRd::NONE, OpIDStore::SH, OpIDPCUpdate::NONE),
+        )
     }
 
     #[test]
     fn sw() {
-        test_instruction(0b010, 0b0100011, OpID::SW)
+        test_instruction(
+            0b010,
+            0b0100011,
+            (OpIDRd::NONE, OpIDStore::SW, OpIDPCUpdate::NONE),
+        )
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
 #[allow(dead_code)]
-fn test_instruction(funct3: u8, op_code: u8, op_id: (u8, u8, u8)) {
+fn test_instruction(funct3: u32, op_code: u32, op_id: (u32, u32, u32)) {
     // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011
     let imm: u32 = 0xABC;
-    let rs2: u8 = 0b11011;
-    let rs1: u8 = 0b10011;
-    let rd: u8 = 0;
+    let rs2: u32 = 0b11011;
+    let rs1: u32 = 0b10011;
+    let rd: u32 = 0;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
+
+    println!("{:?}", &op_id);
 
     instruction.set_immediate(imm);
     instruction.set_funct3(funct3);

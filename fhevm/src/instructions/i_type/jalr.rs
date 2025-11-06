@@ -17,11 +17,21 @@ use crate::instructions::{decompose, reconstruct};
 pub struct Jalr();
 
 impl Jalr {
-    pub fn apply_pc(imm: &[u8; 8], x_rs1: &[u8; 8], _x_rs2: &[u8; 8], _pc: &[u8; 8]) -> [u8; 8] {
+    pub fn apply_pc(
+        imm: &[u32; 8],
+        x_rs1: &[u32; 8],
+        _x_rs2: &[u32; 8],
+        _pc: &[u32; 8],
+    ) -> [u32; 8] {
         decompose(reconstruct(x_rs1).wrapping_add(reconstruct(imm)) & 0xFFFF_FFFE)
     }
 
-    pub fn apply_rd(_imm: &[u8; 8], _x_rs1: &[u8; 8], _x_rs2: &[u8; 8], pc: &[u8; 8]) -> [u8; 8] {
+    pub fn apply_rd(
+        _imm: &[u32; 8],
+        _x_rs1: &[u32; 8],
+        _x_rs2: &[u32; 8],
+        pc: &[u32; 8],
+    ) -> [u32; 8] {
         decompose(reconstruct(pc).wrapping_add(4))
     }
 }
@@ -35,16 +45,16 @@ mod tests {
         let imm: u32 = sext(0xFFF, 11);
         let x_rs1: u32 = 0x0FFF_FFFF;
         let pc: u32 = 4;
-        let rd_w_decomp: [u8; 8] = Jalr::apply_rd(
+        let rd_w_decomp: [u32; 8] = Jalr::apply_rd(
             &decompose(imm),
             &decompose(x_rs1),
-            &[0u8; 8],
+            &[0u32; 8],
             &decompose(pc),
         );
-        let pc_w_decomp: [u8; 8] = Jalr::apply_pc(
+        let pc_w_decomp: [u32; 8] = Jalr::apply_pc(
             &decompose(imm),
             &decompose(x_rs1),
-            &[0u8; 8],
+            &[0u32; 8],
             &decompose(pc),
         );
         assert_eq!(reconstruct(&rd_w_decomp), pc.wrapping_add(4));
