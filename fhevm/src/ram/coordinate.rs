@@ -1,19 +1,19 @@
 use itertools::izip;
 use poulpy_hal::{
     api::{ModuleN, ScratchTakeBasic},
-    layouts::{Backend, Data, DataMut, Module, ScalarZnx, Scratch, ZnxViewMut, ZnxZero},
+    layouts::{Backend, Data, DataMut, Module, Scratch, ZnxViewMut, ZnxZero},
     source::Source,
 };
 
 use poulpy_core::{
     layouts::{
-        GGLWELayout, GGSWInfos, GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPrepared,
-        GLWESecretPreparedFactory, GLWESecretPreparedToRef, LWEInfos, GGSW, GLWE,
+        GGSWInfos, GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
+        GLWESecretPreparedToRef, LWEInfos, GGSW, GLWE,
     },
-    GGSWAutomorphism, GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
+    GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
 };
 
-use crate::{parameters::CryptographicParameters, Base1D};
+use crate::{base::Base1D, parameters::CryptographicParameters};
 
 /// Coordinate stores Vec<GGSW(X^a_i)> such that prod X^{a_i} = X^a.
 /// This provides a second decomposition over the one in base N to
@@ -55,6 +55,7 @@ impl<D: Data> GGSWInfos for Coordinate<D> {
 }
 
 impl Coordinate<Vec<u8>> {
+    #[allow(dead_code)]
     /// Allocates a new [Coordinate].
     /// * `base1d`: digit decomposition of the coordinate (e.g. [12], [6, 6], [4, 4, 4] or [3, 3, 3, 3] for LogN = 12).
     pub(crate) fn alloc<A>(infos: &A, base1d: &Base1D) -> Self
@@ -70,22 +71,7 @@ impl Coordinate<Vec<u8>> {
             base1d: base1d.clone(),
         }
     }
-
-    /// Scratch space required to invert a coordinate, i.e. map GGSW(X^{i}) to GGSW(X^{-i}).
-    pub(crate) fn prepare_inv_scratch_space<B: Backend>(
-        params: &CryptographicParameters<B>,
-    ) -> usize
-    where
-        Module<B>: GGSWAutomorphism<B>,
-    {
-        let module: &Module<B> = params.module();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
-        let evk_infos: &GGLWELayout = &params.evk_ggsw_infos();
-
-        GGSW::automorphism_tmp_bytes(module, ggsw_infos, ggsw_infos, evk_infos, evk_infos)
-            + GGSW::bytes_of_from_infos(ggsw_infos)
-    }
-
+    #[allow(dead_code)]
     /// Scratch space required to evaluate GGSW(X^{i}) * GLWE(m).
     pub(crate) fn product_scratch_space<B: Backend>(params: &CryptographicParameters<B>) -> usize
     where
@@ -96,15 +82,38 @@ impl Coordinate<Vec<u8>> {
         let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
         GLWE::external_product_tmp_bytes(module, glwe_infos, glwe_infos, ggsw_infos)
     }
+}
 
-    pub(crate) fn encrypt_sk_tmp_bytes<B: Backend>(params: &CryptographicParameters<B>) -> usize
+pub(crate) trait TakeCoordinate {
+    fn take_coordinate<A>(
+        &mut self,
+        infos: &A,
+        base1d: &Base1D,
+    ) -> (Coordinate<&mut [u8]>, &mut Self)
     where
-        Module<B>: GLWESecretPreparedFactory<B> + GGSWEncryptSk<B>,
+        A: GGSWInfos;
+}
+
+impl<BE: Backend> TakeCoordinate for Scratch<BE>
+where
+    Self: ScratchTakeCore<BE>,
+{
+    fn take_coordinate<A>(
+        &mut self,
+        infos: &A,
+        base1d: &Base1D,
+    ) -> (Coordinate<&mut [u8]>, &mut Self)
+    where
+        A: GGSWInfos,
     {
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
-        ScalarZnx::bytes_of(ggsw_infos.n().into(), 1)
-            + GLWESecretPrepared::bytes_of(params.module(), ggsw_infos.rank())
-            + GGSW::encrypt_sk_tmp_bytes(params.module(), ggsw_infos)
+        let (ggsws, scratch) = self.take_ggsw_slice(base1d.0.len(), infos);
+        (
+            Coordinate {
+                value: ggsws,
+                base1d: base1d.clone(),
+            },
+            scratch,
+        )
     }
 }
 

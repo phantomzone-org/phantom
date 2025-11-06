@@ -272,7 +272,6 @@ impl Phantom {
             GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
         sk_prepared.prepare(params.module(), &sk_glwe);
 
-        interpreter.pc_fhe_uint_prepared.encrypt_sk(module, 0, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
         interpreter.instructions_encrypt_sk(
             module,
             &parser,

@@ -21,7 +21,7 @@ const K_GLWE_CT: u32 = BASE2K * 3;
 const K_EVK_GLWE: u32 = BASE2K * 4;
 const K_GGSW: u32 = BASE2K * 4;
 const K_EVK_GGSW: u32 = BASE2K * 5;
-pub const DECOMP_N: [u8; 2] = [5,5];
+pub const DECOMP_N: [u8; 2] = [5, 5];
 
 pub struct CryptographicParameters<B: Backend> {
     module: Module<B>, // FFT/NTT tables.
@@ -61,7 +61,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_glwe_pt(),
-            base2k: self.basek(),
+            base2k: self.base2k(),
             rank: self.rank(),
         }
     }
@@ -70,7 +70,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_glwe_ct(),
-            base2k: self.basek(),
+            base2k: self.base2k(),
             rank: self.rank(),
         }
     }
@@ -78,7 +78,7 @@ impl<B: Backend> CryptographicParameters<B> {
     pub fn evk_glwe_infos(&self) -> GGLWELayout {
         GGLWELayout {
             n: self.module.n().into(),
-            base2k: self.basek(),
+            base2k: self.base2k(),
             k: self.k_evk_glwe(),
             rank_in: self.rank(),
             rank_out: self.rank(),
@@ -90,7 +90,7 @@ impl<B: Backend> CryptographicParameters<B> {
     pub fn ggsw_infos(&self) -> GGSWLayout {
         GGSWLayout {
             n: self.module.n().into(),
-            base2k: self.basek(),
+            base2k: self.base2k(),
             k: self.k_ggsw(),
             rank: self.rank(),
             dnum: self.k_glwe_ct().div_ceil(self.base2k).into(),
@@ -101,7 +101,7 @@ impl<B: Backend> CryptographicParameters<B> {
     pub fn evk_ggsw_infos(&self) -> GGLWELayout {
         GGLWELayout {
             n: self.module.n().into(),
-            base2k: self.basek(),
+            base2k: self.base2k(),
             k: self.k_evk_ggsw(),
             rank_in: self.rank(),
             rank_out: self.rank(),
@@ -126,7 +126,7 @@ impl<B: Backend> CryptographicParameters<B> {
         self.lwe_block_size
     }
 
-    pub fn basek(&self) -> Base2K {
+    pub fn base2k(&self) -> Base2K {
         self.base2k
     }
 
@@ -163,7 +163,7 @@ impl<B: Backend> CryptographicParameters<B> {
                 n_lwe: self.n_lwe.into(),
                 base2k: self.base2k,
                 k: self.k_evk_ggsw(),
-                dnum: self.k_ggsw().div_ceil(self.basek()).into(),
+                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
                 rank: self.rank(),
             },
             layout_atk: GLWEAutomorphismKeyLayout {
@@ -171,7 +171,7 @@ impl<B: Backend> CryptographicParameters<B> {
                 base2k: self.base2k,
                 k: self.k_evk_ggsw(),
                 rank: self.rank(),
-                dnum: self.k_ggsw().div_ceil(self.basek()).into(),
+                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
                 dsize: Dsize(1),
             },
             layout_tsk: GGLWEToGGSWKeyLayout {
@@ -179,7 +179,7 @@ impl<B: Backend> CryptographicParameters<B> {
                 base2k: self.base2k,
                 k: self.k_evk_ggsw(),
                 rank: self.rank(),
-                dnum: self.k_ggsw().div_ceil(self.basek()).into(),
+                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
                 dsize: Dsize(1),
             },
         }
@@ -191,7 +191,7 @@ impl<B: Backend> CryptographicParameters<B> {
             base2k: self.base2k,
             k: self.k_evk_glwe(),
             rank_in: self.rank(),
-            dnum: self.k_glwe_ct().div_ceil(self.basek()).into(),
+            dnum: self.k_glwe_ct().div_ceil(self.base2k()).into(),
         }
     }
 

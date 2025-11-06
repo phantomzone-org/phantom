@@ -3,6 +3,7 @@
 pub struct Base1D(pub Vec<u8>);
 
 impl Base1D {
+    #[allow(dead_code)]
     pub fn size(&self) -> usize {
         self.0.len()
     }
@@ -49,6 +50,7 @@ impl Base1D {
 pub struct Base2D(pub Vec<Base1D>);
 
 impl Base2D {
+    #[allow(dead_code)]
     pub fn max_len(&self) -> usize {
         let mut max: usize = 0;
         for base1d in self.0.iter() {

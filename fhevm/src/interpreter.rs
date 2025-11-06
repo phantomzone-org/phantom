@@ -1,9 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    address_conversion::FHEUintPreparedToAddress, arithmetic::Evaluate, get_base_2d,
-    keys::RAMKeysHelper, parameters::CryptographicParameters, store::Store, update_pc, Address,
-    Base2D, Load, Ram, LOAD_OPS_LIST, RD_RV32I_OP_LIST, STORE_OPS_LIST,
+    address_read::AddressRead,
+    address_write::AddressWrite,
+    arithmetic::Evaluate,
+    base::{get_base_2d, Base2D},
+    keys::RAMKeysHelper,
+    parameters::CryptographicParameters,
+    ram::ram::Ram,
+    store::Store,
+    update_pc, Load, LOAD_OPS_LIST, RD_RV32I_OP_LIST, STORE_OPS_LIST,
 };
 
 use poulpy_hal::{
@@ -23,7 +29,7 @@ use poulpy_core::{
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         Add, BDDKeyHelper, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
-        FheUintPrepared, FheUintPreparedFactory, GLWEBlinSelection,
+        FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -36,61 +42,59 @@ pub enum InstructionSet {
 }
 
 pub struct Interpreter<BE: Backend> {
-    pub instruction_set: InstructionSet,
+    pub(crate) instruction_set: InstructionSet,
+    pub(crate) base_2d_rom: Base2D,
+    pub(crate) base_2d_registers: Base2D,
+    pub(crate) ggsw_infos: GGSWLayout,
 
     // ROM
-    pub imm_rom: Ram,
-    pub rs1_rom: Ram,
-    pub rs2_rom: Ram,
-    pub rd_rom: Ram,
-    pub rdu_rom: Ram,
-    pub mu_rom: Ram,
-    pub pcu_rom: Ram,
+    pub(crate) imm_rom: Ram,
+    pub(crate) rs1_rom: Ram,
+    pub(crate) rs2_rom: Ram,
+    pub(crate) rd_rom: Ram,
+    pub(crate) rdu_rom: Ram,
+    pub(crate) mu_rom: Ram,
+    pub(crate) pcu_rom: Ram,
 
     // Registers
-    pub registers: Ram,
+    pub(crate) registers: Ram,
 
     // RAM
-    pub ram_bit_size: usize, // log2(#items)
-    pub ram: Ram,
-    pub ram_addr: Address<Vec<u8>>,
-    pub ram_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub ram_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub ram_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) ram_bit_size: usize, // log2(#items)
+    pub(crate) ram: Ram,
+    pub(crate) ram_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) ram_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) ram_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // PC
-    pub pc_addr: Address<Vec<u8>>,
-    pub pc_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub pc_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) pc_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) pc_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RS1
-    pub rs1_addr: Address<Vec<u8>>,
-    pub rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs1_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs1_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RS2
-    pub rs2_addr: Address<Vec<u8>>,
-    pub rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rs2_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs2_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // IMM
-    pub imm_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub imm_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) imm_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) imm_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RD
-    pub rd_addr: Address<Vec<u8>>,
-    pub rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
 
     // OP ID GLWE
-    pub rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub rdu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub mu_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub mu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub pcu_val_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rdu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) mu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) mu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) pcu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 }
 
 impl<BE: Backend> Interpreter<BE> {
@@ -103,20 +107,20 @@ impl<BE: Backend> Interpreter<BE> {
     where
         Module<BE>: FheUintPreparedFactory<u32, BE>,
     {
-        let imm_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let rs1_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let rs2_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let rd_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let imm_rom: Ram = Ram::new(params, 32, rom_size);
+        let rs1_rom: Ram = Ram::new(params, 32, rom_size);
+        let rs2_rom: Ram = Ram::new(params, 32, rom_size);
+        let rd_rom: Ram = Ram::new(params, 32, rom_size);
 
-        let rdu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let mu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
-        let pcu_rom: Ram = Ram::new(params, 32, &decomp_n, rom_size);
+        let rdu_rom: Ram = Ram::new(params, 32, rom_size);
+        let mu_rom: Ram = Ram::new(params, 32, rom_size);
+        let pcu_rom: Ram = Ram::new(params, 32, rom_size);
 
-        let registers: Ram = Ram::new(params, 32, &[5].into(), 32);
-        let ram: Ram = Ram::new(params, 32, &decomp_n, ram_size);
+        let registers: Ram = Ram::new(params, 32, 32);
+        let ram: Ram = Ram::new(params, 32, ram_size);
 
-        let base_2d_ram: Base2D = get_base_2d(rom_size as u32, &decomp_n);
-        let base_2d_register: Base2D = get_base_2d(32, &[5].to_vec());
+        let base_2d_rom: Base2D = get_base_2d(rom_size as u32, &decomp_n);
+        let base_2d_registers: Base2D = get_base_2d(32, &[5].to_vec());
         let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
         let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
 
@@ -124,6 +128,9 @@ impl<BE: Backend> Interpreter<BE> {
 
         Self {
             instruction_set: InstructionSet::RV32I,
+            ggsw_infos: params.ggsw_infos(),
+            base_2d_registers,
+            base_2d_rom,
             imm_rom,
             rs1_rom,
             rs2_rom,
@@ -133,6 +140,7 @@ impl<BE: Backend> Interpreter<BE> {
             pcu_rom,
             registers,
             ram: ram,
+            ram_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
             ram_bit_size: (usize::BITS - (ram_size - 1).leading_zeros()) as usize,
             rd_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             ram_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
@@ -143,11 +151,6 @@ impl<BE: Backend> Interpreter<BE> {
             rs1_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rs2_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             rd_addr_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
-            pc_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_ram),
-            rd_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
-            rs1_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
-            rs2_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_register),
-            ram_addr: Address::alloc_from_infos(ggsw_infos, &base_2d_ram),
             rdu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             mu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
             pcu_val_fhe_uint: FheUint::alloc_from_infos(glwe_infos),
@@ -159,7 +162,6 @@ impl<BE: Backend> Interpreter<BE> {
             rs2_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
             imm_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
             pc_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
-            ram_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(module, ggsw_infos),
         }
     }
 
@@ -301,8 +303,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn cycle<M, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
-        M: FHEUintPreparedToAddress<u32, BE>
-            + GGSWPreparedFactory<BE>
+        M: GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -311,7 +312,8 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPrepare<BRA, u32, BE>
             + ExecuteBDDCircuit2WTo1W<u32, BE>
             + GLWEBlinSelection<u32, BE>
-            + GGSWAutomorphism<BE>,
+            + GGSWAutomorphism<BE>
+            + GGSWBlindRotation<u32, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
@@ -407,7 +409,7 @@ impl<BE: Backend> Interpreter<BE> {
             .prepare(module, &self.pc_fhe_uint, keys, scratch);
     }
 
-    pub fn store_ram<M, K, D>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
+    pub fn store_ram<M, K, D, BRA>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
     where
         M: ModuleLogN
             + GGSWPreparedFactory<BE>
@@ -418,20 +420,21 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWERotate<BE>
             + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>,
-        K: RAMKeysHelper<D, BE>,
+            + GLWEPackerOps<BE>
+            + FheUintPreparedFactory<u32, BE>
+            + FheUintPrepare<BRA, u32, BE>
+            + GGSWBlindRotation<u32, BE>,
+        BRA: BlindRotationAlgo,
+        K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
+        let mut address =
+            AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
+        address.set_from_fhe_uint(module, &self.ram_addr_fhe_uint, keys, scratch);
+
         self.ram
-            .read_prepare_write(module, &self.ram_addr, keys, scratch);
-        self.ram.write_fhe_uint(
-            module,
-            &self.ram_val_fhe_uint,
-            &self.ram_addr,
-            keys,
-            scratch,
-        );
+            .write(module, &self.ram_val_fhe_uint, &address, keys, scratch);
     }
 
     pub fn derive_ram_store<M, D, O, K>(
@@ -484,7 +487,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn store_rd<M, D, K>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
+    pub fn store_rd<M, D, BRA, K>(&mut self, module: &M, keys: &K, scratch: &mut Scratch<BE>)
     where
         M: ModuleLogN
             + GGSWPreparedFactory<BE>
@@ -495,15 +498,21 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWERotate<BE>
             + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>,
-        K: RAMKeysHelper<D, BE>,
+            + GLWEPackerOps<BE>
+            + FheUintPreparedFactory<u32, BE>
+            + FheUintPrepare<BRA, u32, BE>
+            + GGSWBlindRotation<u32, BE>,
+        K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        BRA: BlindRotationAlgo,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
+        let mut address =
+            AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
+        address.set_from_fhe_uint(module, &self.rd_addr_fhe_uint, keys, scratch);
+
         self.registers
-            .read_prepare_write(module, &self.rd_addr, keys, scratch);
-        self.registers
-            .write_fhe_uint(module, &self.rd_val_fhe_uint, &self.rd_addr, keys, scratch);
+            .write(module, &self.rd_val_fhe_uint, &address, keys, scratch);
     }
 
     pub fn derive_rd_load<M, K, L, D>(
@@ -552,78 +561,51 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn read_instruction_components<M, D, H>(
+    pub fn read_instruction_components<M, D, BRA, H>(
         &mut self,
         module: &M,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        M: FHEUintPreparedToAddress<u32, BE>
-            + GGSWPreparedFactory<BE>
+        M: GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
-            + GLWEPacking<BE>,
-        H: RAMKeysHelper<D, BE>,
+            + GLWEPacking<BE>
+            + FheUintPrepare<BRA, u32, BE>
+            + ModuleN
+            + GGSWBlindRotation<u32, BE>
+            + GGSWPreparedFactory<BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        BRA: BlindRotationAlgo,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.pc_addr
-            .set_from_fheuint_prepared(module, &self.pc_fhe_uint_prepared, scratch);
+        self.pc_fhe_uint_prepared
+            .prepare(module, &self.pc_fhe_uint, keys, scratch);
 
-        self.imm_rom.read_to_fheuint(
-            module,
-            &mut self.imm_val_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
+        let mut address =
+            AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
+        address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, scratch);
 
-        self.rdu_rom.read_to_fheuint(
-            module,
-            &mut self.rdu_val_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
+        self.imm_rom
+            .read(module, &mut self.imm_val_fhe_uint, &address, keys, scratch);
 
-        self.mu_rom.read_to_fheuint(
-            module,
-            &mut self.mu_val_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
+        self.rdu_rom
+            .read(module, &mut self.rdu_val_fhe_uint, &address, keys, scratch);
 
-        self.pcu_rom.read_to_fheuint(
-            module,
-            &mut self.pcu_val_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
+        self.mu_rom
+            .read(module, &mut self.mu_val_fhe_uint, &address, keys, scratch);
 
-        self.rs1_rom.read_to_fheuint(
-            module,
-            &mut self.rs1_addr_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
-        self.rs2_rom.read_to_fheuint(
-            module,
-            &mut self.rs2_addr_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
-        self.rd_rom.read_to_fheuint(
-            module,
-            &mut self.rd_addr_fhe_uint,
-            &self.pc_addr,
-            keys,
-            scratch,
-        );
+        self.pcu_rom
+            .read(module, &mut self.pcu_val_fhe_uint, &address, keys, scratch);
+
+        self.rs1_rom
+            .read(module, &mut self.rs1_addr_fhe_uint, &address, keys, scratch);
+        self.rs2_rom
+            .read(module, &mut self.rs2_addr_fhe_uint, &address, keys, scratch);
+        self.rd_rom
+            .read(module, &mut self.rd_addr_fhe_uint, &address, keys, scratch);
     }
 
     pub fn prepare_imm_rs1_rs2<D, M, BRA, K>(
@@ -661,9 +643,7 @@ impl<BE: Backend> Interpreter<BE> {
         K: BDDKeyHelper<D, BRA, BE> + RAMKeysHelper<D, BE>,
         D: DataRef,
         BRA: BlindRotationAlgo,
-        M: FheUintPrepare<BRA, u32, BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
-            + FHEUintPreparedToAddress<u32, BE>,
+        M: FheUintPrepare<BRA, u32, BE> + ExecuteBDDCircuit2WTo1W<u32, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.ram_addr_fhe_uint.add(
@@ -675,8 +655,6 @@ impl<BE: Backend> Interpreter<BE> {
         );
         self.ram_addr_fhe_uint_prepared
             .prepare(module, &self.ram_addr_fhe_uint, keys, scratch);
-        self.ram_addr
-            .set_from_fheuint_prepared(module, &self.ram_addr_fhe_uint_prepared, scratch);
     }
 
     pub fn read_ram<D, M, H>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
@@ -685,18 +663,20 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
-            + GLWEPacking<BE>,
+            + GLWEPacking<BE>
+            + ModuleN
+            + GGSWBlindRotation<u32, BE>
+            + GGSWPreparedFactory<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         H: RAMKeysHelper<D, BE>,
         D: DataRef,
     {
-        self.ram.read_to_fheuint(
-            module,
-            &mut self.ram_val_fhe_uint,
-            &self.ram_addr,
-            keys,
-            scratch,
-        )
+        let mut address: AddressRead<Vec<u8>, BE> =
+            AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
+        address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, scratch);
+
+        self.ram
+            .read_prepare_write(module, &mut self.ram_val_fhe_uint, &address, keys, scratch)
     }
 
     pub fn read_registers<M, DK, H, BRA>(
@@ -710,32 +690,32 @@ impl<BE: Backend> Interpreter<BE> {
         DK: DataRef,
         M: FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, u32, BE>
-            + FHEUintPreparedToAddress<u32, BE>
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
-            + GLWEPacking<BE>,
+            + GLWEPacking<BE>
+            + ModuleN
+            + FheUintPreparedFactory<u32, BE>
+            + FheUintPrepare<BRA, u32, BE>
+            + GGSWBlindRotation<u32, BE>,
         H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.rs1_addr
-            .set_from_fheuint(module, &self.rs1_addr_fhe_uint, keys, scratch);
+        let mut address =
+            AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
 
-        self.rs2_addr
-            .set_from_fheuint(module, &self.rs2_addr_fhe_uint, keys, scratch);
+        address.set_from_fheuint(module, &self.rs1_addr_fhe_uint, keys, scratch);
 
-        self.registers.read_to_fheuint(
-            module,
-            &mut self.rs1_val_fhe_uint,
-            &self.rs1_addr,
-            keys,
-            scratch,
-        );
-        self.registers.read_to_fheuint(
+        self.registers
+            .read(module, &mut self.rs1_val_fhe_uint, &address, keys, scratch);
+
+        address.set_from_fheuint(module, &self.rs2_addr_fhe_uint, keys, scratch);
+
+        self.registers.read_prepare_write(
             module,
             &mut self.rs2_val_fhe_uint,
-            &self.rs2_addr,
+            &address,
             keys,
             scratch,
         );

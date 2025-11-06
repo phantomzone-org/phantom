@@ -1,30 +1,41 @@
-use poulpy_hal::{
-    api::ModuleN,
-    layouts::{Backend, Data, DataMut, DataRef, Scratch},
-};
+use itertools::Itertools;
+use poulpy_hal::layouts::{Backend, Data, DataMut, DataRef, Scratch};
 
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWEPreparedToRef, GGLWEToGGSWKeyPreparedToRef, GGSWInfos, GGSWPrepared,
-        GGSWPreparedFactory, GLWEInfos, GLWEToMut, GLWEToRef, GetGaloisElement, LWEInfos,
+        GGSWInfos, GGSWPrepared, GGSWPreparedFactory, GLWEInfos, GLWEToMut, GLWEToRef, LWEInfos,
     },
-    GGSWAutomorphism, GLWEExternalProduct, ScratchTakeCore,
+    GLWEExternalProduct, ScratchTakeCore,
 };
 
-use crate::{Base1D, Coordinate};
+use crate::{base::Base1D, coordinate::Coordinate};
 
 pub(crate) struct CoordinatePrepared<D: Data, B: Backend> {
     pub(crate) value: Vec<GGSWPrepared<D, B>>,
     pub(crate) base1d: Base1D,
 }
 
-impl<B: Backend> CoordinatePrepared<Vec<u8>, B> {
+impl<BE: Backend> CoordinatePrepared<Vec<u8>, BE> {
+    #[allow(dead_code)]
     pub(crate) fn alloc_bytes<M, A>(module: &M, infos: &A, size: usize) -> usize
     where
         A: GGSWInfos,
-        M: GGSWPreparedFactory<B>,
+        M: GGSWPreparedFactory<BE>,
     {
         size * GGSWPrepared::bytes_of_from_infos(module, infos)
+    }
+
+    pub(crate) fn alloc<M, A>(module: &M, infos: &A, base1d: &Base1D) -> Self
+    where
+        M: GGSWPreparedFactory<BE>,
+        A: GGSWInfos,
+    {
+        Self {
+            value: (0..base1d.0.len())
+                .map(|_| GGSWPrepared::alloc_from_infos(module, infos))
+                .collect_vec(),
+            base1d: base1d.clone(),
+        }
     }
 }
 
@@ -58,45 +69,8 @@ impl<D: Data, B: Backend> GGSWInfos for CoordinatePrepared<D, B> {
     }
 }
 
-pub(crate) trait TakeCoordinatePrepared<B: Backend> {
-    fn take_coordinate_prepared<A, M>(
-        &mut self,
-        module: &M,
-        infos: &A,
-        base1d: &Base1D,
-    ) -> (CoordinatePrepared<&mut [u8], B>, &mut Self)
-    where
-        M: ModuleN + GGSWPreparedFactory<B>,
-        A: GGSWInfos;
-}
-
-impl<B: Backend> TakeCoordinatePrepared<B> for Scratch<B>
-where
-    Self: ScratchTakeCore<B>,
-{
-    fn take_coordinate_prepared<A, M>(
-        &mut self,
-        module: &M,
-        infos: &A,
-        base1d: &Base1D,
-    ) -> (CoordinatePrepared<&mut [u8], B>, &mut Self)
-    where
-        A: GGSWInfos,
-        M: ModuleN + GGSWPreparedFactory<B>,
-    {
-        let (ggsws, scratch) = self.take_ggsw_prepared_slice(module, base1d.0.len(), infos);
-        (
-            CoordinatePrepared {
-                value: ggsws,
-                base1d: base1d.clone(),
-            },
-            scratch,
-        )
-    }
-}
-
 impl<DM: DataMut, B: Backend> CoordinatePrepared<DM, B> {
-    pub(crate) fn prepare<M, DR: DataRef>(
+    pub(crate) fn prepare<DR: DataRef, M>(
         &mut self,
         module: &M,
         other: &Coordinate<DR>,
@@ -109,32 +83,6 @@ impl<DM: DataMut, B: Backend> CoordinatePrepared<DM, B> {
         for (el_prep, el) in self.value.iter_mut().zip(other.value.iter()) {
             el_prep.prepare(module, el, scratch)
         }
-    }
-}
-
-impl<D: DataMut, B: Backend> CoordinatePrepared<D, B> {
-    /// Maps GGSW(X^{i}) to GGSW(X^{-i}).
-    pub(crate) fn prepare_inv<DR: DataRef, M, G, T>(
-        &mut self,
-        module: &M,
-        other: &Coordinate<DR>,
-        auto_key: &G,
-        gglwe_to_ggsw_key: &T,
-        scratch: &mut Scratch<B>,
-    ) where
-        G: GGLWEPreparedToRef<B> + GetGaloisElement + GGLWEInfos,
-        T: GGLWEToGGSWKeyPreparedToRef<B>,
-        M: GGSWAutomorphism<B> + GGSWPreparedFactory<B>,
-        Scratch<B>: ScratchTakeCore<B>,
-    {
-        assert!(auto_key.p() == -1);
-        assert_eq!(self.base1d, other.base1d);
-        let (mut tmp_ggsw, scratch_1) = scratch.take_ggsw(other);
-        for (prepared, other) in self.value.iter_mut().zip(other.value.iter()) {
-            tmp_ggsw.automorphism(module, other, auto_key, gglwe_to_ggsw_key, scratch_1);
-            prepared.prepare(module, &tmp_ggsw, scratch_1);
-        }
-        self.base1d = other.base1d.clone();
     }
 }
 

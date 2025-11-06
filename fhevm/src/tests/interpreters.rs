@@ -146,8 +146,8 @@ pub fn test_interpreter_init_many_instructions() {
     // Generates a new secret-key along with the public evaluation keys.
     let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
-    sk_lwe.fill_binary_block(8, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
@@ -275,8 +275,8 @@ pub fn test_interpreter_cycle_single_instruction_noop() {
     // Generates a new secret-key along with the public evaluation keys.
     let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
-    sk_lwe.fill_binary_block(8, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
