@@ -302,7 +302,7 @@ impl<BE: Backend> Interpreter<BE> {
             .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
-    pub fn cycle<M, V, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    pub fn cycle<M, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
         M: FHEUintPreparedToAddress<u32, BE>
             + GGSWPreparedFactory<BE>
@@ -324,21 +324,27 @@ impl<BE: Backend> Interpreter<BE> {
         // - addresses=[rs1, rs2, rd]
         // - imm
         // - opids=[rdu, mu, pcu]
+        println!("Reading instruction components");
         self.read_instruction_components(module, keys, scratch);
 
         // Reads Register[rs1] and Register[rs2]
+        println!("Reading registers");
         self.read_registers(module, keys, scratch);
 
         // Prepares FheUint imm, rs1, rs2 to FheUintPrepared
+        println!("Preparing imm, rs1, rs2");
         self.prepare_imm_rs1_rs2(module, keys, scratch);
 
         // Computes rs2 + imm + offset
+        println!("Deriving ram address");
         self.derive_ram_addr(module, keys, scratch);
 
         // Reads Ram[rs2 + imm + offset]
+        println!("Reading ram");
         self.read_ram(module, keys, scratch);
 
         // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
+        println!("Deriving rd arithmetic");
         let mut ops: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
 
         match self.instruction_set {
@@ -349,21 +355,27 @@ impl<BE: Backend> Interpreter<BE> {
         };
 
         // Finalizeses the loaded value from Ram[rs2 + imm + offset]
+        println!("Finalizing rd load");
         self.derive_rd_load(module, &mut ops, LOAD_OPS_LIST, keys, scratch);
 
         // Selects value from the arithmetic operations and and Ram[rs2 + imm + offset]
+        println!("Selecting rd");
         self.select_rd(module, ops, scratch);
 
         // Store value in Register[rd]
+        println!("Storing rd");
         self.store_rd(module, keys, scratch);
 
         // Derive value to store in the ram
+        println!("Deriving ram store");
         self.derive_ram_store(module, STORE_OPS_LIST, keys, scratch);
 
         // Stores value in Ram[rs2 + imm + offset]
+        println!("Storing ram");
         self.store_ram(module, keys, scratch);
 
         // Updates PC
+        println!("Updating pc");
         self.update_pc(module, keys, scratch);
     }
 
@@ -408,11 +420,13 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWESub
             + GLWETrace<BE>
             + GLWERotate<BE>
-            + GLWEExternalProduct<BE>,
+            + GLWEExternalProduct<BE>
+            + GLWEPackerOps<BE>,
         K: RAMKeysHelper<D, BE>,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
+        self.ram.read_prepare_write(module, &self.ram_addr, keys, scratch);
         self.ram.write_fhe_uint(
             module,
             &self.ram_val_fhe_uint,
@@ -482,11 +496,13 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWESub
             + GLWETrace<BE>
             + GLWERotate<BE>
-            + GLWEExternalProduct<BE>,
+            + GLWEExternalProduct<BE>
+            + GLWEPackerOps<BE>,
         K: RAMKeysHelper<D, BE>,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
+        self.registers.read_prepare_write(module, &self.rd_addr, keys, scratch);
         self.registers
             .write_fhe_uint(module, &self.rd_val_fhe_uint, &self.rd_addr, keys, scratch);
     }

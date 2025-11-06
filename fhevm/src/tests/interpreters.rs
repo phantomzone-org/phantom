@@ -4,12 +4,13 @@ use crate::{
     Instruction, InstructionsParser, Interpreter,
 };
 use poulpy_backend::FFT64Ref;
-use poulpy_core::layouts::{GLWEInfos, GLWESecret, GLWESecretPrepared};
+use poulpy_core::layouts::{GLWEInfos, GLWESecret, GLWESecretPrepared, LWESecret};
 use poulpy_hal::{
     api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
     layouts::{Module, ScratchOwned},
     source::Source,
 };
+use poulpy_schemes::tfhe::blind_rotation::CGGI;
 
 #[test]
 pub fn test_interpreter_init_one_instruction() {
@@ -30,6 +31,8 @@ pub fn test_interpreter_init_one_instruction() {
 
     let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
 
     let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, FFT64Ref> =
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
@@ -71,10 +74,10 @@ pub fn test_interpreter_init_one_instruction() {
         scratch.borrow(),
     );
 
-    let key: RAMKeys<Vec<u8>> =
-        RAMKeys::encrypt_sk(&params, &sk_glwe, &mut source_xa, &mut source_xe);
+    let key: RAMKeys<Vec<u8>, CGGI> =
+        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-    let mut key_prepared: RAMKeysPrepared<Vec<u8>, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
@@ -143,9 +146,13 @@ pub fn test_interpreter_init_many_instructions() {
     // Generates a new secret-key along with the public evaluation keys.
     let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
 
+    let rom_size = 1 << 10;
+    let ram_size = 1 << 10;
     let mut interpreter: Interpreter<FFT64Ref> =
-        Interpreter::new(&params, 1 << 10, 1 << 10, DECOMP_N.into());
+        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
 
     let instructions_u32 = vec![
         258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
@@ -172,10 +179,10 @@ pub fn test_interpreter_init_many_instructions() {
 
     let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
 
-    let key: RAMKeys<Vec<u8>> =
-        RAMKeys::encrypt_sk(&params, &sk_glwe, &mut source_xa, &mut source_xe);
+    let key: RAMKeys<Vec<u8>, CGGI> =
+        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-    let mut key_prepared: RAMKeysPrepared<Vec<u8>, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
     for idx in 0..instructions_u32.len() {
@@ -250,4 +257,80 @@ pub fn test_interpreter_init_many_instructions() {
         assert_eq!(correct_mu, dec_mu);
         assert_eq!(correct_pcu, dec_pcu);
     }
+}
+
+#[test]
+pub fn test_interpreter_cycle_single_instruction_noop() {
+    use crate::Instruction;
+
+    let params: CryptographicParameters<FFT64Ref> = CryptographicParameters::<FFT64Ref>::new();
+    let module: &Module<FFT64Ref> = params.module();
+
+    let mut source_xs: Source = Source::new([0u8; 32]);
+    let mut source_xa: Source = Source::new([0u8; 32]);
+    let mut source_xe: Source = Source::new([0u8; 32]);
+
+    let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
+    sk_lwe.fill_binary_block(8, &mut source_xs);
+
+    let rom_size = 1 << 10;
+    let ram_size = 1 << 10;
+    let mut interpreter: Interpreter<FFT64Ref> =
+        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+
+    let instructions_u32 = vec![
+        // 258455
+        0b00000000_00000000_00000000_1110011,
+        0b00000000_00000000_00000000_1110011,
+        // 258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
+        // 791, 8585319, 259383,
+    ];
+
+    let mut instructions = InstructionsParser::new();
+    for inst in instructions_u32.clone() {
+        instructions.add(Instruction::new(inst));
+    }
+
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, FFT64Ref> =
+        GLWESecretPrepared::alloc(module, sk_glwe.rank());
+    sk_glwe_prepared.prepare(module, &sk_glwe);
+
+    interpreter.instructions_encrypt_sk(
+        module,
+        &instructions,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+    interpreter.pc_fhe_uint_prepared.encrypt_sk(
+        module,
+        0 as u32,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+
+    let mut scratch: ScratchOwned<FFT64Ref> = ScratchOwned::alloc(1 << 24);
+
+    let key: RAMKeys<Vec<u8>, CGGI> =
+        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+
+    let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, FFT64Ref> = RAMKeysPrepared::alloc(&params);
+    key_prepared.prepare(module, &key, scratch.borrow());
+
+    println!("Cycle");
+    interpreter.cycle(module, &key_prepared, scratch.borrow());
+    println!("Cycle done");
+
+    let pc = interpreter.pc_fhe_uint.decrypt(module, &sk_glwe_prepared, scratch.borrow());
+    println!("PC: {}", pc);
+    assert_eq!(pc, 4);
+
 }

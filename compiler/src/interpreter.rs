@@ -5,9 +5,7 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    instructions::{Instruction, InstructionsParser},
-    parameters::{CryptographicParameters, DECOMP_N},
-    Interpreter,
+    Interpreter, instructions::{Instruction, InstructionsParser}, keys::{RAMKeys, RAMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
@@ -17,11 +15,12 @@ use poulpy_hal::{
     layouts::ScratchOwned,
     source::Source,
 };
+use poulpy_schemes::tfhe::blind_rotation::CGGI;
 use testvm::TestVM;
 
 mod testvm;
 
-const RAM_SIZE: usize = 1 << 14;
+const RAM_SIZE: usize = 1 << 10;
 
 mod macros {
     macro_rules! verbose_println {
@@ -245,9 +244,6 @@ impl Phantom {
         //     })
         //     .collect_vec();
 
-        // Initialize interpreter
-        // let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
-
         // Initializing cryptographic parameters
         let params = CryptographicParameters::<BackendImpl>::new();
         let module = params.module();
@@ -285,28 +281,15 @@ impl Phantom {
             &mut source_xe,
             scratch.borrow(),
         );
-        interpreter.init_registers(
-            module,
-            &vec![0u32; 32],
-            &sk_prepared,
-            &mut source_xa,
-            &mut source_xe,
-            scratch.borrow(),
-        );
-        interpreter.ram_encrypt_sk(
-            module,
-            &vec![0u32; self.boot_ram.size],
-            &sk_prepared,
-            &mut source_xa,
-            &mut source_xe,
-            scratch.borrow(),
-        );
-        // interpreter.init_ram_offset(module, self.boot_ram.offset as u32, &sk_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        let key: RAMKeys<Vec<u8>, CGGI> =
+        RAMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-        // interpreter.cycle();
+        let mut key_prepared: RAMKeysPrepared<Vec<u8>, CGGI, BackendImpl> = RAMKeysPrepared::alloc(&params);
+        key_prepared.prepare(module, &key, scratch.borrow());
+
+        interpreter.cycle(module, &key_prepared, scratch.borrow());
 
         EncryptedVM {
-            // params: params,
             interpreter,
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,

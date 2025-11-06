@@ -70,6 +70,7 @@ impl<BE: Backend> Evaluate<u32, BE> for RdOps {
         match self {
             Self::None => OpID::NONE.0 as usize,
             Self::Auipc => OpID::AUIPC.0 as usize,
+            Self::Jal => OpID::JAL.0 as usize,
             Self::Jalr => OpID::JALR.0 as usize,
             Self::Lui => OpID::LUI.0 as usize,
             Self::Add => OpID::ADD.0 as usize,
@@ -121,7 +122,8 @@ impl<BE: Backend> Evaluate<u32, BE> for RdOps {
         match self {
             Self::None => {}
             Self::Auipc => res.auipc(module, pc, imm, key, scratch),
-            Self::Jalr => res.auipc(module, pc, pc, key, scratch), // ok? second input is not used
+            Self::Jal => res.jalr(module, pc, pc, key, scratch), // ok? second input is not used
+            Self::Jalr => res.jalr(module, pc, pc, key, scratch), // ok? second input is not used
             Self::Lui => res.lui(module, imm, imm, key, scratch),
             Self::Add => res.add(module, rs1, rs2, key, scratch),
             Self::Sub => res.sub(module, rs1, rs2, key, scratch),
