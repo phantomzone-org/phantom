@@ -1,6 +1,5 @@
 use poulpy_core::layouts::{
-    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout,
-    GLWETensorKeyLayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
+    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision
 };
 use poulpy_hal::{
     api::ModuleNew,
@@ -183,7 +182,7 @@ impl<B: Backend> CryptographicParameters<B> {
                 dnum: Dnum(4),
                 dsize: Dsize(1),
             },
-            layout_tsk: GLWETensorKeyLayout {
+            layout_tsk: GGLWEToGGSWKeyLayout {
                 n: Degree(N_GLWE),
                 base2k: Base2K(BASE2K),
                 k: TorusPrecision(5 * BASE2K),
