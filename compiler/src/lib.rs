@@ -22,7 +22,7 @@ impl CompileOpts {
     }
 
     pub fn build(&self) -> Vec<u8> {
-        // set compilation target to riscv32im-
+        // set compilation target to riscv32i
         let target = "riscv32im-unknown-none-elf";
         let profile = "release";
 

@@ -5,7 +5,10 @@ use elf::{
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
-    Interpreter, instructions::{Instruction, InstructionsParser}, keys::{VMKeys, VMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}
+    instructions::{Instruction, InstructionsParser},
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::{CryptographicParameters, DECOMP_N},
+    Interpreter,
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
@@ -20,7 +23,8 @@ use testvm::TestVM;
 
 mod testvm;
 
-const RAM_SIZE: usize = 1 << 10;
+// RAM size default to 4KB
+const RAM_SIZE: usize = 4 * 1024;
 
 mod macros {
     macro_rules! verbose_println {
@@ -157,7 +161,7 @@ impl Phantom {
             });
         }
         let boot_ram = BootMemory::new(ram_offset, RAM_SIZE, boot_ram_data);
-        // println!("RAM OFFSET: {}", ram_offset);
+        println!("RAM OFFSET: {}", ram_offset);
 
         // gather input information
         let inpdata_sec = elf
@@ -281,9 +285,10 @@ impl Phantom {
             scratch.borrow(),
         );
         let key: VMKeys<Vec<u8>, CGGI> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+            VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
-        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> = VMKeysPrepared::alloc(&params);
+        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> =
+            VMKeysPrepared::alloc(&params);
         key_prepared.prepare(module, &key, scratch.borrow());
 
         interpreter.cycle(module, &key_prepared, scratch.borrow());
