@@ -5,8 +5,8 @@ use poulpy_core::{
         GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
         TorusPrecision, GLWE,
     },
-    GGSWAutomorphism, GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize,
-    GLWEPacker, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker,
+    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN, TakeSlice},
@@ -194,7 +194,6 @@ impl Ram {
         DA: DataRef,
         M: ModuleLogN
             + GGSWPreparedFactory<BE>
-            + GGSWAutomorphism<BE>
             + GLWENormalize<BE>
             + GLWEAdd
             + GLWESub

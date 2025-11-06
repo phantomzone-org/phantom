@@ -1,5 +1,8 @@
 use crate::{
-    address_read::AddressRead, address_write::AddressWrite, base::{Base1D, Base2D, get_base_2d}, parameters::{CryptographicParameters, DECOMP_N}
+    address_read::AddressRead,
+    address_write::AddressWrite,
+    base::{get_base_2d, Base1D, Base2D},
+    parameters::{CryptographicParameters, DECOMP_N},
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
@@ -13,9 +16,7 @@ use poulpy_hal::{
     layouts::{ScalarZnx, ScratchOwned, ZnxViewMut},
     source::Source,
 };
-use poulpy_schemes::tfhe::{
-    bdd_arithmetic::{FheUintPrepared},
-};
+use poulpy_schemes::tfhe::bdd_arithmetic::FheUintPrepared;
 
 #[test]
 fn test_fhe_uint_prepared_to_address_read() {
@@ -45,7 +46,7 @@ fn test_fhe_uint_prepared_to_address_read() {
         .enumerate()
         .for_each(|(i, x)| *x = i as i64);
 
-     let max_addr: u32 = params.n_glwe().as_u32()<<4;
+    let max_addr: u32 = params.n_glwe().as_u32() << 4;
 
     let k: u32 = source.next_u32() % max_addr;
 
@@ -113,13 +114,17 @@ fn test_fhe_uint_prepared_to_address_read() {
                 glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
             );
 
-            glwe.assert_noise(params.module(), &sk_glwe_prep, &pt_want, -(params.base2k().as_u32() as f64));
+            glwe.assert_noise(
+                params.module(),
+                &sk_glwe_prep,
+                &pt_want,
+                -(params.base2k().as_u32() as f64),
+            );
             bit_lsh += bit_mask as usize;
             bit_rsh += bit_mask as usize;
         }
     }
 }
-
 
 #[test]
 fn test_fhe_uint_prepared_to_address_write() {
@@ -149,7 +154,7 @@ fn test_fhe_uint_prepared_to_address_write() {
         .enumerate()
         .for_each(|(i, x)| *x = i as i64);
 
-    let max_addr: u32 = params.n_glwe().as_u32()<<4;
+    let max_addr: u32 = params.n_glwe().as_u32() << 4;
 
     let k: u32 = source.next_u32() % max_addr;
 
@@ -166,8 +171,6 @@ fn test_fhe_uint_prepared_to_address_write() {
         &mut source_xe,
         scratch.borrow(),
     );
-
-    
 
     let base_2d_ram: Base2D = get_base_2d(max_addr as u32, &DECOMP_N.to_vec());
 
@@ -219,7 +222,12 @@ fn test_fhe_uint_prepared_to_address_write() {
                 glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
             );
 
-            glwe.assert_noise(params.module(), &sk_glwe_prep, &pt_want, -(params.base2k().as_u32() as f64));
+            glwe.assert_noise(
+                params.module(),
+                &sk_glwe_prep,
+                &pt_want,
+                -(params.base2k().as_u32() as f64),
+            );
             bit_lsh += bit_mask as usize;
             bit_rsh += bit_mask as usize;
         }

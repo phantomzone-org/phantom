@@ -23,8 +23,8 @@ use poulpy_core::{
         GGSWLayout, GGSWPreparedFactory, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
         GLWESecretPreparedToRef,
     },
-    GGSWAutomorphism, GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize,
-    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPackerOps,
+    GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
@@ -312,7 +312,6 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPrepare<BRA, u32, BE>
             + ExecuteBDDCircuit2WTo1W<u32, BE>
             + GLWEBlinSelection<u32, BE>
-            + GGSWAutomorphism<BE>
             + GGSWBlindRotation<u32, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
@@ -413,7 +412,6 @@ impl<BE: Backend> Interpreter<BE> {
     where
         M: ModuleLogN
             + GGSWPreparedFactory<BE>
-            + GGSWAutomorphism<BE>
             + GLWENormalize<BE>
             + GLWEAdd
             + GLWESub
@@ -491,7 +489,6 @@ impl<BE: Backend> Interpreter<BE> {
     where
         M: ModuleLogN
             + GGSWPreparedFactory<BE>
-            + GGSWAutomorphism<BE>
             + GLWENormalize<BE>
             + GLWEAdd
             + GLWESub
