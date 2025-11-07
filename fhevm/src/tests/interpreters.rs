@@ -1,9 +1,7 @@
 use crate::{
-    keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
-    Instruction, InstructionsParser, Interpreter,
+    Instruction, InstructionsParser, Interpreter, RD_RV32I_OP_LIST, arithmetic::Evaluate, decompose, keys::{VMKeys, VMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}, reconstruct
 };
-use poulpy_backend::{FFT64Avx, FFT64Ref};
+use poulpy_backend::{FFT64Ref};
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -19,8 +17,7 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation,
+        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
@@ -171,6 +168,138 @@ where
     assert_eq!(correct_rdu, dec_rdu);
     assert_eq!(correct_mu, dec_mu);
     assert_eq!(correct_pcu, dec_pcu);
+}
+
+#[test]
+fn test_interpreter_init_one_op_fft64_ref() {
+    test_interpreter_init_one_op::<CGGI, FFT64Ref>()
+}
+
+pub fn test_interpreter_init_one_op<BRA: BlindRotationAlgo, BE: Backend>()
+where
+    Module<BE>: ModuleNew<BE>
+        + GLWESecretPreparedFactory<BE>
+        + FheUintPreparedFactory<u32, BE>
+        + ModuleN
+        + GLWEEncryptSk<BE>
+        + FheUintPreparedEncryptSk<u32, BE>
+        + GLWEAutomorphismKeyEncryptSk<BE>
+        + GGLWEToGGSWKeyEncryptSk<BE>
+        + GLWETrace<BE>
+        + BDDKeyEncryptSk<BRA, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEExternalProduct<BE>
+        + GLWEPackerOps<BE>
+        + GLWEPacking<BE>
+        + FheUintPrepare<BRA, u32, BE>
+        + GGSWBlindRotation<u32, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEDecrypt<BE>
+        + GLWEAutomorphismKeyPreparedFactory<BE>
+        + GGLWEToGGSWKeyPreparedFactory<BE>
+        + BDDKeyPreparedFactory<BRA, BE>,
+    ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
+    Scratch<BE>: ScratchTakeCore<BE>,
+    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
+{
+    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
+
+    let module: &Module<BE> = params.module();
+
+    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 22);
+
+    let rom_size = 1 << 10;
+    let ram_size = 1 << 10;
+    let mut interpreter: Interpreter<BE> =
+        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+
+    let mut source_xs: Source = Source::new([0u8; 32]);
+    let mut source_xa: Source = Source::new([0u8; 32]);
+    let mut source_xe: Source = Source::new([0u8; 32]);
+
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
+
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
+        GLWESecretPrepared::alloc(module, sk_glwe.rank());
+    sk_glwe_prepared.prepare(module, &sk_glwe);
+
+    let instruction_u32 = 258455;
+    let mut instructions: InstructionsParser = InstructionsParser::new();
+    instructions.add(Instruction::new(instruction_u32));
+
+    interpreter.instructions_encrypt_sk(
+        module,
+        &instructions,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+
+    let idx = 0;
+
+    let instruction: Instruction = instructions.get_raw(idx);
+    let correct_imm: u32 = instruction.get_immediate();
+    let (rs1, rs2, rd) = instruction.get_registers();
+    let correct_rs1: u32 = rs1 as u32;
+    let correct_rs2: u32 = rs2 as u32;
+    let correct_rd: u32 = rd as u32;
+    let correct_pc: u32 = 0;
+
+    let (rdu, mu, pcu) = instruction.get_opid();
+    let correct_rdu: u32 = rdu as u32;
+    let correct_mu: u32 = mu as u32;
+    let correct_pcu: u32 = pcu as u32;
+
+    interpreter.pc_fhe_uint.encrypt_sk(
+        module,
+        idx as u32,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+
+    let key: VMKeys<Vec<u8>, BRA> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+
+    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
+    key_prepared.prepare(module, &key, scratch.borrow());
+
+    interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
+
+    interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
+        module, correct_rs1, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+    interpreter.rs2_val_fhe_uint_prepared.encrypt_sk(
+        module, correct_rs2, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+    interpreter.imm_val_fhe_uint_prepared.encrypt_sk(
+        module, correct_imm, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+    interpreter.pc_fhe_uint_prepared.encrypt_sk(
+        module, correct_pc, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+
+    let mut res = FheUint::alloc_from_infos(&params.glwe_ct_infos());
+    let mut fails = vec![];
+    for op in RD_RV32I_OP_LIST {
+        op.eval(
+            module,
+            &mut res,
+            &interpreter.rs1_val_fhe_uint_prepared,
+            &interpreter.rs2_val_fhe_uint_prepared,
+            &interpreter.imm_val_fhe_uint_prepared,
+            &interpreter.pc_fhe_uint_prepared,
+            &key_prepared,
+            scratch.borrow(),
+        );
+
+        let dec = res.decrypt(module, &sk_glwe_prepared, scratch.borrow());
+        if reconstruct(&op.apply(&decompose(correct_imm), &decompose(correct_rs1), &decompose(correct_rs2), &decompose(correct_pc)).1) != dec {
+            fails.push(op);
+        }
+    }
+    assert_eq!(fails.len(), 0);
 }
 
 #[test]
@@ -334,7 +463,7 @@ where
 
 #[test]
 fn test_interpreter_cycle_single_instruction_noop_fft64_ref() {
-    test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Avx>();
+    test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Ref>();
 }
 
 fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo, BE: Backend>()
