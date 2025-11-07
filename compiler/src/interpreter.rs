@@ -137,7 +137,7 @@ impl Phantom {
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
             .iter()
-            .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
+            .filter(|p| p.p_flags == PF_R || p.p_flags == PF_R + PF_W)
             .collect();
         let mut ram_offset = 0;
         let mut boot_ram_data = vec![0u8; RAM_SIZE];
@@ -299,12 +299,13 @@ impl Phantom {
         }
     }
 
-    pub fn test_vm(&self) -> TestVM {
+    pub fn test_vm(&self, max_cycles: usize) -> TestVM {
         TestVM::init(
             &self.boot_rom,
             &self.boot_ram,
             &self.input_info,
             &self.output_info,
+            max_cycles,
         )
     }
 }

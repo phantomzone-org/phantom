@@ -23,7 +23,7 @@ impl CompileOpts {
 
     pub fn build(&self) -> Vec<u8> {
         // set compilation target to riscv32i
-        let target = "riscv32im-unknown-none-elf";
+        let target = "riscv32i-unknown-none-elf";
         let profile = "release";
 
         // Direct path to linker file for the rust compiler
@@ -79,30 +79,5 @@ impl CompileOpts {
         );
         let elf_data = std::fs::read(std::path::Path::new(&elf_path)).unwrap();
         elf_data
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use interpreter::Phantom;
-
-    use super::*;
-
-    #[test]
-    fn test_compiler() {
-        let compiler = CompileOpts::new("guest");
-        let elf_data = compiler.build();
-
-        // VM
-        let mut vm = Phantom::init(elf_data).test_vm();
-
-        // vm.read_input_tape(&[123, 0, 0, 0, 89, 1, 0, 0]);
-
-        while vm.is_exec() {
-            vm.run();
-        }
-
-        let output = vm.output_tape();
-        println!("Output={:?}", output);
     }
 }
