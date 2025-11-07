@@ -22,6 +22,6 @@ pub struct Lui();
 
 impl Lui {
     pub fn apply(imm: &[u32; 8], _x_rs1: &[u32; 8], _x_rs2: &[u32; 8]) -> [u32; 8] {
-        decompose(reconstruct(imm))
+        decompose(reconstruct(imm) << 12)
     }
 }
