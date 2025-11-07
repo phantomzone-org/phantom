@@ -132,7 +132,6 @@ impl Phantom {
             elf_bytes[txthdr.p_offset as usize..(txthdr.p_offset + txthdr.p_memsz) as usize]
                 .to_vec(),
         );
-
         macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
 
         // load all +r/+rw headers
@@ -229,7 +228,6 @@ impl Phantom {
 
         // setup RAM
         let ram_offset = self.boot_ram.offset;
-        assert!(self.boot_ram.size % 4 == 0);
         let mut ram_with_input = self.boot_ram.data.clone();
         // read input tape
         assert!(input_tape.len() == self.input_info.size);

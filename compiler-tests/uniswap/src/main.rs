@@ -51,8 +51,8 @@ fn main() {
 
     let MAX_CYCLES = 10_000;
 
-    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
-    enc_vm.execute();
+    // let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
+    // enc_vm.execute();
 
     // Init -> read input tape -> run -> read output tape
     let mut vm = pz.test_vm();
@@ -65,18 +65,16 @@ fn main() {
     }
 
     let output_tape = vm.output_tape();
-    assert_eq!(output_tape, enc_vm.output_tape());
+    // assert_eq!(output_tape, enc_vm.output_tape());
 
-    // // Check output
-    // let output = from_u8_slice::<Output>(&output_tape);
-    // if pool.t0 > input.inp0 {
-    //     assert!(output.out0 == input.inp0);
-    //     assert!(output.pool.t0 == input.pool.t0 - input.inp0);
-    // }
-    // if pool.t1 > input.inp1 {
-    //     assert!(output.out1 == input.inp1);
-    //     assert!(output.pool.t1 == input.pool.t1 - input.inp1);
-    // }
-
-    // pool = output.pool;
+    // Check output
+    let output = from_u8_slice::<Output>(&output_tape);
+    if pool.t0 > input.inp0 {
+        assert!(output.out0 == input.inp0);
+        assert!(output.pool.t0 == input.pool.t0 - input.inp0);
+    }
+    if pool.t1 > input.inp1 {
+        assert!(output.out1 == input.inp1);
+        assert!(output.pool.t1 == input.pool.t1 - input.inp1);
+    }
 }

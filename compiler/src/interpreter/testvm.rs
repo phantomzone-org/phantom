@@ -50,6 +50,11 @@ impl Memory {
     }
 
     fn read_half(&self, addr: usize) -> u16 {
+        assert!(
+            addr % 2 == 0,
+            "ROM read address {} is not 2-byte aligned",
+            addr
+        );
         let mut out = 0u16;
         for i in 0..2 {
             out += (self.data[((addr - self.offset) + i) % self.size] as u16) << (i * 8);
@@ -58,6 +63,11 @@ impl Memory {
     }
 
     fn read_word(&self, addr: usize) -> u32 {
+        assert!(
+            addr % 4 == 0,
+            "ROM read address {} is not 4-byte aligned",
+            addr
+        );
         let mut out = 0u32;
         for i in 0..4 {
             out += (self.data[((addr - self.offset) + i) % self.size] as u32) << (i * 8);
