@@ -7,10 +7,10 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, UnsignedInteger};
 
 use crate::{keys::RAMKeysHelper, LoadOps, OpIDRd};
 
-pub trait Load<T: UnsignedInteger, BE: Backend> {
+pub trait Load<T: UnsignedInteger> {
     fn id(&self) -> u32;
 
-    fn load<R, A, H, K, M>(
+    fn load<R, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,
@@ -26,7 +26,7 @@ pub trait Load<T: UnsignedInteger, BE: Backend> {
         Scratch<BE>: ScratchTakeCore<BE>;
 }
 
-impl<BE: Backend> Load<u32, BE> for LoadOps {
+impl Load<u32> for LoadOps {
     fn id(&self) -> u32 {
         match self {
             Self::Lb => OpIDRd::LB,
@@ -37,7 +37,7 @@ impl<BE: Backend> Load<u32, BE> for LoadOps {
         }
     }
 
-    fn load<R, A, H, K, M>(
+    fn load<R, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,

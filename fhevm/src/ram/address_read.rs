@@ -128,6 +128,7 @@ impl<D: DataMut, BE: Backend> AddressRead<D, BE> {
         module: &M,
         fheuint: &FheUint<F, T>,
         bit_start: usize,
+        bit_end: usize,
         keys: &K,
         scratch: &mut Scratch<BE>,
     ) where
@@ -142,8 +143,8 @@ impl<D: DataMut, BE: Backend> AddressRead<D, BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut fheuint_prepared = FheUintPrepared::alloc_from_infos(module, self);
-        fheuint_prepared.prepare(module, &fheuint, keys, scratch);
-        self.set_from_fhe_uint_prepared(module, &fheuint_prepared, bit_start, scratch);
+        fheuint_prepared.prepare_custom(module, &fheuint, bit_start, bit_end, keys, scratch);
+        self.set_from_fhe_uint_prepared(module, &fheuint_prepared, 0, scratch);
     }
 
     pub fn set_from_fhe_uint_prepared<DR, M, T>(

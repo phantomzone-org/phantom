@@ -11,10 +11,10 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
 
 use crate::{keys::RAMKeysHelper, OpIDStore, StoreOps};
 
-pub trait Store<T: UnsignedInteger, BE: Backend> {
+pub trait Store<T: UnsignedInteger> {
     fn id(&self) -> usize;
 
-    fn store<R, D, A, H, K, M>(
+    fn store<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, T>,
@@ -39,7 +39,7 @@ pub trait Store<T: UnsignedInteger, BE: Backend> {
         Scratch<BE>: ScratchTakeCore<BE>;
 }
 
-impl<BE: Backend> Store<u32, BE> for StoreOps {
+impl Store<u32> for StoreOps {
     fn id(&self) -> usize {
         match self {
             Self::None => OpIDStore::NONE as usize,
@@ -49,7 +49,7 @@ impl<BE: Backend> Store<u32, BE> for StoreOps {
         }
     }
 
-    fn store<R, D, A, H, K, M>(
+    fn store<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,

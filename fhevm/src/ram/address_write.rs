@@ -127,6 +127,8 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
         &mut self,
         module: &M,
         fheuint: &FheUint<F, T>,
+        bit_start: usize,
+        bit_end: usize,
         keys: &K,
         scratch: &mut Scratch<BE>,
     ) where
@@ -141,14 +143,15 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut fheuint_prepared = FheUintPrepared::alloc_from_infos(module, self);
-        fheuint_prepared.prepare(module, &fheuint, keys, scratch);
-        self.set_from_fhe_uint_prepared(module, &fheuint_prepared, scratch);
+        fheuint_prepared.prepare_custom(module, &fheuint, bit_start, bit_end, keys, scratch);
+        self.set_from_fhe_uint_prepared(module, &fheuint_prepared, 0, scratch);
     }
 
     pub fn set_from_fhe_uint_prepared<DR, M, T>(
         &mut self,
         module: &M,
         fheuint: &FheUintPrepared<DR, T, BE>,
+        bit_start: usize,
         scratch: &mut Scratch<BE>,
     ) where
         M: ModuleN + GGSWBlindRotation<T, BE> + GGSWPreparedFactory<BE>,
@@ -162,7 +165,7 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
 
         let (mut ggsw, scratch_1) = scratch.take_ggsw(self);
 
-        let mut bit_rsh: usize = 0;
+        let mut bit_rsh: usize = bit_start;
         for coordinate in self.coordinates.iter_mut() {
             let mut bit_lsh: usize = 0;
             let base1d = coordinate.base1d.clone();

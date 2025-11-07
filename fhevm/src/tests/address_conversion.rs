@@ -177,7 +177,7 @@ fn test_fhe_uint_prepared_to_address_write() {
     let mut address: AddressWrite<Vec<u8>, FFT64Ref> =
         AddressWrite::alloc_from_infos(params.module(), ggsw_infos, &base_2d_ram);
 
-    address.set_from_fhe_uint_prepared(params.module(), &fheuint, scratch.borrow());
+    address.set_from_fhe_uint_prepared(params.module(), &fheuint, 0, scratch.borrow());
 
     let mut bit_rsh: usize = 0;
     for coordinate in address.coordinates.iter_mut() {

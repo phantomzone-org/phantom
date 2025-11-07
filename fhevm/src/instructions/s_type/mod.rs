@@ -22,7 +22,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{OpIDPCUpdate, OpIDRd, OpIDStore, instructions::sext};
+    use crate::{instructions::sext, OpIDPCUpdate, OpIDRd, OpIDStore};
 
     #[test]
     fn imm_encoding() {
