@@ -1,18 +1,38 @@
 use poulpy_backend::FFT64Ref;
-use poulpy_core::{GGLWEToGGSWKeyEncryptSk, GGSWAutomorphism, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore, layouts::{GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret}};
-use poulpy_hal::{api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow}, layouts::{Backend, Module, Scratch, ScratchOwned}, source::Source};
-use poulpy_schemes::tfhe::{bdd_arithmetic::{BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation}, blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI}};
+use poulpy_core::{
+    layouts::{
+        GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
+        GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret,
+    },
+    GGLWEToGGSWKeyEncryptSk, GGSWAutomorphism, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt,
+    GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
+};
+use poulpy_hal::{
+    api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
+    layouts::{Backend, Module, Scratch, ScratchOwned},
+    source::Source,
+};
+use poulpy_schemes::tfhe::{
+    bdd_arithmetic::{
+        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPrepared,
+        FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation,
+    },
+    blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
+};
 
-use crate::{keys::{VMKeys, VMKeysPrepared}, parameters::CryptographicParameters, update_pc};
-
-
+use crate::{
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::CryptographicParameters,
+    update_pc,
+};
 
 #[test]
-fn test_pc_update_fft64_ref(){
+fn test_pc_update_fft64_ref() {
     test_pc_update::<CGGI, FFT64Ref>()
 }
 
-fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>() where
+fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>()
+where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
@@ -37,8 +57,8 @@ fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>() where
         + GGSWAutomorphism<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,{
-
+    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
+{
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
     let module: &Module<BE> = params.module();
 
@@ -61,27 +81,78 @@ fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>() where
     let ggsw_infos: &poulpy_core::layouts::GGSWLayout = &params.ggsw_infos();
     let glwe_infos: &poulpy_core::layouts::GLWELayout = &params.glwe_ct_infos();
 
-    
-    let mut rs1_prep: FheUintPrepared<Vec<u8>, u32, BE> = FheUintPrepared::alloc_from_infos(module, ggsw_infos);
-    let mut rs2_prep: FheUintPrepared<Vec<u8>, u32, BE> = FheUintPrepared::alloc_from_infos(module, ggsw_infos);
-    let mut imm_prep: FheUintPrepared<Vec<u8>, u32, BE> = FheUintPrepared::alloc_from_infos(module, ggsw_infos);
-    let mut pc_prep: FheUintPrepared<Vec<u8>, u32, BE> = FheUintPrepared::alloc_from_infos(module, ggsw_infos);
-    let mut pc_id: FheUintPrepared<Vec<u8>, u32, BE> = FheUintPrepared::alloc_from_infos(module, ggsw_infos); 
+    let mut rs1_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+    let mut rs2_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+    let mut imm_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+    let mut pc_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+    let mut pc_id: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
     let mut pc: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
 
-    rs1_prep.encrypt_sk(module, 0, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-    rs2_prep.encrypt_sk(module, 0, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-    imm_prep.encrypt_sk(module, 0, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-    pc_prep.encrypt_sk(module, 0, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
-    pc_id.encrypt_sk(module, 1, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+    rs1_prep.encrypt_sk(
+        module,
+        0,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+    rs2_prep.encrypt_sk(
+        module,
+        0,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+    imm_prep.encrypt_sk(
+        module,
+        0,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+    pc_prep.encrypt_sk(
+        module,
+        0,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+    pc_id.encrypt_sk(
+        module,
+        1,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
 
     let keys: VMKeys<Vec<u8>, BRA> =
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
     let mut keys_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     keys_prepared.prepare(module, &keys, scratch.borrow());
 
-    update_pc(module, &mut pc, &rs1_prep, &rs2_prep, &pc_prep, &imm_prep, &pc_id, &keys_prepared, scratch.borrow());
+    update_pc(
+        module,
+        &mut pc,
+        &rs1_prep,
+        &rs2_prep,
+        &pc_prep,
+        &imm_prep,
+        &pc_id,
+        &keys_prepared,
+        scratch.borrow(),
+    );
 
-    println!("pc: {}", pc.decrypt(module, &sk_glwe_prepared, scratch.borrow()));
-    
+    println!(
+        "pc: {}",
+        pc.decrypt(module, &sk_glwe_prepared, scratch.borrow())
+    );
 }

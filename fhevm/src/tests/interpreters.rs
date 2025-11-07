@@ -3,7 +3,7 @@ use crate::{
     parameters::{CryptographicParameters, DECOMP_N},
     Instruction, InstructionsParser, Interpreter,
 };
-use poulpy_backend::FFT64Ref;
+use poulpy_backend::{FFT64Avx, FFT64Ref};
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -334,7 +334,7 @@ where
 
 #[test]
 fn test_interpreter_cycle_single_instruction_noop_fft64_ref() {
-    test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Ref>();
+    test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Avx>();
 }
 
 fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo, BE: Backend>()
@@ -387,9 +387,6 @@ where
     let mut interpreter: Interpreter<BE> =
         Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
 
-
-    
-
     let instructions_u32 = vec![
         // 258455
         0b00000000_00000000_00000000_1110011,
@@ -420,7 +417,7 @@ where
 
     interpreter.pc_fhe_uint.encrypt_sk(
         module,
-        4,
+        0,
         &sk_glwe_prepared,
         &mut source_xa,
         &mut source_xe,

@@ -93,6 +93,32 @@ impl Ram {
         }
     }
 
+    pub(crate) fn zero<M, D, BE: Backend, H>(
+        &mut self,
+        module: &M,
+        addr: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWETrace<BE> + GLWESub + GLWERotate<BE>,
+        H: RAMKeysHelper<D, BE>,
+        D: DataRef,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let poly: usize = addr / module.n();
+        let idx: usize = poly % module.n();
+
+        let (mut tmp, scratch_1) = scratch.take_glwe(&self.subrams[0].data[0]);
+
+        for subram in self.subrams.iter_mut() {
+            let a: &mut GLWE<Vec<u8>> = &mut subram.data[poly];
+            module.glwe_rotate_inplace(-(idx as i64), a, scratch_1);
+            module.glwe_trace(&mut tmp, 0, a, keys, scratch_1);
+            module.glwe_sub_inplace(a, &tmp);
+            module.glwe_rotate_inplace(idx as i64, a, scratch_1);
+        }
+    }
+
     /// Simple read from the [Ram] at the provided encrypted address.
     /// Returns a vector of [GLWE], where each ciphertext stores
     /// Enc(m_i) where is the i-th digit of the word-size such that m = m_0 | m-1 | ...
