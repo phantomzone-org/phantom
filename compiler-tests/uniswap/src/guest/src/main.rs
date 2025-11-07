@@ -1,5 +1,5 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
-use core::panic::PanicInfo;
+use core::{ops::Div, panic::PanicInfo};
 use macros::entry;
 
 #[panic_handler]
@@ -19,15 +19,28 @@ struct Pool {
 #[repr(C)]
 struct Output {
     pool: Pool,
-    out0: u32,
-    out1: u32,
+    account: Account,
+}
+
+#[repr(C)]
+struct Trade {
+    /// Token amount to sell
+    amount: u32,
+    /// Trade direction. Set true to sell t0 for t1, false to sell t1 for t0
+    direction: bool,
+}
+
+#[repr(C)]
+struct Account {
+    t0_balance: u32,
+    t1_balance: u32,
 }
 
 #[repr(C)]
 struct Input {
     pool: Pool,
-    inp0: u32,
-    inp1: u32,
+    trade: Trade,
+    account: Account,
 }
 
 #[no_mangle]
@@ -46,24 +59,41 @@ fn main() {
         unsafe { core::ptr::read_volatile(((&INPUT) as *const u8) as *const Input) };
 
     let mut pool = input.pool;
-    let inp0 = input.inp0;
-    let inp1 = input.inp1;
+    let trade = input.trade;
+    let mut account = input.account;
 
-    let mut out0 = 0;
-    let mut out1 = 0;
+    let k = pool.t0.wrapping_mul(pool.t1);
 
-    if pool.t0 > inp0 {
-        pool.t0 -= inp0;
-        out0 = inp0;
-    }
+    if trade.direction == true {
+        assert!(account.t0_balance >= trade.amount);
 
-    if pool.t1 > inp1 {
-        pool.t1 -= inp1;
-        out1 = inp1;
+        // Sell t0
+        let t1_out = pool.t1 - (k.div(pool.t0.wrapping_add(trade.amount)));
+
+        // update amount
+        pool.t1 -= t1_out;
+        pool.t0 += trade.amount;
+
+        // update account
+        account.t0_balance -= trade.amount;
+        account.t1_balance += t1_out;
+    } else {
+        assert!(account.t1_balance >= trade.amount);
+
+        // Sell t1
+        let t0_out = pool.t0 - (k.div(pool.t1.wrapping_add(trade.amount)));
+
+        // update pool
+        pool.t0 -= t0_out;
+        pool.t1 += trade.amount;
+
+        // update account
+        account.t1_balance -= trade.amount;
+        account.t0_balance += t0_out;
     }
 
     // WRITE OUTPUT
-    let output_str = Output { pool, out0, out1 };
+    let output_str = Output { pool, account };
     unsafe {
         core::ptr::copy_nonoverlapping(
             (&output_str as *const Output) as *const u8,

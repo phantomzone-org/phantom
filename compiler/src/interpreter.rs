@@ -132,13 +132,12 @@ impl Phantom {
             elf_bytes[txthdr.p_offset as usize..(txthdr.p_offset + txthdr.p_memsz) as usize]
                 .to_vec(),
         );
-
         macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
 
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
             .iter()
-            .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
+            .filter(|p| p.p_flags == PF_R || p.p_flags == PF_R + PF_W)
             .collect();
         let mut ram_offset = 0;
         let mut boot_ram_data = vec![0u8; RAM_SIZE];
@@ -229,7 +228,6 @@ impl Phantom {
 
         // setup RAM
         let ram_offset = self.boot_ram.offset;
-        assert!(self.boot_ram.size % 4 == 0);
         let mut ram_with_input = self.boot_ram.data.clone();
         // read input tape
         assert!(input_tape.len() == self.input_info.size);
@@ -301,12 +299,13 @@ impl Phantom {
         }
     }
 
-    pub fn test_vm(&self) -> TestVM {
+    pub fn test_vm(&self, max_cycles: usize) -> TestVM {
         TestVM::init(
             &self.boot_rom,
             &self.boot_ram,
             &self.input_info,
             &self.output_info,
+            max_cycles,
         )
     }
 }
