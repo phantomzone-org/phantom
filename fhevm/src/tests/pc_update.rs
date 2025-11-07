@@ -1,4 +1,4 @@
-use poulpy_backend::{FFT64Avx, FFT64Ref};
+use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -29,7 +29,7 @@ use crate::{
 
 #[test]
 fn test_pc_update_fft64_ref() {
-    test_pc_update::<CGGI, FFT64Avx>()
+    test_pc_update::<CGGI, FFT64Ref>()
 }
 
 fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>()

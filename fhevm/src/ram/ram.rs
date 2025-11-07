@@ -238,9 +238,6 @@ impl Ram {
             })
             .collect_vec();
 
-        //let atk_ggsw_inv: &GLWEAutomorphismKeyPrepared<K, BE> = &keys.atk_ggsw_inv;
-        //let tsk_ggsw_inv: &GGLWEToGGSWKeyPrepared<K, BE> = &keys.tsk_ggsw_inv;
-
         // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
         for (i, subram) in self.subrams.iter_mut().enumerate() {
             subram.write_first_step(module, &bits[i], address.n2(), keys, scratch);

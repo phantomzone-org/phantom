@@ -506,7 +506,7 @@ impl<'a, BE: Backend> Interpreter<'a, BE> {
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, u32, BE>
             + GGSWBlindRotation<u32, BE>
-            + GLWENormalize<BE>,
+            + GLWENormalize<BE> + GLWEExternalProduct<BE>,
         BRA: BlindRotationAlgo,
         H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         D: DataRef,
