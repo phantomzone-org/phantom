@@ -7,6 +7,7 @@ pub mod load;
 pub mod parameters;
 pub mod pc_update;
 pub mod ram;
+pub(crate) mod ram_offset;
 pub mod store;
 
 // Re-export the main functionality

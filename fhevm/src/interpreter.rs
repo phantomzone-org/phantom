@@ -8,6 +8,7 @@ use crate::{
     keys::RAMKeysHelper,
     parameters::CryptographicParameters,
     ram::ram::Ram,
+    ram_offset::ram_offset,
     store::Store,
     update_pc, Load, LOAD_OPS_LIST, RD_RV32I_OP_LIST, STORE_OPS_LIST,
 };
@@ -28,7 +29,7 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        Add, BDDKeyHelper, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
+        BDDKeyHelper, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
         FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
     },
     blind_rotation::BlindRotationAlgo,
@@ -337,9 +338,11 @@ impl<BE: Backend> Interpreter<BE> {
         println!("Preparing imm, rs1, rs2");
         self.prepare_imm_rs1_rs2_values(module, keys, scratch);
 
-        // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
-        println!("Deriving rd arithmetic");
+        println!("Reading ram");
+        self.read_ram(module, keys, scratch);
 
+        // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
+        println!("Updating registers");
         match self.instruction_set {
             InstructionSet::RV32 => unimplemented!(),
             InstructionSet::RV32I => self.update_registers(module, RD_RV32I_OP_LIST, keys, scratch),
@@ -473,7 +476,7 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.imm_val_fhe_uint_prepared
-            .prepare(module, &self.imm_val_fhe_uint, keys, scratch);
+            .prepare(module, &self.imm_val_fhe_uint, keys, scratch); // TODO switch to 20 bits immediate & update circuits
         self.rs1_val_fhe_uint_prepared
             .prepare(module, &self.rs1_val_fhe_uint, keys, scratch);
         self.rs2_val_fhe_uint_prepared
@@ -530,7 +533,6 @@ impl<BE: Backend> Interpreter<BE> {
         }
 
         // Blind selection of the correct rd value using rdu_val_fhe_uint_prepared
-
         let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
         for (key, object) in rd_map.iter_mut() {
             ops_ref.insert(*key as usize, object);
@@ -557,7 +559,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         // Computes rd address
-        let mut address =
+        let mut address: AddressWrite<Vec<u8>, BE> =
             AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
         address.set_from_fhe_uint(
             module,
@@ -573,7 +575,7 @@ impl<BE: Backend> Interpreter<BE> {
             .write(module, &self.rd_val_fhe_uint, &address, keys, scratch);
     }
 
-    pub fn update_ram<D, M, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    pub fn read_ram<D, M, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
         M: GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
@@ -591,9 +593,10 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         D: DataRef,
     {
-        // Derives ram address = [rs2 + imm]
-        self.ram_addr_fhe_uint.add(
+        // Derives ram address = [rs2 + imm + 2^18]
+        ram_offset(
             module,
+            &mut self.ram_addr_fhe_uint,
             &self.imm_val_fhe_uint_prepared,
             &self.rs2_val_fhe_uint_prepared,
             keys,
@@ -617,7 +620,26 @@ impl<BE: Backend> Interpreter<BE> {
         // Read ram_val_fhe_uint from Ram[rs2 + imm]
         self.ram
             .read_prepare_write(module, &mut self.ram_val_fhe_uint, &address, keys, scratch);
+    }
 
+    pub fn update_ram<D, M, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    where
+        M: GGSWPreparedFactory<BE>
+            + GLWEExternalProduct<BE>
+            + GLWEPackerOps<BE>
+            + GLWETrace<BE>
+            + GLWEPacking<BE>
+            + ModuleN
+            + GGSWBlindRotation<u32, BE>
+            + GGSWPreparedFactory<BE>
+            + ExecuteBDDCircuit2WTo1W<u32, BE>
+            + FheUintPrepare<BRA, u32, BE>
+            + GLWEBlinSelection<u32, BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        BRA: BlindRotationAlgo,
+        D: DataRef,
+    {
         // Constructs diffferent possible values that are stored back
         let mut res_tmp: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
         for op in STORE_OPS_LIST {
