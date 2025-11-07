@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Minimum gap between heap and stack
-const MEMORY_GAP: usize = 0x1000;
+const MEMORY_GAP: usize = 0x100;
 
 #[allow(clippy::missing_safety_doc)]
 #[no_mangle]
