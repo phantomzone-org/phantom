@@ -1,12 +1,8 @@
 use itertools::{izip, Itertools};
 use poulpy_core::{
-    layouts::{
-        GGLWEInfos, GGLWEPreparedToRef, GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEInfos,
-        GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
-        TorusPrecision, GLWE,
-    },
-    GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker,
-    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPreparedFactory, GLWE, GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement, TorusPrecision
+    }
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN, TakeSlice},
@@ -90,6 +86,37 @@ impl Ram {
                 *x = y.bit(i);
             }
             self.subrams[i].encrypt_sk(module, &bits, sk, source_xa, source_xe, scratch);
+        }
+    }
+
+    /// Initialize the FHE-[Ram] with provided values (encrypted inder the provided secret).
+    pub(crate) fn decrypt<M, S, BE: Backend>(
+        &mut self,
+        module: &M,
+        data_decrypted: &mut [u32],
+        sk: &S,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEDecrypt<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+    {
+        let max_addr: usize = self.max_addr;
+        let ram_chunks: usize = self.word_size;
+
+        assert!(data_decrypted.len() / ram_chunks <= max_addr);
+
+        let mut bits: Vec<u8> = vec![0u8; max_addr];
+
+        for i in 0..ram_chunks {
+            self.subrams[i].decrypt(module, bits.as_mut_slice(), sk, scratch);
+            for (x, y) in bits.iter().zip(data_decrypted.iter_mut()) {
+                if *x == 1 {
+                    *y |= 1 << i;
+                } else {
+                    *y &= !(1 << i);
+                }
+            }
         }
     }
 
@@ -333,6 +360,32 @@ impl SubRam {
             pt.encode_vec_i64(&data_i64, self.k);
             ct.encrypt_sk(module, &pt, sk_prepared, source_xa, source_xe, scratch_2);
         }
+    }
+
+    fn decrypt<M, BE: Backend, S>(
+        &mut self,
+        module: &M,
+        data_decrypted: &mut [u8],
+        sk_prepared: &S,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEDecrypt<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
+        let (mut data_i64, scratch_2) = scratch_1.take_slice(module.n());
+
+        for (chunk, ct) in data_decrypted.chunks_mut(module.n()).zip(self.data.iter()) {
+            ct.decrypt(module, &mut pt, sk_prepared, scratch_2);
+
+            pt.decode_vec_i64(&mut data_i64, self.k);
+
+            
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
+                *x = *y as u8;
+            }
+        }        
     }
 
     fn read<M, DA: DataRef, K, H, BE: Backend>(
