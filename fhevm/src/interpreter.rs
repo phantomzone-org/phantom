@@ -20,17 +20,13 @@ use poulpy_hal::{
 };
 
 use poulpy_core::{
-    layouts::{
-        GGSWLayout, GGSWPreparedFactory, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
-        GLWESecretPreparedToRef,
-    },
-    GLWEAdd, GLWECopy, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPackerOps,
-    GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{
+        GGSWLayout, GLWEToRef, GGSWPreparedFactory, GLWEInfos, GLWELayout, GLWESecretPrepared, GLWESecretPreparedFactory, GLWESecretPreparedToRef
+    }
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
-        FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
+        BDDKeyHelper, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -42,7 +38,10 @@ pub enum InstructionSet {
     RV32I,
 }
 
-pub struct Interpreter<BE: Backend> {
+pub struct Interpreter<'a, BE: Backend> {
+
+    pub(crate) sk: Option<&'a GLWESecretPrepared<Vec<u8>, BE>>,
+
     pub(crate) instruction_set: InstructionSet,
     pub(crate) base_2d_rom: Base2D,
     pub(crate) base_2d_registers: Base2D,
@@ -100,7 +99,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 }
 
-impl<BE: Backend> Interpreter<BE> {
+impl<'a, BE: Backend> Interpreter<'a, BE> {
     pub fn new(
         params: &CryptographicParameters<BE>,
         rom_size: usize,
@@ -130,6 +129,7 @@ impl<BE: Backend> Interpreter<BE> {
         let module: &Module<BE> = params.module();
 
         Self {
+            sk: None,
             instruction_set: InstructionSet::RV32I,
             ggsw_infos: params.ggsw_infos(),
             base_2d_registers,
@@ -699,7 +699,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + GLWECopy
             + ExecuteBDDCircuit<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>,
+            + FheUintPrepare<BRA, u32, BE> + Cmux<BE> + GLWEDecrypt<BE>,
         K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
@@ -713,6 +713,32 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
+        if let Some(sk) = self.sk{
+            
+
+            let mut rs1: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.pcu_val_fhe_uint);
+            rs1.from_fhe_uint_prepared(module, &self.rs1_val_fhe_uint_prepared, keys, scratch);
+            println!("rs1: {}", rs1.decrypt(module, sk, scratch));
+
+            let mut rs2: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.pcu_val_fhe_uint);
+            rs1.from_fhe_uint_prepared(module, &self.rs2_val_fhe_uint_prepared, keys, scratch);
+            println!("rs2: {}", rs2.decrypt(module, sk, scratch));
+
+            let mut pc: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.pcu_val_fhe_uint);
+            pc.from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, keys, scratch);
+            println!("pc: {}", pc.decrypt(module, sk, scratch));
+
+            let mut imm: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.pcu_val_fhe_uint);
+            imm.from_fhe_uint_prepared(module, &self.imm_val_fhe_uint_prepared, keys, scratch);
+            println!("imm: {}", imm.decrypt(module, sk, scratch));
+
+            let mut pcu: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.pcu_val_fhe_uint);
+            pcu.from_fhe_uint_prepared(module, &self.pcu_val_fhe_uint_prepared, keys, scratch);
+            println!("pcu: {}", pcu.decrypt(module, sk, scratch));
+        }
+
+        println!("{}", self.pc_fhe_uint.to_ref());
+
         update_pc(
             module,
             &mut self.pc_fhe_uint,
@@ -724,5 +750,14 @@ impl<BE: Backend> Interpreter<BE> {
             keys,
             scratch,
         );
+
+        println!("{}", self.pc_fhe_uint.to_ref());
+
+        if let Some(sk) = self.sk{
+            
+
+            println!("pc: {}", self.pc_fhe_uint.decrypt(module, sk, scratch));
+            
+        }
     }
 }

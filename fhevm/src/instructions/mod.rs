@@ -455,15 +455,15 @@ impl OpIDStore {
 pub struct OpIDPCUpdate;
 
 impl OpIDPCUpdate {
-    pub const NONE: u32 = 0b1000;
-    pub const JAL: u32 = 0b1100;
-    pub const JALR: u32 = 0b1110;
-    pub const BNE: u32 = 0b0010;
+    pub const NONE: u32 = 0b0001;
+    pub const JAL: u32 = 0b0011;
+    pub const JALR: u32 = 0b0111;
+    pub const BNE: u32 = 0b0100;
     pub const BEQ: u32 = 0b0000;
     pub const BLT: u32 = 0b0110;
-    pub const BGE: u32 = 0b0111;
-    pub const BLTU: u32 = 0b0100;
-    pub const BGEU: u32 = 0b0101;
+    pub const BGE: u32 = 0b1110;
+    pub const BLTU: u32 = 0b0010;
+    pub const BGEU: u32 = 0b1010;
 }
 
 pub struct InstructionsParser {

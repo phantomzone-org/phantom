@@ -55,7 +55,6 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
         &crate::codegen::codegen_pc_update::OUTPUT_CIRCUITS,
         scratch_1,
     );
-
     // Repacks the bits
     res.pack(module, out_bits, keys, scratch_1);
 }
@@ -88,7 +87,6 @@ impl<'a, T: UnsignedInteger, BE: Backend> GetGGSWBit<BE> for FheUintHelper<'a, T
             .rev() // reverse so we find the largest offset <= bit
             .find(|(_, &start)| bit >= start)
             .unwrap(); // safe if bit is within expected range
-
         self.data[index].get_bit(bit - base)
     }
 }

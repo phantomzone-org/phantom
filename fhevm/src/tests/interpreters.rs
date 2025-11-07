@@ -387,6 +387,9 @@ where
     let mut interpreter: Interpreter<BE> =
         Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
 
+
+    
+
     let instructions_u32 = vec![
         // 258455
         0b00000000_00000000_00000000_1110011,
@@ -404,6 +407,8 @@ where
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
     sk_glwe_prepared.prepare(module, &sk_glwe);
 
+    interpreter.sk = Some(&sk_glwe_prepared);
+
     interpreter.instructions_encrypt_sk(
         module,
         &instructions,
@@ -415,7 +420,7 @@ where
 
     interpreter.pc_fhe_uint.encrypt_sk(
         module,
-        0,
+        4,
         &sk_glwe_prepared,
         &mut source_xa,
         &mut source_xe,
