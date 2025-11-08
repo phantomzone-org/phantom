@@ -1,36 +1,12 @@
-pub mod add;
-pub mod and;
-pub mod div;
-pub mod divu;
-pub mod mul;
-pub mod mulh;
-pub mod mulhsu;
-pub mod mulhu;
-pub mod or;
-pub mod rem;
-pub mod remu;
-pub mod sll;
-pub mod slt;
-pub mod sltu;
-pub mod sra;
-pub mod srl;
-pub mod sub;
-pub mod xor;
-
 #[cfg(test)]
 mod tests {
-    use crate::{OpIDPCUpdate, OpIDRd, OpIDStore};
+    use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
 
     use super::*;
 
     #[test]
     fn add() {
-        test_instruction(
-            0,
-            0,
-            0b0110011,
-            (OpIDRd::ADD, OpIDStore::NONE, OpIDPCUpdate::NONE),
-        )
+        test_instruction(0, 0, 0b0110011, (RD_UPDATE::ADD, RAM_UPDATE::NONE, PC_UPDATE::NONE))
     }
 
     #[test]
@@ -39,7 +15,7 @@ mod tests {
             0,
             0b111,
             0b0110011,
-            (OpIDRd::AND, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::AND, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -49,7 +25,7 @@ mod tests {
             0,
             0b110,
             0b0110011,
-            (OpIDRd::OR, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::OR, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -59,7 +35,7 @@ mod tests {
             0,
             0b001,
             0b0110011,
-            (OpIDRd::SLL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SLL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -69,7 +45,7 @@ mod tests {
             0,
             0b010,
             0b0110011,
-            (OpIDRd::SLT, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SLT, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -79,7 +55,7 @@ mod tests {
             0,
             0b011,
             0b0110011,
-            (OpIDRd::SLTU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SLTU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -89,7 +65,7 @@ mod tests {
             0b0100000,
             0b101,
             0b0110011,
-            (OpIDRd::SRA, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SRA, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -99,7 +75,7 @@ mod tests {
             0,
             0b101,
             0b0110011,
-            (OpIDRd::SRL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SRL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -109,7 +85,7 @@ mod tests {
             0b0100000,
             0,
             0b0110011,
-            (OpIDRd::SUB, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::SUB, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -119,7 +95,7 @@ mod tests {
             0,
             0b100,
             0b0110011,
-            (OpIDRd::XOR, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::XOR, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -129,7 +105,7 @@ mod tests {
             0b0000001,
             0b000,
             0b0110011,
-            (OpIDRd::MUL, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::MUL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -139,7 +115,7 @@ mod tests {
             0b0000001,
             0b001,
             0b0110011,
-            (OpIDRd::MULH, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::MULH, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -149,7 +125,7 @@ mod tests {
             0b0000001,
             0b010,
             0b0110011,
-            (OpIDRd::MULHSU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::MULHSU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -159,7 +135,7 @@ mod tests {
             0b0000001,
             0b011,
             0b0110011,
-            (OpIDRd::MULHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::MULHU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -169,7 +145,7 @@ mod tests {
             0b0000001,
             0b100,
             0b0110011,
-            (OpIDRd::DIV, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::DIV, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -179,7 +155,7 @@ mod tests {
             0b0000001,
             0b101,
             0b0110011,
-            (OpIDRd::DIVU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::DIVU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -189,7 +165,7 @@ mod tests {
             0b0000001,
             0b110,
             0b0110011,
-            (OpIDRd::REM, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::REM, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 
@@ -199,14 +175,15 @@ mod tests {
             0b0000001,
             0b111,
             0b0110011,
-            (OpIDRd::REMU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            (RD_UPDATE::REMU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         )
     }
 }
 
 use crate::instructions::{Instruction, InstructionsParser};
+use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
 #[allow(dead_code)]
-fn test_instruction(funct7: u32, funct3: u32, op_code: u32, opid: (u32, u32, u32)) {
+fn test_instruction(funct7: u32, funct3: u32, op_code: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     // 00000 | 00 | rs2[24:20] | rs1[19:15] | funct3 | rd[11:7] |
     let imm: u32 = 0;
     let rs2: u32 = 0b11011;

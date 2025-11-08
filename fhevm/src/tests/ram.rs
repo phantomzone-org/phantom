@@ -223,11 +223,15 @@ fn test_fhe_ram() {
     );
 
     let mut ram_decrypted: Vec<u32> = vec![0u32; ram.max_addr()];
-    ram.decrypt(params.module(), ram_decrypted.as_mut_slice(), &sk_prep, scratch.borrow());
+    ram.decrypt(
+        params.module(),
+        ram_decrypted.as_mut_slice(),
+        &sk_prep,
+        scratch.borrow(),
+    );
 
     assert_eq!(
         ram_decrypted[idx as usize],
         res.decrypt(params.module(), &sk_prep, scratch.borrow())
     );
-    
 }

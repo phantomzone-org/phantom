@@ -71,400 +71,320 @@ pub mod r_type;
 pub mod s_type;
 pub mod u_type;
 
-pub fn reconstruct(x: &[u32; 8]) -> u32 {
-    let mut y: u32 = 0;
-    y |= (x[7] as u32) << 28;
-    y |= (x[6] as u32) << 24;
-    y |= (x[5] as u32) << 20;
-    y |= (x[4] as u32) << 16;
-    y |= (x[3] as u32) << 12;
-    y |= (x[2] as u32) << 8;
-    y |= (x[1] as u32) << 4;
-    y |= x[0] as u32;
-    y
+pub(crate) fn sext(x: u32, bits: u32) -> u32 {
+    (x << (u32::BITS - bits) >> (u32::BITS - bits))
+        | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
 }
 
-pub fn decompose(x: u32) -> [u32; 8] {
-    let mut y: [u32; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-    y[0] = ((x >> 0) & 0xF) as u32;
-    y[1] = ((x >> 4) & 0xF) as u32;
-    y[2] = ((x >> 8) & 0xF) as u32;
-    y[3] = ((x >> 12) & 0xF) as u32;
-    y[4] = ((x >> 16) & 0xF) as u32;
-    y[5] = ((x >> 20) & 0xF) as u32;
-    y[6] = ((x >> 24) & 0xF) as u32;
-    y[7] = ((x >> 28) & 0xF) as u32;
-    y
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+pub(crate) enum RAM_UPDATE {
+    NONE = 0b00,
+    SB = 0b01,
+    SH = 0b10,
+    SW = 0b11,
 }
 
-pub fn sext(x: u32, bits: u32) -> u32 {
-    x | ((x >> bits) & 1) * (0xFFFF_FFFF & (0xFFFF_FFFF << bits))
-}
-
-pub enum StoreOps {
-    None,
-    Sb,
-    Sh,
-    Sw,
-}
-
-impl StoreOps {
-    pub fn apply(&self, value: &[u32; 8]) -> (u32, [u32; 8]) {
+impl RAM_UPDATE {
+    pub fn apply(&self, value: u32) -> u32 {
         match self {
-            StoreOps::None => (0, *value),
-            StoreOps::Sb => (OpIDStore::SB, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
-            StoreOps::Sh => (
-                OpIDStore::SH,
-                [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
-            ),
-            StoreOps::Sw => (OpIDStore::SW, *value),
+            RAM_UPDATE::NONE => 0,
+            RAM_UPDATE::SB => value & 0xFF,
+            RAM_UPDATE::SH => value & 0xFFFF,
+            RAM_UPDATE::SW => value,
         }
     }
 }
 
-pub static STORE_OPS_LIST: &[StoreOps] =
-    &[StoreOps::None, StoreOps::Sb, StoreOps::Sh, StoreOps::Sw];
+pub(crate) static RAM_UPDATE_OP_LIST: &[RAM_UPDATE] =
+    &[RAM_UPDATE::NONE, RAM_UPDATE::SB, RAM_UPDATE::SH, RAM_UPDATE::SW];
 
-pub enum PcOps {
-    One,
-    Jal,
-    Jalr,
-    Beq,
-    Bne,
-    Blt,
-    Bge,
-    Bltu,
-    Bgeu,
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+pub(crate) enum PC_UPDATE {
+    NONE = 0b0001,
+    JAL = 0b0011,
+    JALR = 0b0111,
+    BEQ = 0b0000,
+    BNE = 0b0100,
+    BLT = 0b0110,
+    BGE = 0b1110,
+    BLTU = 0b0010,
+    BGEU = 0b1010,
 }
 
-impl PcOps {
-    pub fn apply(
-        &self,
-        imm: &[u32; 8],
-        x_rs1: &[u32; 8],
-        x_rs2: &[u32; 8],
-        pc: &[u32; 8],
-    ) -> (u32, [u32; 8]) {
+impl PC_UPDATE {
+    pub fn apply(&self, imm: u32, rs1: u32, rs2: u32, pc: u32) -> u32 {
         match self {
-            PcOps::One => (0, decompose(reconstruct(pc).wrapping_add(4))),
-            PcOps::Beq => (
-                OpIDPCUpdate::BEQ,
-                b_type::beq::Beq::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Bge => (
-                OpIDPCUpdate::BGE,
-                b_type::bge::Bge::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Bgeu => (
-                OpIDPCUpdate::BGEU,
-                b_type::bgeu::Bgeu::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Blt => (
-                OpIDPCUpdate::BLT,
-                b_type::blt::Blt::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Bltu => (
-                OpIDPCUpdate::BLTU,
-                b_type::bltu::Bltu::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Bne => (
-                OpIDPCUpdate::BNE,
-                b_type::bne::Bne::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Jal => (
-                OpIDPCUpdate::JAL,
-                j_type::jal::Jal::apply_pc(imm, x_rs1, x_rs2, pc),
-            ),
-            PcOps::Jalr => (
-                OpIDPCUpdate::JALR,
-                i_type::jalr::Jalr::apply_pc(imm, x_rs1, x_rs2, pc),
-            ),
+            PC_UPDATE::NONE => pc.wrapping_add(4),
+            PC_UPDATE::BEQ => {
+                if rs1 == rs2 {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::BGE => {
+                if (rs1 as i32) >= (rs2 as i32) {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::BGEU => {
+                if rs1 >= rs2 {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::BLT => {
+                if (rs1 as i32) < (rs2 as i32) {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::BLTU => {
+                if rs1 < rs2 {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::BNE => {
+                if rs1 != rs2 {
+                    pc.wrapping_add(imm)
+                } else {
+                    pc.wrapping_add(4)
+                }
+            }
+            PC_UPDATE::JAL => pc.wrapping_add(imm),
+            PC_UPDATE::JALR => rs1.wrapping_add(imm) & 0xFFFF_FFFE,
         }
     }
 }
 
-pub static PC_OPS_LIST: &[PcOps] = &[
-    PcOps::One,
-    PcOps::Beq,
-    PcOps::Bge,
-    PcOps::Bgeu,
-    PcOps::Blt,
-    PcOps::Bltu,
-    PcOps::Bne,
-    PcOps::Jal,
-    PcOps::Jalr,
+pub(crate) static PC_UPDATE_OP_LIST: &[PC_UPDATE] = &[
+    PC_UPDATE::NONE,
+    PC_UPDATE::BEQ,
+    PC_UPDATE::BGE,
+    PC_UPDATE::BGEU,
+    PC_UPDATE::BLT,
+    PC_UPDATE::BLTU,
+    PC_UPDATE::BNE,
+    PC_UPDATE::JAL,
+    PC_UPDATE::JALR,
 ];
-
-pub enum RdOps {
-    None,
-    Lui,
-    Auipc,
-    Addi,
-    Slti,
-    Sltiu,
-    Xori,
-    Ori,
-    Andi,
-    Slli,
-    Srli,
-    Srai,
-    Add,
-    Sub,
-    Sll,
-    Slt,
-    Sltu,
-    Xor,
-    Srl,
-    Sra,
-    Or,
-    And,
-    Jal,
-    Jalr,
-    Mul,
-    Mulh,
-    Mulhsu,
-    Mulhu,
-    Div,
-    Divu,
-    Rem,
-    Remu,
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, Copy)]
+#[repr(u32)]
+pub(crate) enum RD_UPDATE {
+    NONE = 0,
+    LUI = 1,
+    AUIPC = 2,
+    ADDI = 3,
+    SLTI = 4,
+    SLTIU = 5,
+    XORI = 6,
+    ORI = 7,
+    ANDI = 8,
+    SLLI = 9,
+    SRLI = 10,
+    SRAI = 11,
+    ADD = 12,
+    SUB = 13,
+    SLL = 14,
+    SLT = 15,
+    SLTU = 16,
+    XOR = 17,
+    SRL = 18,
+    SRA = 19,
+    OR = 20,
+    AND = 21,
+    LB = 22,
+    LBU = 23,
+    LH = 24,
+    LHU = 25,
+    LW = 26,
+    JAL = 27,
+    JALR = 28,
+    MUL = 29,
+    MULH = 30,
+    MULHSU = 31,
+    MULHU = 32,
+    DIV = 33,
+    DIVU = 34,
+    REM = 35,
+    REMU = 36,
 }
 
-impl RdOps {
-    pub fn apply(
-        &self,
-        imm: &[u32; 8],
-        x_rs1: &[u32; 8],
-        x_rs2: &[u32; 8],
-        pc: &[u32; 8],
-    ) -> (u32, [u32; 8]) {
+impl RD_UPDATE {
+    pub fn apply(&self, imm: u32, rs1: u32, rs2: u32, pc: u32, ram: u32) -> u32 {
         match self {
-            RdOps::None => (0, [0u32; 8]),
-            RdOps::Lui => (OpIDRd::LUI, u_type::lui::Lui::apply(imm, x_rs1, x_rs2)),
-            RdOps::Auipc => (
-                OpIDRd::AUIPC,
-                u_type::auipc::Auipc::apply(imm, x_rs1, x_rs2, pc),
-            ),
-            RdOps::Addi => (OpIDRd::ADDI, i_type::addi::Addi::apply(imm, x_rs1, x_rs2)),
-            RdOps::Slti => (OpIDRd::SLTI, i_type::slti::Slti::apply(imm, x_rs1, x_rs2)),
-            RdOps::Sltiu => (
-                OpIDRd::SLTIU,
-                i_type::sltiu::Sltiu::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Xori => (OpIDRd::XORI, i_type::xori::Xori::apply(imm, x_rs1, x_rs2)),
-            RdOps::Ori => (OpIDRd::ORI, i_type::ori::Ori::apply(imm, x_rs1, x_rs2)),
-            RdOps::Andi => (OpIDRd::ANDI, i_type::andi::Andi::apply(imm, x_rs1, x_rs2)),
-            RdOps::Slli => (OpIDRd::SLLI, i_type::slli::Slli::apply(imm, x_rs1, x_rs2)),
-            RdOps::Srli => (OpIDRd::SRLI, i_type::srli::Srli::apply(imm, x_rs1, x_rs2)),
-            RdOps::Srai => (OpIDRd::SRAI, i_type::srai::Srai::apply(imm, x_rs1, x_rs2)),
-            RdOps::Add => (OpIDRd::ADD, r_type::add::Add::apply(imm, x_rs1, x_rs2)),
-            RdOps::Sub => (OpIDRd::SUB, r_type::sub::Sub::apply(imm, x_rs1, x_rs2)),
-            RdOps::Sll => (OpIDRd::SLL, r_type::sll::Sll::apply(imm, x_rs1, x_rs2)),
-            RdOps::Slt => (OpIDRd::SLT, r_type::slt::Slt::apply(imm, x_rs1, x_rs2)),
-            RdOps::Sltu => (OpIDRd::SLTU, r_type::sltu::Sltu::apply(imm, x_rs1, x_rs2)),
-            RdOps::Xor => (OpIDRd::XOR, r_type::xor::Xor::apply(imm, x_rs1, x_rs2)),
-            RdOps::Srl => (OpIDRd::SRL, r_type::srl::Srl::apply(imm, x_rs1, x_rs2)),
-            RdOps::Sra => (OpIDRd::SRA, r_type::sra::Sra::apply(imm, x_rs1, x_rs2)),
-            RdOps::Or => (OpIDRd::OR, r_type::or::Or::apply(imm, x_rs1, x_rs2)),
-            RdOps::And => (OpIDRd::AND, r_type::and::And::apply(imm, x_rs1, x_rs2)),
-            RdOps::Jal => (
-                OpIDRd::JAL,
-                j_type::jal::Jal::apply_rd(imm, x_rs1, x_rs2, pc),
-            ),
-            RdOps::Jalr => (
-                OpIDRd::JALR,
-                i_type::jalr::Jalr::apply_rd(imm, x_rs1, x_rs2, pc),
-            ),
-            RdOps::Mul => (OpIDRd::MUL, r_type::mul::Mul::apply(imm, x_rs1, x_rs2)),
-            RdOps::Mulh => (OpIDRd::MULH, r_type::mulh::Mulh::apply(imm, x_rs1, x_rs2)),
-            RdOps::Mulhsu => (
-                OpIDRd::MULHSU,
-                r_type::mulhsu::Mulhsu::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Mulhu => (
-                OpIDRd::MULHU,
-                r_type::mulhu::Mulhu::apply(imm, x_rs1, x_rs2),
-            ),
-            RdOps::Div => (OpIDRd::DIV, r_type::div::Div::apply(imm, x_rs1, x_rs2)),
-            RdOps::Divu => (OpIDRd::DIVU, r_type::divu::Divu::apply(imm, x_rs1, x_rs2)),
-            RdOps::Rem => (OpIDRd::REM, r_type::rem::Rem::apply(imm, x_rs1, x_rs2)),
-            RdOps::Remu => (OpIDRd::REMU, r_type::remu::Remu::apply(imm, x_rs1, x_rs2)),
+            RD_UPDATE::NONE => 0,
+            RD_UPDATE::LUI => imm.wrapping_shl(12),
+            RD_UPDATE::AUIPC => pc.wrapping_add(imm.wrapping_shl(12)),
+            RD_UPDATE::ADDI => rs1.wrapping_add(imm),
+            RD_UPDATE::SLTI => {
+                if (rs1 as i32) < (imm as i32) {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            }
+            RD_UPDATE::SLTIU => {
+                if rs1 < imm {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            }
+            RD_UPDATE::XORI => rs1 ^ imm,
+            RD_UPDATE::ORI => rs1 | imm,
+            RD_UPDATE::ANDI => rs1 & imm,
+            RD_UPDATE::SLLI => rs1.wrapping_shl(imm & 0x1F),
+            RD_UPDATE::SRLI => rs1.wrapping_shr(imm & 0x1F),
+            RD_UPDATE::SRAI => (rs1 as i32).wrapping_shr(imm & 0x1F) as u32,
+            RD_UPDATE::ADD => rs1.wrapping_add(rs2),
+            RD_UPDATE::SUB => rs1.wrapping_sub(rs2),
+            RD_UPDATE::SLL => rs1.wrapping_shl(rs2 & 0x1F),
+            RD_UPDATE::SLT => {
+                if (rs1 as i32) < (rs2 as i32) {
+                    return 1;
+                } else {
+                    return 0;
+                };
+            }
+            RD_UPDATE::SLTU => {
+                if rs1 < rs2 {
+                    return 1;
+                } else {
+                    return 0;
+                };
+            }
+            RD_UPDATE::XOR => rs1 ^ rs2,
+            RD_UPDATE::SRL => rs1 >> (rs2 & 0x1F),
+            RD_UPDATE::SRA => (rs1 as i32 >> (rs2 & 0x1F)) as u32,
+            RD_UPDATE::OR => rs1 | rs2,
+            RD_UPDATE::AND => rs1 & rs2,
+            RD_UPDATE::LB => sext(ram & 0xFF, 7),
+            RD_UPDATE::LH => sext(ram & 0xFFFF, 15),
+            RD_UPDATE::LW => ram,
+            RD_UPDATE::LBU => ram & 0xFF,
+            RD_UPDATE::LHU => ram & 0xFFFF,
+            RD_UPDATE::JAL => pc.wrapping_add(4),
+            RD_UPDATE::JALR => pc.wrapping_add(4),
+            RD_UPDATE::MUL => rs1.wrapping_mul(rs2),
+            RD_UPDATE::MULH => ((rs1 as i32 as i64).wrapping_mul(rs2 as i32 as i64) >> 32) as u32,
+            RD_UPDATE::MULHSU => ((rs1 as i32 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
+            RD_UPDATE::MULHU => ((rs1 as i64).wrapping_mul(rs2 as i64) >> 32) as u32,
+            RD_UPDATE::DIV => {
+                if rs2 == 0 {
+                    return i32::MAX as u32;
+                } else if (rs1 as i32 == i32::MIN) && (rs2 as i32 == -1) {
+                    return i32::MIN as u32;
+                }
+                (rs1 as i32 / rs2 as i32) as u32
+            }
+            RD_UPDATE::DIVU => {
+                if rs2 == 0 {
+                    return rs1;
+                }
+                rs1 / rs2
+            }
+            RD_UPDATE::REM => {
+                if rs1 == 0 {
+                    rs1
+                } else if rs1 as i32 == i32::MIN && rs2 as i32 == -1 {
+                    0
+                } else {
+                    (rs1 as i32 % rs2 as i32) as u32
+                }
+            }
+            RD_UPDATE::REMU => {
+                if rs2 == 0 {
+                    return rs1;
+                }
+                rs1 % rs2
+            }
         }
     }
 }
 
-pub static RD_RV32_OP_LIST: &[RdOps] = &[
-    RdOps::None,
-    RdOps::Lui,
-    RdOps::Auipc,
-    RdOps::Addi,
-    RdOps::Slti,
-    RdOps::Sltiu,
-    RdOps::Xori,
-    RdOps::Ori,
-    RdOps::Andi,
-    RdOps::Slli,
-    RdOps::Srli,
-    RdOps::Srai,
-    RdOps::Add,
-    RdOps::Sub,
-    RdOps::Sll,
-    RdOps::Slt,
-    RdOps::Sltu,
-    RdOps::Xor,
-    RdOps::Srl,
-    RdOps::Sra,
-    RdOps::Or,
-    RdOps::And,
-    RdOps::Jal,
-    RdOps::Jalr,
-    RdOps::Mul,
-    RdOps::Mulh,
-    RdOps::Mulhsu,
-    RdOps::Mulhu,
-    RdOps::Div,
-    RdOps::Divu,
-    RdOps::Rem,
-    RdOps::Remu,
+pub(crate) static RD_UPDATE_RV32M_OP_LIST: &[RD_UPDATE] = &[
+    RD_UPDATE::NONE,
+    RD_UPDATE::LUI,
+    RD_UPDATE::AUIPC,
+    RD_UPDATE::ADDI,
+    RD_UPDATE::SLTI,
+    RD_UPDATE::SLTIU,
+    RD_UPDATE::XORI,
+    RD_UPDATE::ORI,
+    RD_UPDATE::ANDI,
+    RD_UPDATE::SLLI,
+    RD_UPDATE::SRLI,
+    RD_UPDATE::SRAI,
+    RD_UPDATE::ADD,
+    RD_UPDATE::SUB,
+    RD_UPDATE::SLL,
+    RD_UPDATE::SLT,
+    RD_UPDATE::SLTU,
+    RD_UPDATE::XOR,
+    RD_UPDATE::SRL,
+    RD_UPDATE::SRA,
+    RD_UPDATE::OR,
+    RD_UPDATE::AND,
+    RD_UPDATE::LB,
+    RD_UPDATE::LBU,
+    RD_UPDATE::LH,
+    RD_UPDATE::LHU,
+    RD_UPDATE::LW,
+    RD_UPDATE::JAL,
+    RD_UPDATE::JALR,
+    RD_UPDATE::MUL,
+    RD_UPDATE::MULH,
+    RD_UPDATE::MULHSU,
+    RD_UPDATE::MULHU,
+    RD_UPDATE::DIV,
+    RD_UPDATE::DIVU,
+    RD_UPDATE::REM,
+    RD_UPDATE::REMU,
 ];
 
-pub static RD_RV32I_OP_LIST: &[RdOps] = &[
-    RdOps::None,
-    RdOps::Lui,
-    RdOps::Auipc,
-    RdOps::Addi,
-    RdOps::Slti,
-    RdOps::Sltiu,
-    RdOps::Xori,
-    RdOps::Ori,
-    RdOps::Andi,
-    RdOps::Slli,
-    RdOps::Srli,
-    RdOps::Srai,
-    RdOps::Add,
-    RdOps::Sub,
-    RdOps::Sll,
-    RdOps::Slt,
-    RdOps::Sltu,
-    RdOps::Xor,
-    RdOps::Srl,
-    RdOps::Sra,
-    RdOps::Or,
-    RdOps::And,
-    RdOps::Jal,
-    RdOps::Jalr,
+pub(crate) static RD_UPDATE_RV32I_OP_LIST: &[RD_UPDATE] = &[
+    RD_UPDATE::NONE,
+    RD_UPDATE::LUI,
+    RD_UPDATE::AUIPC,
+    RD_UPDATE::ADDI,
+    RD_UPDATE::SLTI,
+    RD_UPDATE::SLTIU,
+    RD_UPDATE::XORI,
+    RD_UPDATE::ORI,
+    RD_UPDATE::ANDI,
+    RD_UPDATE::SLLI,
+    RD_UPDATE::SRLI,
+    RD_UPDATE::SRAI,
+    RD_UPDATE::ADD,
+    RD_UPDATE::SUB,
+    RD_UPDATE::SLL,
+    RD_UPDATE::SLT,
+    RD_UPDATE::SLTU,
+    RD_UPDATE::XOR,
+    RD_UPDATE::SRL,
+    RD_UPDATE::SRA,
+    RD_UPDATE::OR,
+    RD_UPDATE::AND,
+    RD_UPDATE::LB,
+    RD_UPDATE::LBU,
+    RD_UPDATE::LH,
+    RD_UPDATE::LHU,
+    RD_UPDATE::LW,
+    RD_UPDATE::JAL,
+    RD_UPDATE::JALR,
 ];
-
-pub enum LoadOps {
-    Lb,
-    Lbu,
-    Lh,
-    Lhu,
-    Lw,
-}
-
-pub static LOAD_OPS_LIST: &[LoadOps] = &[
-    LoadOps::Lb,
-    LoadOps::Lbu,
-    LoadOps::Lh,
-    LoadOps::Lhu,
-    LoadOps::Lw,
-];
-
-impl LoadOps {
-    pub fn apply(&self, value: &[u32; 8]) -> (u32, [u32; 8]) {
-        match self {
-            LoadOps::Lb => (
-                OpIDRd::LB,
-                decompose(sext(
-                    reconstruct(&[value[0], value[1], 0, 0, 0, 0, 0, 0]),
-                    7,
-                )),
-            ),
-            LoadOps::Lh => (
-                OpIDRd::LH,
-                decompose(sext(
-                    reconstruct(&[value[0], value[1], value[2], value[3], 0, 0, 0, 0]),
-                    15,
-                )),
-            ),
-            LoadOps::Lw => (OpIDRd::LW, *value),
-            LoadOps::Lbu => (OpIDRd::LBU, [value[0], value[1], 0, 0, 0, 0, 0, 0]),
-            LoadOps::Lhu => (
-                OpIDRd::LHU,
-                [value[0], value[1], value[2], value[3], 0, 0, 0, 0],
-            ),
-        }
-    }
-}
-
-#[non_exhaustive]
-pub struct OpIDRd;
-
-impl OpIDRd {
-    pub const NONE: u32 = 0;
-    pub const LUI: u32 = 1;
-    pub const AUIPC: u32 = 2;
-    pub const ADDI: u32 = 3;
-    pub const SLTI: u32 = 4;
-    pub const SLTIU: u32 = 5;
-    pub const XORI: u32 = 6;
-    pub const ORI: u32 = 7;
-    pub const ANDI: u32 = 8;
-    pub const SLLI: u32 = 9;
-    pub const SRLI: u32 = 10;
-    pub const SRAI: u32 = 11;
-    pub const ADD: u32 = 12;
-    pub const SUB: u32 = 13;
-    pub const SLL: u32 = 14;
-    pub const SLT: u32 = 15;
-    pub const SLTU: u32 = 16;
-    pub const XOR: u32 = 17;
-    pub const SRL: u32 = 18;
-    pub const SRA: u32 = 19;
-    pub const OR: u32 = 20;
-    pub const AND: u32 = 21;
-    pub const LB: u32 = 22;
-    pub const LH: u32 = 23;
-    pub const LW: u32 = 24;
-    pub const LBU: u32 = 25;
-    pub const LHU: u32 = 26;
-    pub const MUL: u32 = 29;
-    pub const MULH: u32 = 30;
-    pub const MULHSU: u32 = 31;
-    pub const MULHU: u32 = 32;
-    pub const DIV: u32 = 33;
-    pub const DIVU: u32 = 34;
-    pub const REM: u32 = 35;
-    pub const REMU: u32 = 36;
-    pub const JAL: u32 = 27;
-    pub const JALR: u32 = 28;
-}
-
-#[non_exhaustive]
-pub struct OpIDStore;
-
-impl OpIDStore {
-    pub const NONE: u32 = 0b00;
-    pub const SB: u32 = 0b01;
-    pub const SH: u32 = 0b10;
-    pub const SW: u32 = 0b11;
-}
-
-#[non_exhaustive]
-pub struct OpIDPCUpdate;
-
-impl OpIDPCUpdate {
-    pub const NONE: u32 = 0b0001;
-    pub const JAL: u32 = 0b0011;
-    pub const JALR: u32 = 0b0111;
-    pub const BNE: u32 = 0b0100;
-    pub const BEQ: u32 = 0b0000;
-    pub const BLT: u32 = 0b0110;
-    pub const BGE: u32 = 0b1110;
-    pub const BLTU: u32 = 0b0010;
-    pub const BGEU: u32 = 0b1010;
-}
 
 pub struct InstructionsParser {
     pub imm: Vec<i64>,
@@ -576,23 +496,23 @@ impl InstructionsParser {
 #[derive(Clone, Debug)]
 pub struct Instruction(pub u32);
 
-pub const RS1MASK: u32 = 0x000F_8000;
-pub const RS2MASK: u32 = 0x01F0_0000;
-pub const FUNCT3MASK: u32 = 0x0000_7000;
-pub const FUNCT7MASK: u32 = 0xFE00_0000;
-pub const SHAMTMASK: u32 = 0x01F0_0000;
-pub const RDMASK: u32 = 0x0000_0F80;
-pub const OPCODEMASK: u32 = 0x0000_007F;
+pub(crate) const RS1MASK: u32 = 0x000F_8000;
+pub(crate) const RS2MASK: u32 = 0x01F0_0000;
+pub(crate) const FUNCT3MASK: u32 = 0x0000_7000;
+pub(crate) const FUNCT7MASK: u32 = 0xFE00_0000;
+pub(crate) const SHAMTMASK: u32 = 0x01F0_0000;
+pub(crate) const RDMASK: u32 = 0x0000_0F80;
+pub(crate) const OPCODEMASK: u32 = 0x0000_007F;
 
-pub const RS1SHIFT: u32 = 15;
-pub const RS2SHIFT: u32 = 20;
-pub const FUNCT3SHIFT: u32 = 12;
-pub const FUNCT7SHIFT: u32 = 25;
-pub const SHAMTSHIFT: u32 = 20;
-pub const RDSHIFT: u32 = 7;
-pub const OPCODESHIFT: u32 = 0;
+pub(crate) const RS1SHIFT: u32 = 15;
+pub(crate) const RS2SHIFT: u32 = 20;
+pub(crate) const FUNCT3SHIFT: u32 = 12;
+pub(crate) const FUNCT7SHIFT: u32 = 25;
+pub(crate) const SHAMTSHIFT: u32 = 20;
+pub(crate) const RDSHIFT: u32 = 7;
+pub(crate) const OPCODESHIFT: u32 = 0;
 
-pub enum Type {
+pub(crate) enum Type {
     NONE,
     R,
     I,
@@ -895,28 +815,28 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_opid(&self) -> (u32, u32, u32) {
+    pub fn get_opid(&self) -> (RD_UPDATE, RAM_UPDATE, PC_UPDATE) {
         let opcode: u32 = self.get_opcode();
         match self.get_type() {
             Type::R => match (self.get_funct7(), self.get_funct3()) {
-                (0b0000000, 0b000) => (OpIDRd::ADD, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0100000, 0b000) => (OpIDRd::SUB, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b001) => (OpIDRd::SLL, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b010) => (OpIDRd::SLT, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b011) => (OpIDRd::SLTU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b100) => (OpIDRd::XOR, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b101) => (OpIDRd::SRL, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0100000, 0b101) => (OpIDRd::SRA, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b110) => (OpIDRd::OR, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000000, 0b111) => (OpIDRd::AND, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b000) => (OpIDRd::MUL, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b001) => (OpIDRd::MULH, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b010) => (OpIDRd::MULHSU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b011) => (OpIDRd::MULHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b100) => (OpIDRd::DIV, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b101) => (OpIDRd::DIVU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b110) => (OpIDRd::REM, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                (0b0000001, 0b111) => (OpIDRd::REMU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                (0b0000000, 0b000) => (RD_UPDATE::ADD, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0100000, 0b000) => (RD_UPDATE::SUB, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b001) => (RD_UPDATE::SLL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b010) => (RD_UPDATE::SLT, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b011) => (RD_UPDATE::SLTU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b100) => (RD_UPDATE::XOR, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b101) => (RD_UPDATE::SRL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0100000, 0b101) => (RD_UPDATE::SRA, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b110) => (RD_UPDATE::OR, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000000, 0b111) => (RD_UPDATE::AND, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b000) => (RD_UPDATE::MUL, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b001) => (RD_UPDATE::MULH, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b010) => (RD_UPDATE::MULHSU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b011) => (RD_UPDATE::MULHU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b100) => (RD_UPDATE::DIV, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b101) => (RD_UPDATE::DIVU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b110) => (RD_UPDATE::REM, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                (0b0000001, 0b111) => (RD_UPDATE::REMU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
                 _ => panic!(
                     "invalid funct3 {:03b} or funct7 {:07b}: {:032b}",
                     self.get_funct3(),
@@ -928,54 +848,54 @@ impl Instruction {
                 let funct3: u32 = self.get_funct3();
                 match opcode {
                     0b0010011 => match funct3 {
-                        0b000 => (OpIDRd::ADDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b010 => (OpIDRd::SLTI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b011 => (OpIDRd::SLTIU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b100 => (OpIDRd::XORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b110 => (OpIDRd::ORI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b111 => (OpIDRd::ANDI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b001 => (OpIDRd::SLLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b000 => (RD_UPDATE::ADDI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b010 => (RD_UPDATE::SLTI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b011 => (RD_UPDATE::SLTIU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b100 => (RD_UPDATE::XORI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b110 => (RD_UPDATE::ORI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b111 => (RD_UPDATE::ANDI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b001 => (RD_UPDATE::SLLI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
                         0b101 => match self.get_funct7() {
-                            0b0000000 => (OpIDRd::SRLI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                            0b0100000 => (OpIDRd::SRAI, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                            0b0000000 => (RD_UPDATE::SRLI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                            0b0100000 => (RD_UPDATE::SRAI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
                             _ => panic!("invalid funct7: {:032b}", self.0),
                         },
                         _ => panic!("invalid funct3: {:032b}", self.0),
                     },
                     0b0000011 => match funct3 {
-                        0b000 => (OpIDRd::LB, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b001 => (OpIDRd::LH, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b010 => (OpIDRd::LW, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b100 => (OpIDRd::LBU, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                        0b101 => (OpIDRd::LHU, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                        0b000 => (RD_UPDATE::LB, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b001 => (RD_UPDATE::LH, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b010 => (RD_UPDATE::LW, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b100 => (RD_UPDATE::LBU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                        0b101 => (RD_UPDATE::LHU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
                         _ => panic!("invalid funct3: {:032b}", self.0),
                     },
-                    0b1100111 => (OpIDRd::JALR, OpIDStore::NONE, OpIDPCUpdate::JALR),
+                    0b1100111 => (RD_UPDATE::JALR, RAM_UPDATE::NONE, PC_UPDATE::JALR),
                     _ => panic!("invalid instruction: {:032b}", self.0),
                 }
             }
             Type::S => match self.get_funct3() {
-                0b000 => (OpIDRd::NONE, OpIDStore::SB, OpIDPCUpdate::NONE),
-                0b001 => (OpIDRd::NONE, OpIDStore::SH, OpIDPCUpdate::NONE),
-                0b010 => (OpIDRd::NONE, OpIDStore::SW, OpIDPCUpdate::NONE),
+                0b000 => (RD_UPDATE::NONE, RAM_UPDATE::SB, PC_UPDATE::NONE),
+                0b001 => (RD_UPDATE::NONE, RAM_UPDATE::SH, PC_UPDATE::NONE),
+                0b010 => (RD_UPDATE::NONE, RAM_UPDATE::SW, PC_UPDATE::NONE),
                 _ => panic!("invalid funct3: {:032b}", self.0),
             },
             Type::B => match self.get_funct3() {
-                0b000 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BEQ),
-                0b001 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BNE),
-                0b100 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLT),
-                0b101 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGE),
-                0b110 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BLTU),
-                0b111 => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::BGEU),
+                0b000 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BEQ),
+                0b001 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BNE),
+                0b100 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BLT),
+                0b101 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BGE),
+                0b110 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BLTU),
+                0b111 => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::BGEU),
                 _ => panic!("invalid funct3: {:032b}", self.0),
             },
             Type::U => match opcode {
-                0b0110111 => (OpIDRd::LUI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-                0b0010111 => (OpIDRd::AUIPC, OpIDStore::NONE, OpIDPCUpdate::NONE),
+                0b0110111 => (RD_UPDATE::LUI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+                0b0010111 => (RD_UPDATE::AUIPC, RAM_UPDATE::NONE, PC_UPDATE::NONE),
                 _ => panic!("invalid instruction: {:032b}", self.0),
             },
-            Type::J => (OpIDRd::JAL, OpIDStore::NONE, OpIDPCUpdate::JAL),
-            Type::NONE => (OpIDRd::NONE, OpIDStore::NONE, OpIDPCUpdate::NONE),
+            Type::J => (RD_UPDATE::JAL, RAM_UPDATE::NONE, PC_UPDATE::JAL),
+            Type::NONE => (RD_UPDATE::NONE, RAM_UPDATE::NONE, PC_UPDATE::NONE),
         }
     }
 }

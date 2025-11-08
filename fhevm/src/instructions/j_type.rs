@@ -1,5 +1,3 @@
-pub mod jal;
-
 pub const IMMMASK20: u32 = 0x0010_0000;
 pub const IMMMASK19: u32 = 0x000F_F000;
 pub const IMMMASK11: u32 = 0x0000_0800;
@@ -33,7 +31,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{instructions::sext, OpIDPCUpdate, OpIDRd, OpIDStore};
+    use crate::{instructions::sext, PC_UPDATE, RD_UPDATE, RAM_UPDATE};
     #[test]
     fn imm_encoding() {
         (1..21).for_each(|i| {
@@ -46,13 +44,14 @@ mod tests {
 
     #[test]
     fn jal() {
-        test_instruction(0b1101111, (OpIDRd::JAL, OpIDStore::NONE, OpIDPCUpdate::JAL))
+        test_instruction(0b1101111, (RD_UPDATE::JAL, RAM_UPDATE::NONE, PC_UPDATE::JAL))
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
+use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
 #[allow(dead_code)]
-fn test_instruction(op_code: u32, op_id: (u32, u32, u32)) {
+fn test_instruction(op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     let imm: u32 = 0xABCDE << 1;
     let rs2: u32 = 0;
     let rs1: u32 = 0;

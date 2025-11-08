@@ -24,7 +24,7 @@ use crate::{
     parameters::CryptographicParameters,
 };
 
-/// [Address] stores GGSW(X^{addr}) in decomposed
+/// [Address] stores GGSW(X^{addr}) in d
 /// form. That is, given addr = prod X^{a_i}, then
 /// it stores Vec<[Coordinate]:(X^{a_0}), [Coordinate]:(X^{a_1}), ...>.
 /// where [a_0, a_1, ...] is the representation in base N of a.

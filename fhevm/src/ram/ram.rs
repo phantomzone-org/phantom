@@ -1,8 +1,12 @@
 use itertools::{izip, Itertools};
 use poulpy_core::{
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{
-        GGLWEInfos, GGLWEPreparedToRef, GGSWPreparedFactory, GLWE, GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement, TorusPrecision
-    }
+    layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEInfos,
+        GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
+        TorusPrecision, GLWE,
+    },
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker,
+    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN, TakeSlice},
@@ -378,11 +382,10 @@ impl SubRam {
 
             pt.decode_vec_i64(&mut data_i64, self.k);
 
-            
             for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
                 *x = *y as u8;
             }
-        }        
+        }
     }
 
     fn read<M, DA: DataRef, K, H, BE: Backend>(

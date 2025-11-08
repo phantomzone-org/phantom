@@ -9,10 +9,10 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     FheUint, FheUintPrepared, GLWEBlinSelection, UnsignedInteger,
 };
 
-use crate::{keys::RAMKeysHelper, OpIDStore, StoreOps};
+use crate::{keys::RAMKeysHelper, RAM_UPDATE};
 
 pub trait Store<T: UnsignedInteger> {
-    fn id(&self) -> usize;
+    fn id(&self) -> u32;
 
     fn store<R, D, A, H, K, M, BE: Backend>(
         &self,
@@ -39,14 +39,9 @@ pub trait Store<T: UnsignedInteger> {
         Scratch<BE>: ScratchTakeCore<BE>;
 }
 
-impl Store<u32> for StoreOps {
-    fn id(&self) -> usize {
-        match self {
-            Self::None => OpIDStore::NONE as usize,
-            Self::Sb => OpIDStore::SB as usize,
-            Self::Sh => OpIDStore::SH as usize,
-            Self::Sw => OpIDStore::SW as usize,
-        }
+impl Store<u32> for RAM_UPDATE {
+    fn id(&self) -> u32 {
+        *self as u32
     }
 
     fn store<R, D, A, H, K, M, BE: Backend>(
@@ -74,15 +69,15 @@ impl Store<u32> for StoreOps {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         match self {
-            Self::None => {
+            Self::NONE => {
                 module.glwe_copy(res, loaded);
             }
 
-            Self::Sw => {
+            Self::SW => {
                 module.glwe_copy(res, rs2);
             }
 
-            Self::Sb => {
+            Self::SB => {
                 let mut cts: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
                 for i in 0..4 {
                     let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(res);
@@ -97,7 +92,7 @@ impl Store<u32> for StoreOps {
                 module.glwe_blind_selection(res, cts_ref, offset, 0, 4, scratch);
             }
 
-            Self::Sh => {
+            Self::SH => {
                 let mut cts: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
                 for i in 0..2 {
                     let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(res);

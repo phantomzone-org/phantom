@@ -151,7 +151,7 @@ mod tests {
             for &elem in &decomp {
                 assert!(
                     elem < 16,
-                    "Decomposed element {} should be < 16 for value {}",
+                    "d element {} should be < 16 for value {}",
                     elem,
                     value
                 );
@@ -255,7 +255,7 @@ mod tests {
             for &elem in &decomp {
                 assert!(
                     elem < 16,
-                    "Decomposed element {} should be < 16 for value {}",
+                    "d element {} should be < 16 for value {}",
                     elem,
                     value
                 );
@@ -298,7 +298,7 @@ mod tests {
             "Decomposition should produce at least 1 element"
         );
         for &elem in &decomp {
-            assert!(elem < 16, "Decomposed element {} should be < 16", elem);
+            assert!(elem < 16, "d element {} should be < 16", elem);
         }
     }
 
@@ -431,7 +431,7 @@ mod tests {
             for &elem in &decomp {
                 assert!(
                     elem < 16,
-                    "Decomposed element {} should be < 16 for value {}",
+                    "d element {} should be < 16 for value {}",
                     elem,
                     value
                 );

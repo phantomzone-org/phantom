@@ -1,6 +1,3 @@
-pub mod auipc;
-pub mod lui;
-
 pub const OPMASK: u32 = 0x0000_0FFF;
 pub const IMMMASK: u32 = 0xFFFF_F000;
 
@@ -17,7 +14,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{OpIDPCUpdate, OpIDRd, OpIDStore};
+    use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
 
     #[test]
     fn imm_encoding() {
@@ -31,24 +28,21 @@ mod tests {
 
     #[test]
     fn lui() {
-        test_instruction(
-            0b0110111,
-            (OpIDRd::LUI, OpIDStore::NONE, OpIDPCUpdate::NONE),
-        )
+        test_instruction(0b0110111, (RD_UPDATE::LUI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
     }
 
     #[test]
     fn auipc() {
-        test_instruction(
-            0b0010111,
-            (OpIDRd::AUIPC, OpIDStore::NONE, OpIDPCUpdate::NONE),
-        )
+        test_instruction(0b0010111, (RD_UPDATE::AUIPC, RAM_UPDATE::NONE, PC_UPDATE::NONE))
     }
 }
 
-use crate::instructions::{Instruction, InstructionsParser};
+use crate::{
+    instructions::{Instruction, InstructionsParser},
+    PC_UPDATE, RD_UPDATE, RAM_UPDATE,
+};
 #[allow(dead_code)]
-fn test_instruction(op_code: u32, op_id: (u32, u32, u32)) {
+fn test_instruction(op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     let imm: u32 = 0xABCD_E000;
     let rs2: u32 = 0;
     let rs1: u32 = 0;

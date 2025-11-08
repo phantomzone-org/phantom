@@ -3,7 +3,7 @@ graph TD
 
     ROM["<b>ROM read (size = 8KB):</b><br> - cost: 5ms"]
 
-    DCP["<b>DCP[4xu5,1xu6]:</b><br> - decomposes 31 bits into: 4xu5, 1xu6<br> - which requires 6 sequential DCP operations<br> - each DCP operation requires 2 BRs<br> - total 12 BRs required<br> - Cost: 12 x 20ms = 240ms"]
+    DCP["<b>DCP[4xu5,1xu6]:</b><br> - s 31 bits into: 4xu5, 1xu6<br> - which requires 6 sequential DCP operations<br> - each DCP operation requires 2 BRs<br> - total 12 BRs required<br> - Cost: 12 x 20ms = 240ms"]
 
     CBT1["<b>CBT[u5]:</b><br> - CBT with 5 bit value<br> - multiple CBTs in parallel with depth of 1 CBT<br> - Cost: 20ms"]
 

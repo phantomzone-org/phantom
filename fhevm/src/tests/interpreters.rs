@@ -1,7 +1,10 @@
 use crate::{
-    Instruction, InstructionsParser, Interpreter, RD_RV32I_OP_LIST, arithmetic::Evaluate, decompose, keys::{VMKeys, VMKeysPrepared}, parameters::{CryptographicParameters, DECOMP_N}, reconstruct
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::{CryptographicParameters, DECOMP_N},
+    rd_update::Evaluate,
+    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
-use poulpy_backend::{FFT64Ref};
+use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -17,10 +20,12 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation
+        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPreparedEncryptSk,
+        FheUintPreparedFactory, GGSWBlindRotation,
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
+use rand_core::RngCore;
 
 #[test]
 fn test_interpreter_init_one_instruction_fft64_ref() {
@@ -226,42 +231,11 @@ where
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
     sk_glwe_prepared.prepare(module, &sk_glwe);
 
-    let instruction_u32 = 258455;
-    let mut instructions: InstructionsParser = InstructionsParser::new();
-    instructions.add(Instruction::new(instruction_u32));
-
-    interpreter.instructions_encrypt_sk(
-        module,
-        &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-
-    let idx = 0;
-
-    let instruction: Instruction = instructions.get_raw(idx);
-    let correct_imm: u32 = instruction.get_immediate();
-    let (rs1, rs2, rd) = instruction.get_registers();
-    let correct_rs1: u32 = rs1 as u32;
-    let correct_rs2: u32 = rs2 as u32;
-    let correct_rd: u32 = rd as u32;
-    let correct_pc: u32 = 0;
-
-    let (rdu, mu, pcu) = instruction.get_opid();
-    let correct_rdu: u32 = rdu as u32;
-    let correct_mu: u32 = mu as u32;
-    let correct_pcu: u32 = pcu as u32;
-
-    interpreter.pc_fhe_uint.encrypt_sk(
-        module,
-        idx as u32,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
+    let imm_value: u32 = source_xa.next_u32();
+    let rs1_value: u32 = source_xa.next_u32();
+    let rs2_value: u32 = source_xa.next_u32();
+    let pc_value: u32 = source_xa.next_u32();
+    let ram_value: u32 = source_xa.next_u32();
 
     let key: VMKeys<Vec<u8>, BRA> =
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
@@ -272,17 +246,50 @@ where
     interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
 
     interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
-        module, correct_rs1, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        module,
+        rs1_value,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
     interpreter.rs2_val_fhe_uint_prepared.encrypt_sk(
-        module, correct_rs2, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        module,
+        rs2_value,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
     interpreter.imm_val_fhe_uint_prepared.encrypt_sk(
-        module, correct_imm, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        module,
+        imm_value,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
     interpreter.pc_fhe_uint_prepared.encrypt_sk(
-        module, correct_pc, &sk_glwe_prepared, &mut source_xa, &mut source_xe, scratch.borrow());
+        module,
+        pc_value,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
+
+    interpreter.ram_val_fhe_uint.encrypt_sk(
+        module,
+        ram_value,
+        &sk_glwe_prepared,
+        &mut source_xa,
+        &mut source_xe,
+        scratch.borrow(),
+    );
 
     let mut res = FheUint::alloc_from_infos(&params.glwe_ct_infos());
-    let mut fails = vec![];
-    for op in RD_RV32I_OP_LIST {
+
+    for op in RD_UPDATE_RV32I_OP_LIST {
         op.eval(
             module,
             &mut res,
@@ -290,16 +297,26 @@ where
             &interpreter.rs2_val_fhe_uint_prepared,
             &interpreter.imm_val_fhe_uint_prepared,
             &interpreter.pc_fhe_uint_prepared,
+            &interpreter.ram_val_fhe_uint,
             &key_prepared,
             scratch.borrow(),
         );
 
-        let dec = res.decrypt(module, &sk_glwe_prepared, scratch.borrow());
-        if reconstruct(&op.apply(&decompose(correct_imm), &decompose(correct_rs1), &decompose(correct_rs2), &decompose(correct_pc)).1) != dec {
-            fails.push(op);
-        }
+        let have: u32 = res.decrypt(module, &sk_glwe_prepared, scratch.borrow());
+        let want: u32 = op.apply(imm_value, rs1_value, rs2_value, pc_value, ram_value);
+
+        assert_eq!(
+            have, want,
+            "{:#?}\n
+            rs1: {rs1_value}\n
+            rs2: {rs2_value}\n
+            imm: {imm_value}\n
+            pc:  {pc_value}\n
+            ram: {ram_value}\n
+            -> have: {} != want: {}",
+            op, have, want
+        );
     }
-    assert_eq!(fails.len(), 0);
 }
 
 #[test]
@@ -532,8 +549,6 @@ where
     let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
     sk_glwe_prepared.prepare(module, &sk_glwe);
-
-    interpreter.sk = Some(&sk_glwe_prepared);
 
     interpreter.instructions_encrypt_sk(
         module,
