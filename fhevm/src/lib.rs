@@ -3,11 +3,11 @@ pub mod instructions;
 pub mod interpreter;
 pub mod keys;
 pub mod parameters;
-pub mod pc_update;
-pub mod ram;
+pub(crate) mod pc_update;
+pub(crate) mod ram;
 pub(crate) mod ram_offset;
-pub mod rd_update;
-pub mod store;
+pub(crate) mod rd_update;
+pub(crate) mod ram_update;
 
 // Re-export the main functionality
 pub(crate) use instructions::*;

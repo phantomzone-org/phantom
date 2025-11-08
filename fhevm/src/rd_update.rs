@@ -46,7 +46,7 @@ impl_bdd_2w_to_1w_trait!(
 pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
     fn id(&self) -> u32;
 
-    fn eval<R, R1, R2, IM, PC, RA, H, K, M>(
+    fn eval_fhe<R, R1, R2, IM, PC, RA, H, K, M>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,
@@ -81,7 +81,7 @@ impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
         *self as u32
     }
 
-    fn eval<R, R1, R2, IM, PC, RA, H, K, M>(
+    fn eval_fhe<R, R1, R2, IM, PC, RA, H, K, M>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,

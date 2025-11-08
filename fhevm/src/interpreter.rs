@@ -9,7 +9,7 @@ use crate::{
     ram::ram::Ram,
     ram_offset::ram_offset,
     rd_update::Evaluate,
-    store::Store,
+    ram_update::Store,
     update_pc, PC_UPDATE, PCU, RD_UPDATE_RV32I_OP_LIST, RAM_UPDATE_OP_LIST,
 };
 
@@ -577,7 +577,7 @@ impl<BE: Backend> Interpreter<BE> {
         // Evaluates arithmetic operations & store in map with respective op ID
         for op in ops {
             let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
-            op.eval(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch);
+            op.eval_fhe(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch);
             rd_map.insert(op.id(), tmp);
         }
 
@@ -694,7 +694,7 @@ impl<BE: Backend> Interpreter<BE> {
         let mut res_tmp: HashMap<u32, FheUint<Vec<u8>, u32>> = HashMap::new();
         for op in RAM_UPDATE_OP_LIST {
             let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
-            op.store(
+            op.eval_fhe(
                 module,
                 &mut tmp,
                 &self.rs2_val_fhe_uint,

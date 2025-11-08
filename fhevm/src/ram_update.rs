@@ -14,7 +14,7 @@ use crate::{keys::RAMKeysHelper, RAM_UPDATE};
 pub trait Store<T: UnsignedInteger> {
     fn id(&self) -> u32;
 
-    fn store<R, D, A, H, K, M, BE: Backend>(
+    fn eval_fhe<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, T>,
@@ -44,7 +44,7 @@ impl Store<u32> for RAM_UPDATE {
         *self as u32
     }
 
-    fn store<R, D, A, H, K, M, BE: Backend>(
+    fn eval_fhe<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,

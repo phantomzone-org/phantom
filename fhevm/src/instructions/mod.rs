@@ -64,12 +64,12 @@
 //!  7 |bltu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] <u  x[rs2]), pc += sext(imm[19:0])
 //!  8 |bgeu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] >=u x[rs2]), pc += sext(imm[19:0])
 
-pub mod b_type;
-pub mod i_type;
-pub mod j_type;
-pub mod r_type;
-pub mod s_type;
-pub mod u_type;
+pub(crate) mod b_type;
+pub(crate) mod i_type;
+pub(crate) mod j_type;
+pub(crate) mod r_type;
+pub(crate) mod s_type;
+pub(crate) mod u_type;
 
 pub(crate) fn sext(x: u32, bits: u32) -> u32 {
     (x << (u32::BITS - bits) >> (u32::BITS - bits))
@@ -87,7 +87,7 @@ pub(crate) enum RAM_UPDATE {
 }
 
 impl RAM_UPDATE {
-    pub fn apply(&self, value: u32) -> u32 {
+    pub fn eval(&self, value: u32) -> u32 {
         match self {
             RAM_UPDATE::NONE => 0,
             RAM_UPDATE::SB => value & 0xFF,
@@ -116,7 +116,7 @@ pub(crate) enum PC_UPDATE {
 }
 
 impl PC_UPDATE {
-    pub fn apply(&self, imm: u32, rs1: u32, rs2: u32, pc: u32) -> u32 {
+    pub fn eval(&self, imm: u32, rs1: u32, rs2: u32, pc: u32) -> u32 {
         match self {
             PC_UPDATE::NONE => pc.wrapping_add(4),
             PC_UPDATE::BEQ => {
@@ -222,7 +222,7 @@ pub(crate) enum RD_UPDATE {
 }
 
 impl RD_UPDATE {
-    pub fn apply(&self, imm: u32, rs1: u32, rs2: u32, pc: u32, ram: u32) -> u32 {
+    pub fn eval(&self, imm: u32, rs1: u32, rs2: u32, pc: u32, ram: u32) -> u32 {
         match self {
             RD_UPDATE::NONE => 0,
             RD_UPDATE::LUI => imm.wrapping_shl(12),

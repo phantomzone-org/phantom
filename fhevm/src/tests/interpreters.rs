@@ -290,7 +290,7 @@ where
     let mut res = FheUint::alloc_from_infos(&params.glwe_ct_infos());
 
     for op in RD_UPDATE_RV32I_OP_LIST {
-        op.eval(
+        op.eval_fhe(
             module,
             &mut res,
             &interpreter.rs1_val_fhe_uint_prepared,
@@ -303,7 +303,7 @@ where
         );
 
         let have: u32 = res.decrypt(module, &sk_glwe_prepared, scratch.borrow());
-        let want: u32 = op.apply(imm_value, rs1_value, rs2_value, pc_value, ram_value);
+        let want: u32 = op.eval(imm_value, rs1_value, rs2_value, pc_value, ram_value);
 
         assert_eq!(
             have, want,
