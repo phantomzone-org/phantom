@@ -22,7 +22,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{instructions::sext, PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+    use crate::{instructions::sext, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 
     #[test]
     fn imm_encoding() {
@@ -36,22 +36,35 @@ mod tests {
 
     #[test]
     fn sb() {
-        test_instruction(0b000, 0b0100011, (RD_UPDATE::NONE, RAM_UPDATE::SB, PC_UPDATE::NONE))
+        test_instruction(
+            0b000,
+            0b0100011,
+            (RD_UPDATE::NONE, RAM_UPDATE::SB, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn sh() {
-        test_instruction(0b001, 0b0100011, (RD_UPDATE::NONE, RAM_UPDATE::SH, PC_UPDATE::NONE))
+        test_instruction(
+            0b001,
+            0b0100011,
+            (RD_UPDATE::NONE, RAM_UPDATE::SH, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn sw() {
-        test_instruction(0b010, 0b0100011, (RD_UPDATE::NONE, RAM_UPDATE::SW, PC_UPDATE::NONE))
+        test_instruction(
+            0b010,
+            0b0100011,
+            (RD_UPDATE::NONE, RAM_UPDATE::SW, PC_UPDATE::NONE),
+        )
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
-use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
+#[allow(dead_code)]
 fn test_instruction(funct3: u32, op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     // imm[11:5] | rs2[24:20] | rs1[19:15] | 000 | imm[4:0] | 0100011
     let imm: u32 = 0xABC;

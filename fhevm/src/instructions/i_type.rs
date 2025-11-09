@@ -16,7 +16,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 mod tests {
 
     use super::*;
-    use crate::{instructions::sext, PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+    use crate::{instructions::sext, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 
     #[test]
     fn imm_encoding() {
@@ -30,12 +30,20 @@ mod tests {
 
     #[test]
     fn addi() {
-        test_instruction(0b000, 0b0010011, (RD_UPDATE::ADDI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b000,
+            0b0010011,
+            (RD_UPDATE::ADDI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn slti() {
-        test_instruction(0b010, 0b0010011, (RD_UPDATE::SLTI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b010,
+            0b0010011,
+            (RD_UPDATE::SLTI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
@@ -49,17 +57,29 @@ mod tests {
 
     #[test]
     fn xori() {
-        test_instruction(0b100, 0b0010011, (RD_UPDATE::XORI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b100,
+            0b0010011,
+            (RD_UPDATE::XORI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn ori() {
-        test_instruction(0b110, 0b0010011, (RD_UPDATE::ORI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b110,
+            0b0010011,
+            (RD_UPDATE::ORI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn andi() {
-        test_instruction(0b111, 0b0010011, (RD_UPDATE::ANDI, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b111,
+            0b0010011,
+            (RD_UPDATE::ANDI, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
@@ -91,32 +111,56 @@ mod tests {
 
     #[test]
     fn jalr() {
-        test_instruction(0b000, 0b1100111, (RD_UPDATE::JALR, RAM_UPDATE::NONE, PC_UPDATE::JALR))
+        test_instruction(
+            0b000,
+            0b1100111,
+            (RD_UPDATE::JALR, RAM_UPDATE::NONE, PC_UPDATE::JALR),
+        )
     }
 
     #[test]
     fn lb() {
-        test_instruction(0, 0b0000011, (RD_UPDATE::LB, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0,
+            0b0000011,
+            (RD_UPDATE::LB, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn lh() {
-        test_instruction(0b001, 0b0000011, (RD_UPDATE::LH, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b001,
+            0b0000011,
+            (RD_UPDATE::LH, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn lw() {
-        test_instruction(0b010, 0b0000011, (RD_UPDATE::LW, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b010,
+            0b0000011,
+            (RD_UPDATE::LW, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn lbu() {
-        test_instruction(0b100, 0b0000011, (RD_UPDATE::LBU, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b100,
+            0b0000011,
+            (RD_UPDATE::LBU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
     fn lhu() {
-        test_instruction(0b101, 0b0000011, (RD_UPDATE::LHU, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0b101,
+            0b0000011,
+            (RD_UPDATE::LHU, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 }
 
@@ -150,7 +194,7 @@ fn test_instruction(funct3: u32, op_code: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_
     );
 }
 
-use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 #[allow(dead_code)]
 fn test_instruction_shamt(imm: u32, funct3: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     // 0000000 | shamt[24:20] | rs1[19:15] | funct3 | rd[11:7] | 0010011

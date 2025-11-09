@@ -263,7 +263,7 @@ impl Phantom {
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
         sk_lwe.fill_binary_block(8, &mut source_xs);
 
-        let mut interpreter = Interpreter::new(
+        let mut interpreter: Interpreter<BackendImpl> = Interpreter::new(
             &params,
             self.boot_rom.size,
             self.boot_ram.size,

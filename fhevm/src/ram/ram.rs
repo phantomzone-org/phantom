@@ -93,7 +93,7 @@ impl Ram {
         }
     }
 
-    /// Initialize the FHE-[Ram] with provided values (encrypted inder the provided secret).
+    #[allow(dead_code)]
     pub(crate) fn decrypt<M, S, BE: Backend>(
         &mut self,
         module: &M,
@@ -363,6 +363,7 @@ impl SubRam {
         }
     }
 
+    #[allow(dead_code)]
     fn decrypt<M, BE: Backend, S>(
         &mut self,
         module: &M,
@@ -379,9 +380,7 @@ impl SubRam {
 
         for (chunk, ct) in data_decrypted.chunks_mut(module.n()).zip(self.data.iter()) {
             ct.decrypt(module, &mut pt, sk_prepared, scratch_2);
-
             pt.decode_vec_i64(&mut data_i64, self.k);
-
             for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
                 *x = *y as u8;
             }

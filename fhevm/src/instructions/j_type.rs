@@ -31,7 +31,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{instructions::sext, PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+    use crate::{instructions::sext, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
     #[test]
     fn imm_encoding() {
         (1..21).for_each(|i| {
@@ -44,12 +44,15 @@ mod tests {
 
     #[test]
     fn jal() {
-        test_instruction(0b1101111, (RD_UPDATE::JAL, RAM_UPDATE::NONE, PC_UPDATE::JAL))
+        test_instruction(
+            0b1101111,
+            (RD_UPDATE::JAL, RAM_UPDATE::NONE, PC_UPDATE::JAL),
+        )
     }
 }
 
 use crate::instructions::{sext, Instruction, InstructionsParser};
-use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 #[allow(dead_code)]
 fn test_instruction(op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     let imm: u32 = 0xABCDE << 1;

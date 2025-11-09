@@ -87,18 +87,37 @@ pub(crate) enum RAM_UPDATE {
 }
 
 impl RAM_UPDATE {
-    pub fn eval(&self, value: u32) -> u32 {
+    pub(crate) fn id(&self) -> u32 {
+        *self as u32
+    }
+
+    pub(crate) fn eval_plain(&self, rs2: u32, ram: u32, offset: u32) -> u32 {
         match self {
-            RAM_UPDATE::NONE => 0,
-            RAM_UPDATE::SB => value & 0xFF,
-            RAM_UPDATE::SH => value & 0xFFFF,
-            RAM_UPDATE::SW => value,
+            RAM_UPDATE::NONE => ram,
+            RAM_UPDATE::SW => rs2,
+
+            RAM_UPDATE::SB => match offset {
+                0 => (rs2 & 0xFF) | (ram & 0xFFFF_FF00),
+                1 => ((rs2 & 0xFF) << 8) | (ram & 0xFFFF_00FF),
+                2 => ((rs2 & 0xFF) << 16) | (ram & 0xFF00_FFFF),
+                3 => ((rs2 & 0xFF) << 24) | (ram & 0x00FF_FFFF),
+                _ => panic!("invalid offset: {} != [0, 1, 2, 3]", offset),
+            },
+            RAM_UPDATE::SH => match offset {
+                0 => (rs2 & 0xFFFF) | (ram & 0xFFFF_0000),
+                2 => ((rs2 & 0xFFFF) << 16) | (ram & 0x_FFFF),
+                _ => panic!("invalid offset: {} != [0, 2]", offset),
+            },
         }
     }
 }
 
-pub(crate) static RAM_UPDATE_OP_LIST: &[RAM_UPDATE] =
-    &[RAM_UPDATE::NONE, RAM_UPDATE::SB, RAM_UPDATE::SH, RAM_UPDATE::SW];
+pub(crate) static RAM_UPDATE_OP_LIST: &[RAM_UPDATE] = &[
+    RAM_UPDATE::NONE,
+    RAM_UPDATE::SB,
+    RAM_UPDATE::SH,
+    RAM_UPDATE::SW,
+];
 
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy)]
@@ -116,7 +135,11 @@ pub(crate) enum PC_UPDATE {
 }
 
 impl PC_UPDATE {
-    pub fn eval(&self, imm: u32, rs1: u32, rs2: u32, pc: u32) -> u32 {
+    pub(crate) fn id(&self) -> u32 {
+        *self as u32
+    }
+
+    pub(crate) fn eval_plain(&self, imm: u32, rs1: u32, rs2: u32, pc: u32) -> u32 {
         match self {
             PC_UPDATE::NONE => pc.wrapping_add(4),
             PC_UPDATE::BEQ => {
@@ -222,7 +245,11 @@ pub(crate) enum RD_UPDATE {
 }
 
 impl RD_UPDATE {
-    pub fn eval(&self, imm: u32, rs1: u32, rs2: u32, pc: u32, ram: u32) -> u32 {
+    pub(crate) fn id(&self) -> u32 {
+        *self as u32
+    }
+
+    pub(crate) fn eval_plain(&self, imm: u32, rs1: u32, rs2: u32, pc: u32, ram: u32) -> u32 {
         match self {
             RD_UPDATE::NONE => 0,
             RD_UPDATE::LUI => imm.wrapping_shl(12),
@@ -416,16 +443,16 @@ impl InstructionsParser {
         self.instructions_raw.push(instruction);
     }
 
-    pub fn assert_size(&self, size: usize) {
+    pub(crate) fn assert_size(&self, size: usize) {
         assert_eq!(self.imm.len(), size);
         assert_eq!(self.instructions.len(), size);
     }
 
-    pub fn get_raw(&self, idx: usize) -> Instruction {
+    pub(crate) fn get_raw(&self, idx: usize) -> Instruction {
         self.instructions_raw[idx].clone()
     }
 
-    pub fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
+    pub(crate) fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {
         assert!(self.imm.len() > idx);
         let data = self.instructions[idx];
         (
@@ -439,7 +466,7 @@ impl InstructionsParser {
         )
     }
 
-    pub fn assert_instruction(
+    pub(crate) fn assert_instruction(
         &self,
         idx: usize,
         imm: i64,
@@ -533,7 +560,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_type(&self) -> Type {
+    pub(crate) fn get_type(&self) -> Type {
         let opcode: u32 = self.get_opcode();
         match opcode {
             0b0110111 | 0b0010111 => Type::U,
@@ -548,7 +575,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_funct3(&self) -> u32 {
+    pub(crate) fn get_funct3(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -563,7 +590,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_funct3(&mut self, funct3: u32) {
+    pub(crate) fn set_funct3(&mut self, funct3: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -579,7 +606,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_funct7(&self) -> u32 {
+    pub(crate) fn get_funct7(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -594,7 +621,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_funct7(&mut self, funct7: u32) {
+    pub(crate) fn set_funct7(&mut self, funct7: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -610,7 +637,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs1(&self) -> u32 {
+    pub(crate) fn get_rs1(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -625,15 +652,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs1_or_zero(&self) -> u32 {
-        match self.get_type() {
-            Type::R | Type::I | Type::S | Type::B => self.get_rs1(),
-            _ => 0,
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_rs1(&mut self, rs1: u32) {
+    pub(crate) fn set_rs1(&mut self, rs1: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -648,7 +667,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs2(&self) -> u32 {
+    pub(crate) fn get_rs2(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -663,15 +682,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rs2_or_zero(&self) -> u32 {
-        match self.get_type() {
-            Type::R | Type::S | Type::B => self.get_rs2(),
-            _ => 0,
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_rs2(&mut self, rs2: u32) {
+    pub(crate) fn set_rs2(&mut self, rs2: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -686,7 +697,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rd(&self) -> u32 {
+    pub(crate) fn get_rd(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -701,15 +712,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_rd_or_zero(&self) -> u32 {
-        match self.get_type() {
-            Type::R | Type::I | Type::U | Type::J => self.get_rd(),
-            _ => 0,
-        }
-    }
-
-    #[inline(always)]
-    pub fn set_rd(&mut self, rd: u32) {
+    pub(crate) fn set_rd(&mut self, rd: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -724,7 +727,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_shamt(&self) -> u32 {
+    pub(crate) fn get_shamt(&self) -> u32 {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -739,7 +742,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn set_shamt(&mut self, shamt: u32) {
+    pub(crate) fn set_shamt(&mut self, shamt: u32) {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -754,23 +757,25 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get(&self) -> u32 {
+    #[allow(dead_code)]
+    pub(crate) fn get(&self) -> u32 {
         self.0
     }
 
     #[inline(always)]
-    pub fn get_opcode(&self) -> u32 {
+    pub(crate) fn get_opcode(&self) -> u32 {
         ((self.0 & OPCODEMASK) >> OPCODESHIFT) as u32
     }
 
     #[inline(always)]
-    pub fn set_opcode(&mut self, opcode: u32) {
+    #[allow(dead_code)]
+    pub(crate) fn set_opcode(&mut self, opcode: u32) {
         self.0 =
             (self.0 & (0xFFFF_FFFF ^ OPCODEMASK)) | ((opcode as u32) << OPCODESHIFT) & OPCODEMASK
     }
 
     #[inline(always)]
-    pub fn set_immediate(&mut self, immediate: u32) {
+    pub(crate) fn set_immediate(&mut self, immediate: u32) {
         match self.get_type() {
             Type::R => panic!("cannot encode immediate on type R instruction"),
             Type::I => match (self.get_funct3(), self.get_opcode()) {
@@ -788,7 +793,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_immediate(&self) -> u32 {
+    pub(crate) fn get_immediate(&self) -> u32 {
         match self.get_type() {
             Type::R => 0,
             Type::I => match (self.get_funct3(), self.get_opcode()) {
@@ -804,7 +809,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_registers(&self) -> (u32, u32, u32) {
+    pub(crate) fn get_registers(&self) -> (u32, u32, u32) {
         match self.get_type() {
             Type::R => (self.get_rs2(), self.get_rs1(), self.get_rd()),
             Type::I => (0, self.get_rs1(), self.get_rd()),
@@ -815,7 +820,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub fn get_opid(&self) -> (RD_UPDATE, RAM_UPDATE, PC_UPDATE) {
+    pub(crate) fn get_opid(&self) -> (RD_UPDATE, RAM_UPDATE, PC_UPDATE) {
         let opcode: u32 = self.get_opcode();
         match self.get_type() {
             Type::R => match (self.get_funct7(), self.get_funct3()) {

@@ -1,12 +1,17 @@
 #[cfg(test)]
 mod tests {
-    use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+    use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 
     use super::*;
 
     #[test]
     fn add() {
-        test_instruction(0, 0, 0b0110011, (RD_UPDATE::ADD, RAM_UPDATE::NONE, PC_UPDATE::NONE))
+        test_instruction(
+            0,
+            0,
+            0b0110011,
+            (RD_UPDATE::ADD, RAM_UPDATE::NONE, PC_UPDATE::NONE),
+        )
     }
 
     #[test]
@@ -181,9 +186,14 @@ mod tests {
 }
 
 use crate::instructions::{Instruction, InstructionsParser};
-use crate::{PC_UPDATE, RD_UPDATE, RAM_UPDATE};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 #[allow(dead_code)]
-fn test_instruction(funct7: u32, funct3: u32, op_code: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
+fn test_instruction(
+    funct7: u32,
+    funct3: u32,
+    op_code: u32,
+    opid: (RD_UPDATE, RAM_UPDATE, PC_UPDATE),
+) {
     // 00000 | 00 | rs2[24:20] | rs1[19:15] | funct3 | rd[11:7] |
     let imm: u32 = 0;
     let rs2: u32 = 0b11011;

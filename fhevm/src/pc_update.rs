@@ -9,7 +9,9 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 
-use crate::{keys::RAMKeysHelper, sext, PC_UPDATE};
+use crate::keys::RAMKeysHelper;
+#[cfg(test)]
+use crate::PC_UPDATE;
 
 pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     module: &M,
@@ -91,6 +93,7 @@ impl<'a, T: UnsignedInteger, BE: Backend> GetGGSWBit<BE> for FheUintHelper<'a, T
     }
 }
 
+#[cfg(test)]
 pub(crate) struct PCU {
     pub(crate) op_type: PC_UPDATE,
     // registers
@@ -102,6 +105,7 @@ pub(crate) struct PCU {
     pub(crate) imm: u32,
 }
 
+#[cfg(test)]
 impl PCU {
     pub(crate) const NONE: PCU = PCU::new(PC_UPDATE::NONE);
 
@@ -188,6 +192,8 @@ impl PCU {
     }
 
     pub(crate) fn expected_update(&self) -> u32 {
+        use crate::sext;
+
         let se_imm: u32 = sext(self.imm, 19);
         let default_case: u32 = self.pc + 4;
         match self.op_type {

@@ -12,9 +12,7 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
 use crate::{keys::RAMKeysHelper, RAM_UPDATE};
 
 pub trait Store<T: UnsignedInteger> {
-    fn id(&self) -> u32;
-
-    fn eval_fhe<R, D, A, H, K, M, BE: Backend>(
+    fn eval_enc<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, T>,
@@ -40,11 +38,7 @@ pub trait Store<T: UnsignedInteger> {
 }
 
 impl Store<u32> for RAM_UPDATE {
-    fn id(&self) -> u32 {
-        *self as u32
-    }
-
-    fn eval_fhe<R, D, A, H, K, M, BE: Backend>(
+    fn eval_enc<R, D, A, H, K, M, BE: Backend>(
         &self,
         module: &M,
         res: &mut FheUint<R, u32>,
