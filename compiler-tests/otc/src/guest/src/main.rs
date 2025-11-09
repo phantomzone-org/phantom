@@ -24,10 +24,11 @@ struct ClientProfile {
 
 #[repr(C)]
 struct MarketData {
+    // Mid market price
     mid_price: f32,
     /// volume in past 24 hours
     window_volume: f32,
-    /// sqrt(pair's volatility / annualized volatility)
+    /// sqrt(`BTC/USD` daily annualized volatility / annualized volatility)
     volatility_factor: f32,
 }
 
@@ -73,7 +74,7 @@ fn base_spread(client_type: &ClientType) -> f32 {
 }
 
 #[inline]
-/// - increase spread for larger trades
+/// Increase spread for large trade volume
 fn size_adj(trade: &Trade, market_data: &MarketData) -> f32 {
     let vol_perc = trade.amount / market_data.window_volume;
 
@@ -93,7 +94,7 @@ fn size_adj(trade: &Trade, market_data: &MarketData) -> f32 {
 }
 
 #[inline]
-/// give volume based discounts to FIs and Prime due to longer relationship
+/// Volume based discounts to Insititutions and Prime customer to maintain strong relationship
 fn volume_disc(client: &ClientType, volume: f32) -> f32 {
     match client {
         ClientType::PRIME | ClientType::INSTITUTIONAL => {
