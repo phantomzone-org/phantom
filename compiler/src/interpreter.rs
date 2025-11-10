@@ -102,6 +102,7 @@ pub struct EncryptedVM {
     output_info: OutputInfo,
     ram_offset: usize,
     max_cycles: usize,
+    debug: bool,
 }
 
 impl EncryptedVM {
@@ -109,14 +110,19 @@ impl EncryptedVM {
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
             // let time = std::time::Instant::now();
-            self.interpreter.cycle(self.params.module(), &self.key_prepared, self.scratch.borrow());
+            if self.debug{
+                self.interpreter.cycle_debug(self.params.module(), &self.key_prepared, &self.sk_prepared, self.scratch.borrow());
+            }else{
+                self.interpreter.cycle(self.params.module(), &self.key_prepared, self.scratch.borrow());
+            }
+            
             // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
     }
 
     pub fn output_tape(&mut self) -> Vec<u8> {
-        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE];
+        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE>>2];
         // let mem_bytes: Vec<u8> =
         self.interpreter.ram_decrypt(
             self.params.module(),
@@ -274,7 +280,7 @@ impl Phantom {
         &self.output_info
     }
 
-    pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
+    pub fn encrypted_vm<const DEBUG: bool>(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
@@ -292,8 +298,8 @@ impl Phantom {
             .for_each(|i| parser.add(i));
 
         // // setup RAM
-        let ram_offset = self.boot_ram.offset;
-        let mut ram_with_input = self.boot_ram.data.clone();
+        let ram_offset: usize = self.boot_ram.offset;
+        let mut ram_with_input: Vec<u8> = self.boot_ram.data.clone();
         // read input tape
         assert!(input_tape.len() == self.input_info.size);
         ram_with_input[(self.input_info.start_addr - ram_offset)
@@ -326,12 +332,21 @@ impl Phantom {
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
         sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
-        let mut interpreter: Interpreter<BackendImpl> = Interpreter::new(
-            &params,
-            self.boot_rom.size,
-            self.boot_ram.size,
-            DECOMP_N.into(),
-        );
+        let mut interpreter: Interpreter<BackendImpl> = if DEBUG{
+            Interpreter::new_with_debug(
+                &params,
+                self.boot_rom.size>>2,
+                self.boot_ram.size>>2,
+                DECOMP_N.into(),
+            )
+        }else{
+            Interpreter::new(
+                &params,
+                self.boot_rom.size>>2,
+                self.boot_ram.size>>2,
+                DECOMP_N.into(),
+            )
+        };
 
         let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
             GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
@@ -352,7 +367,7 @@ impl Phantom {
             VMKeysPrepared::alloc(&params);
         key_prepared.prepare(params.module(), &key, scratch.borrow());
 
-        interpreter.ram_encrypt_sk_internal(
+        interpreter.ram_encrypt_sk(
             params.module(),
             &ram_data_u32,
             &sk_prepared,
@@ -374,6 +389,7 @@ impl Phantom {
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,
             max_cycles,
+            debug: DEBUG,
         }
     }
 

@@ -73,7 +73,7 @@ fn main() {
     let max_cycles = 1000;
     // let max_cycles = 10; // For testing purposes
 
-    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), max_cycles);
+    let mut enc_vm = pz.encrypted_vm::<true>(to_u8_slice(&input), max_cycles);
     enc_vm.execute();
 
     // Init -> read input tape -> run -> read output tape

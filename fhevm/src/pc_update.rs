@@ -193,55 +193,6 @@ impl PCU {
 
     pub(crate) fn expected_update(&self) -> u32 {
         use crate::sext;
-
-        let se_imm: u32 = sext(self.imm, 19);
-        let default_case: u32 = self.pc + 4;
-        match self.op_type {
-            PC_UPDATE::NONE => default_case,
-            PC_UPDATE::BEQ => {
-                if self.rs1 == self.rs2 {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::BNE => {
-                if self.rs1 != self.rs2 {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::BLT => {
-                if (self.rs1 as i32) < self.rs2 as i32 {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::BLTU => {
-                if self.rs1 < self.rs2 {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::BGE => {
-                if (self.rs1 as i32) >= (self.rs2 as i32) {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::BGEU => {
-                if self.rs1 >= self.rs2 {
-                    self.pc.wrapping_add(se_imm)
-                } else {
-                    default_case
-                }
-            }
-            PC_UPDATE::JAL => self.pc.wrapping_add(se_imm),
-            PC_UPDATE::JALR => (self.pc.wrapping_add(se_imm).wrapping_shr(1)).wrapping_shl(1),
-        }
+        self.op_type.eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
     }
 }
