@@ -112,6 +112,8 @@ fn test_fhe_uint_prepared_to_address_read() {
             println!(
                 "noise: {}",
                 glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
+                    .std()
+                    .log2()
             );
 
             glwe.assert_noise(
@@ -220,6 +222,8 @@ fn test_fhe_uint_prepared_to_address_write() {
             println!(
                 "noise: {}",
                 glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
+                    .std()
+                    .log2()
             );
 
             glwe.assert_noise(

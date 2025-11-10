@@ -99,7 +99,7 @@ where
     let idx = 0;
 
     let instruction: Instruction = instructions.get_raw(idx);
-    let correct_imm: u32 = instruction.get_immediate();
+    let correct_imm: u32 = instruction.get_imm();
     let (rs1, rs2, rd) = instruction.get_registers();
     let correct_rs1: u32 = rs1 as u32;
     let correct_rs2: u32 = rs2 as u32;
@@ -416,7 +416,7 @@ where
 
     for idx in 0..instructions_u32.len() {
         let instruction = instructions.get_raw(idx);
-        let correct_imm = instruction.get_immediate();
+        let correct_imm = instruction.get_imm();
         let (rs1, rs2, rd) = instruction.get_registers();
         let correct_rs1: u32 = rs1 as u32;
         let correct_rs2: u32 = rs2 as u32;

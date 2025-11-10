@@ -11,12 +11,13 @@ pub const IMMSHIFT11: u32 = 9;
 pub const IMMSHIFT10: u32 = 20;
 
 #[inline(always)]
-pub fn set_immediate(instruction: &mut u32, immediate: u32) {
-    *instruction = (*instruction & OPMASK)
+pub fn set_immediate(mut instruction: Instruction, immediate: u32) -> Instruction {
+    instruction.0 = (instruction.0 & OPMASK)
         | (immediate & IMMMASK20) << IMMSHIFT20
         | (immediate & IMMMASK19) << IMMSHIFT19
         | (immediate & IMMMASK11) << IMMSHIFT11
-        | (immediate & IMMMASK10) << IMMSHIFT10
+        | (immediate & IMMMASK10) << IMMSHIFT10;
+    instruction
 }
 
 #[inline(always)]
@@ -37,7 +38,7 @@ mod tests {
         (1..21).for_each(|i| {
             let immediate: u32 = 1 << i;
             let mut instruction: u32 = 0;
-            set_immediate(&mut instruction, immediate);
+            instruction = set_immediate(Instruction(instruction), immediate).0;
             assert_eq!(sext(immediate, 20), get_immediate(&instruction));
         })
     }
@@ -60,9 +61,8 @@ fn test_instruction(op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     let rs1: u32 = 0;
     let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.set_immediate(imm);
-    instruction.set_rd(rd);
-    instruction.print();
+    instruction = instruction.set_imm(imm);
+    instruction = instruction.set_rd(rd);
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);

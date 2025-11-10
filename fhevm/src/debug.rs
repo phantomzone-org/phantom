@@ -3,6 +3,9 @@ use std::collections::HashMap;
 use crate::{InstructionsParser, PC_UPDATE_OP_LIST, RAM_UPDATE_OP_LIST, RD_UPDATE};
 
 pub(crate) struct InterpreterDebug {
+    pub(crate) ram_size: u32,
+    #[allow(dead_code)]
+    pub(crate) rom_size: u32,
     pub(crate) pc: u32,
     pub(crate) imm_rom: Vec<u32>,
     pub(crate) rs1_rom: Vec<u32>,
@@ -31,6 +34,8 @@ impl InterpreterDebug {
     pub fn new(rom_size: usize, ram_size: usize) -> Self {
         Self {
             pc: 0,
+            ram_size: ram_size as u32,
+            rom_size: rom_size as u32,
             imm_rom: vec![0u32; rom_size],
             rs1_rom: vec![0u32; rom_size],
             rs2_rom: vec![0u32; rom_size],
@@ -58,7 +63,7 @@ impl InterpreterDebug {
     pub fn set_instructions(&mut self, instructions: &InstructionsParser) {
         assert_eq!(self.imm_rom.len(), instructions.instructions.len());
         for i in 0..instructions.instructions.len() {
-            self.imm_rom[i] = instructions.get_raw(i).get_immediate() as u32;
+            self.imm_rom[i] = instructions.get_raw(i).get_imm() as u32;
             let (rs1, rs2, rd) = instructions.get_raw(i).get_registers();
             self.rs1_rom[i] = rs1 as u32;
             self.rs2_rom[i] = rs2 as u32;
@@ -76,7 +81,7 @@ impl InterpreterDebug {
     }
 
     pub fn read_instructions(&mut self) {
-        let pc: usize = (self.pc & 0xFFFF_FFFE) as usize;
+        let pc: usize = (self.pc >> 2) as usize;
         self.imm = self.imm_rom[pc];
         self.rs1_addr = self.rs1_rom[pc];
         self.rs2_addr = self.rs2_rom[pc];
@@ -93,7 +98,7 @@ impl InterpreterDebug {
 
     pub fn read_ram(&mut self) {
         self.ram_addr = self.imm.wrapping_add(self.rs2_val).wrapping_sub(1 << 18);
-        self.ram_val = self.ram[(self.ram_addr & 0xFFFF_FFFE) as usize];
+        self.ram_val = self.ram[(self.ram_addr >> 2) as usize % self.ram_size as usize];
     }
 
     pub fn update_registers(&mut self, ops: &[RD_UPDATE]) {
@@ -126,7 +131,7 @@ impl InterpreterDebug {
 
         self.ram_val = *ram_map.get(&self.mu).unwrap();
 
-        self.ram[(self.ram_addr & 0xFFFF_FFFE) as usize] = self.ram_val;
+        self.ram[(self.ram_addr >> 2) as usize % self.ram_size as usize] = self.ram_val;
     }
 
     pub fn update_pc(&mut self) {

@@ -97,24 +97,24 @@ impl Ram {
     pub(crate) fn decrypt<M, S, BE: Backend>(
         &mut self,
         module: &M,
-        data_decrypted: &mut [u32],
+        data: &mut [u32],
         sk: &S,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEDecrypt<BE>,
+        M: ModuleN + GLWEDecrypt<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         S: GLWESecretPreparedToRef<BE>,
     {
         let max_addr: usize = self.max_addr;
         let ram_chunks: usize = self.word_size;
 
-        assert!(data_decrypted.len() / ram_chunks <= max_addr);
+        assert!(data.len() / ram_chunks <= max_addr);
 
         let mut bits: Vec<u8> = vec![0u8; max_addr];
 
         for i in 0..ram_chunks {
             self.subrams[i].decrypt(module, bits.as_mut_slice(), sk, scratch);
-            for (x, y) in bits.iter().zip(data_decrypted.iter_mut()) {
+            for (x, y) in bits.iter().zip(data.iter_mut()) {
                 if *x == 1 {
                     *y |= 1 << i;
                 } else {
@@ -371,7 +371,7 @@ impl SubRam {
         sk_prepared: &S,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEDecrypt<BE>,
+        M: ModuleN + GLWEDecrypt<BE>,
         S: GLWESecretPreparedToRef<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {

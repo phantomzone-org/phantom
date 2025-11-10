@@ -3,8 +3,9 @@ pub const OPMASK: u32 = 0x000F_FFFF;
 pub const IMMSEXTMASK: u32 = 0xFFFF_F000;
 
 #[inline(always)]
-pub fn set_immediate(instruction: &mut u32, immediate: u32) {
-    *instruction = (*instruction & OPMASK) | (immediate << IMMSHIFT);
+pub fn set_immediate(mut instruction: Instruction, immediate: u32) -> Instruction {
+    instruction.0 = (instruction.0 & OPMASK) | (immediate << IMMSHIFT);
+    instruction
 }
 
 #[inline(always)]
@@ -23,7 +24,7 @@ mod tests {
         (0..12).for_each(|i| {
             let immediate: u32 = 1 << i;
             let mut instruction: u32 = 0;
-            set_immediate(&mut instruction, immediate);
+            instruction = set_immediate(Instruction(instruction), immediate).0;
             assert_eq!(sext(immediate, 11), get_immediate(&instruction));
         })
     }
@@ -175,10 +176,10 @@ fn test_instruction(funct3: u32, op_code: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_
     let rs1: u32 = 0b10011;
     let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.set_immediate(imm);
-    instruction.set_funct3(funct3);
-    instruction.set_rs1(rs1);
-    instruction.set_rd(rd);
+    instruction = instruction.set_imm(imm);
+    instruction = instruction.set_funct3(funct3);
+    instruction = instruction.set_rs1(rs1);
+    instruction = instruction.set_rd(rd);
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);
@@ -204,10 +205,10 @@ fn test_instruction_shamt(imm: u32, funct3: u32, opid: (RD_UPDATE, RAM_UPDATE, P
     let rs1: u32 = 0b10011;
     let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.set_immediate(imm);
-    instruction.set_funct3(funct3);
-    instruction.set_rs1(rs1);
-    instruction.set_rd(rd);
+    instruction = instruction.set_imm(imm);
+    instruction = instruction.set_funct3(funct3);
+    instruction = instruction.set_rs1(rs1);
+    instruction = instruction.set_rd(rd);
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     m.assert_size(1);

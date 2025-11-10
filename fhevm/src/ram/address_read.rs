@@ -123,7 +123,7 @@ impl<D: DataMut, BE: Backend> AddressRead<D, BE> {
         }
     }
 
-    pub fn set_from_fheuint<F, T, M, DK, BRA: BlindRotationAlgo, K>(
+    pub fn set_from_fhe_uint<F, T, M, DK, BRA: BlindRotationAlgo, K>(
         &mut self,
         module: &M,
         fheuint: &FheUint<F, T>,

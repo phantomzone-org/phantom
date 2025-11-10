@@ -128,7 +128,10 @@ fn test_fhe_ram() {
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
-        ) < -32.0
+        )
+        .std()
+        .log2()
+            < -32.0
     );
 
     let start: Instant = Instant::now();
@@ -157,7 +160,10 @@ fn test_fhe_ram() {
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
-        ) < -32.0
+        )
+        .std()
+        .log2()
+            < -32.0
     );
 
     // Value to write on the FHE-RAM
@@ -219,7 +225,10 @@ fn test_fhe_ram() {
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
-        ) < -32.0
+        )
+        .std()
+        .log2()
+            < -32.0
     );
 
     let mut ram_decrypted: Vec<u32> = vec![0u32; ram.max_addr()];

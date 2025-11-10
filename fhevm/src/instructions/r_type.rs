@@ -200,11 +200,11 @@ fn test_instruction(
     let rs1: u32 = 0b10011;
     let rd: u32 = 0b01011;
     let mut instruction: Instruction = Instruction::new(op_code as u32);
-    instruction.set_funct3(funct3);
-    instruction.set_funct7(funct7);
-    instruction.set_rs2(rs2);
-    instruction.set_rs1(rs1);
-    instruction.set_rd(rd);
+    instruction = instruction.set_funct3(funct3);
+    instruction = instruction.set_funct7(funct7);
+    instruction = instruction.set_rs2(rs2);
+    instruction = instruction.set_rs1(rs1);
+    instruction = instruction.set_rd(rd);
     let mut m: InstructionsParser = InstructionsParser::new();
     m.add(instruction);
     println!("{:30b}", m.instructions[0]);

@@ -64,12 +64,89 @@
 //!  7 |bltu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] <u  x[rs2]), pc += sext(imm[19:0])
 //!  8 |bgeu  | imm[19:16] | imm[15:12] | imm[11:8] | imm[7:4] | imm[3:0] | rs2 | rs1 | rd | if (x[rs1] >=u x[rs2]), pc += sext(imm[19:0])
 
+use std::fmt::{self, Debug};
+
 pub(crate) mod b_type;
 pub(crate) mod i_type;
 pub(crate) mod j_type;
 pub(crate) mod r_type;
 pub(crate) mod s_type;
 pub(crate) mod u_type;
+
+/// RV32I base ISA — template encodings with variable fields = 0
+#[repr(u32)]
+#[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
+pub(crate) enum RV32I {
+    // ────────────────────────────────────────────────
+    // U-type:  imm[31:12] | rd | opcode
+    LUI = 0b000000000000_00000_0110111,
+    AUIPC = 0b000000000000_00000_0010111,
+
+    // ────────────────────────────────────────────────
+    // J-type: imm[20|10:1|11|19:12] | rd | opcode
+    JAL = 0b00000000000000000000_00000_1101111,
+
+    // ────────────────────────────────────────────────
+    // I-type ALU: imm[11:0] | rs1 | funct3 | rd | opcode
+    ADDI = 0b000000000000_00000_000_00000_0010011,
+    SLTI = 0b000000000000_00000_010_00000_0010011,
+    SLTIU = 0b000000000000_00000_011_00000_0010011,
+    XORI = 0b000000000000_00000_100_00000_0010011,
+    ORI = 0b000000000000_00000_110_00000_0010011,
+    ANDI = 0b000000000000_00000_111_00000_0010011,
+
+    SLLI = 0b0000000_00000_00000_001_00000_0010011,
+    SRLI = 0b0000000_00000_00000_101_00000_0010011,
+    SRAI = 0b0100000_00000_00000_101_00000_0010011,
+
+    // ────────────────────────────────────────────────
+    // R-type (ALU register): funct7 | rs2 | rs1 | funct3 | rd | opcode
+    ADD = 0b0000000_00000_00000_000_00000_0110011,
+    SUB = 0b0100000_00000_00000_000_00000_0110011,
+    SLL = 0b0000000_00000_00000_001_00000_0110011,
+    SLT = 0b0000000_00000_00000_010_00000_0110011,
+    SLTU = 0b0000000_00000_00000_011_00000_0110011,
+    XOR = 0b0000000_00000_00000_100_00000_0110011,
+    SRL = 0b0000000_00000_00000_101_00000_0110011,
+    SRA = 0b0100000_00000_00000_101_00000_0110011,
+    OR = 0b0000000_00000_00000_110_00000_0110011,
+    AND = 0b0000000_00000_00000_111_00000_0110011,
+
+    // ────────────────────────────────────────────────
+    // I-type — loads
+    LB = 0b000000000000_00000_000_00000_0000011,
+    LH = 0b000000000000_00000_001_00000_0000011,
+    LW = 0b000000000000_00000_010_00000_0000011,
+    LBU = 0b000000000000_00000_100_00000_0000011,
+    LHU = 0b000000000000_00000_101_00000_0000011,
+
+    // ────────────────────────────────────────────────
+    // S-type — stores: imm[11:5] | rs2 | rs1 | funct3 | imm[4:0] | opcode
+    SB = 0b0000000_00000_00000_000_00000_0100011,
+    SH = 0b0000000_00000_00000_001_00000_0100011,
+    SW = 0b0000000_00000_00000_010_00000_0100011,
+
+    // ────────────────────────────────────────────────
+    // B-type — branches
+    BEQ = 0b0000000_00000_00000_000_00000_1100011,
+    BNE = 0b0000000_00000_00000_001_00000_1100011,
+    BLT = 0b0000000_00000_00000_100_00000_1100011,
+    BGE = 0b0000000_00000_00000_101_00000_1100011,
+    BLTU = 0b0000000_00000_00000_110_00000_1100011,
+    BGEU = 0b0000000_00000_00000_111_00000_1100011,
+
+    // ────────────────────────────────────────────────
+    // JALR — I-type but used for PC update
+    JALR = 0b000000000000_00000_000_00000_1100111,
+}
+
+impl RV32I {
+    #[allow(dead_code)]
+    pub(crate) fn new(&self) -> Instruction {
+        Instruction(*self as u32)
+    }
+}
 
 pub(crate) fn sext(x: u32, bits: u32) -> u32 {
     (x << (u32::BITS - bits) >> (u32::BITS - bits))
@@ -101,12 +178,12 @@ impl RAM_UPDATE {
                 1 => ((rs2 & 0xFF) << 8) | (ram & 0xFFFF_00FF),
                 2 => ((rs2 & 0xFF) << 16) | (ram & 0xFF00_FFFF),
                 3 => ((rs2 & 0xFF) << 24) | (ram & 0x00FF_FFFF),
-                _ => panic!("invalid offset: {} != [0, 1, 2, 3]", offset),
+                _ => 0,
             },
             RAM_UPDATE::SH => match offset {
                 0 => (rs2 & 0xFFFF) | (ram & 0xFFFF_0000),
                 2 => ((rs2 & 0xFFFF) << 16) | (ram & 0x_FFFF),
-                _ => panic!("invalid offset: {} != [0, 2]", offset),
+                _ => 0,
             },
         }
     }
@@ -432,7 +509,7 @@ impl InstructionsParser {
     pub fn add(&mut self, instruction: Instruction) {
         let (rs2, rs1, rd) = instruction.get_registers();
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
-        self.imm.push(instruction.get_immediate() as i64);
+        self.imm.push(instruction.get_imm() as i64);
         self.instructions.push(
             (rs2 as i64) << 26
                 | (rs1 as i64) << 21
@@ -521,8 +598,21 @@ impl InstructionsParser {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy)]
 pub struct Instruction(pub u32);
+
+impl fmt::Display for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:032b}", self.0)
+    }
+}
+
+impl fmt::Debug for Instruction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Just reuse Display:
+        fmt::Display::fmt(self, f)
+    }
+}
 
 pub(crate) const RS1MASK: u32 = 0x000F_8000;
 pub(crate) const RS2MASK: u32 = 0x01F0_0000;
@@ -540,6 +630,7 @@ pub(crate) const SHAMTSHIFT: u32 = 20;
 pub(crate) const RDSHIFT: u32 = 7;
 pub(crate) const OPCODESHIFT: u32 = 0;
 
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Type {
     NONE,
     R,
@@ -554,10 +645,6 @@ impl Instruction {
     #[inline(always)]
     pub fn new(instruction: u32) -> Self {
         Self(instruction)
-    }
-
-    pub fn print(&self) {
-        println!("{:032b}", self.0);
     }
 
     #[inline(always)]
@@ -591,7 +678,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_funct3(&mut self, funct3: u32) {
+    pub(crate) fn set_funct3(mut self, funct3: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -603,7 +690,8 @@ impl Instruction {
             }
         }
         self.0 =
-            (self.0 & (0xFFFF_FFFF ^ FUNCT3MASK)) | ((funct3 as u32) << FUNCT3SHIFT) & FUNCT3MASK
+            (self.0 & (0xFFFF_FFFF ^ FUNCT3MASK)) | ((funct3 as u32) << FUNCT3SHIFT) & FUNCT3MASK;
+        self
     }
 
     #[inline(always)]
@@ -622,7 +710,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_funct7(&mut self, funct7: u32) {
+    pub(crate) fn set_funct7(mut self, funct7: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -634,7 +722,8 @@ impl Instruction {
             }
         }
         self.0 =
-            (self.0 & (0xFFFF_FFFF ^ FUNCT7MASK)) | ((funct7 as u32) << FUNCT7SHIFT) & FUNCT7MASK
+            (self.0 & (0xFFFF_FFFF ^ FUNCT7MASK)) | ((funct7 as u32) << FUNCT7SHIFT) & FUNCT7MASK;
+        self
     }
 
     #[inline(always)]
@@ -653,7 +742,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_rs1(&mut self, rs1: u32) {
+    pub(crate) fn set_rs1(mut self, rs1: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -664,7 +753,8 @@ impl Instruction {
                 ),
             }
         }
-        self.0 = (self.0 & (0xFFFF_FFFF ^ RS1MASK)) | ((rs1 as u32) << RS1SHIFT) & RS1MASK
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RS1MASK)) | ((rs1 as u32) << RS1SHIFT) & RS1MASK;
+        self
     }
 
     #[inline(always)]
@@ -683,7 +773,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_rs2(&mut self, rs2: u32) {
+    pub(crate) fn set_rs2(mut self, rs2: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -694,7 +784,8 @@ impl Instruction {
                 ),
             }
         }
-        self.0 = (self.0 & (0xFFFF_FFFF ^ RS2MASK)) | ((rs2 as u32) << RS2SHIFT) & RS2MASK
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RS2MASK)) | ((rs2 as u32) << RS2SHIFT) & RS2MASK;
+        self
     }
 
     #[inline(always)]
@@ -713,7 +804,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_rd(&mut self, rd: u32) {
+    pub(crate) fn set_rd(mut self, rd: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -724,7 +815,8 @@ impl Instruction {
                 ),
             }
         }
-        self.0 = (self.0 & (0xFFFF_FFFF ^ RDMASK)) | ((rd as u32) << RDSHIFT) & RDMASK
+        self.0 = (self.0 & (0xFFFF_FFFF ^ RDMASK)) | ((rd as u32) << RDSHIFT) & RDMASK;
+        self
     }
 
     #[inline(always)]
@@ -743,7 +835,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn set_shamt(&mut self, shamt: u32) {
+    pub(crate) fn set_shamt(mut self, shamt: u32) -> Self {
         #[cfg(debug_assertions)]
         {
             match self.get_type() {
@@ -754,7 +846,8 @@ impl Instruction {
                 ),
             }
         }
-        self.0 = (self.0 & (0xFFFF_FFFF ^ SHAMTMASK)) | ((shamt as u32) << SHAMTSHIFT) & SHAMTMASK
+        self.0 = (self.0 & (0xFFFF_FFFF ^ SHAMTMASK)) | ((shamt as u32) << SHAMTSHIFT) & SHAMTMASK;
+        self
     }
 
     #[inline(always)]
@@ -770,23 +863,24 @@ impl Instruction {
 
     #[inline(always)]
     #[allow(dead_code)]
-    pub(crate) fn set_opcode(&mut self, opcode: u32) {
+    pub(crate) fn set_opcode(mut self, opcode: u32) -> Self {
         self.0 =
-            (self.0 & (0xFFFF_FFFF ^ OPCODEMASK)) | ((opcode as u32) << OPCODESHIFT) & OPCODEMASK
+            (self.0 & (0xFFFF_FFFF ^ OPCODEMASK)) | ((opcode as u32) << OPCODESHIFT) & OPCODEMASK;
+        self
     }
 
     #[inline(always)]
-    pub(crate) fn set_immediate(&mut self, immediate: u32) {
+    pub(crate) fn set_imm(self, imm: u32) -> Self {
         match self.get_type() {
             Type::R => panic!("cannot encode immediate on type R instruction"),
             Type::I => match (self.get_funct3(), self.get_opcode()) {
-                (0b001, 0b0010011) | (0b101, 0b0010011) => self.set_shamt(immediate as u32),
-                _ => i_type::set_immediate(&mut self.0, immediate),
+                (0b001, 0b0010011) | (0b101, 0b0010011) => self.set_shamt(imm as u32),
+                _ => i_type::set_immediate(self, imm),
             },
-            Type::S => s_type::set_immediate(&mut self.0, immediate),
-            Type::B => b_type::set_immediate(&mut self.0, immediate),
-            Type::U => u_type::set_immediate(&mut self.0, immediate),
-            Type::J => j_type::set_immediate(&mut self.0, immediate),
+            Type::S => s_type::set_immediate(self, imm),
+            Type::B => b_type::set_immediate(self, imm),
+            Type::U => u_type::set_immediate(self, imm),
+            Type::J => j_type::set_immediate(self, imm),
             Type::NONE => {
                 panic!("cannot encode immediate on type NONE instruction")
             }
@@ -794,7 +888,7 @@ impl Instruction {
     }
 
     #[inline(always)]
-    pub(crate) fn get_immediate(&self) -> u32 {
+    pub(crate) fn get_imm(&self) -> u32 {
         match self.get_type() {
             Type::R => 0,
             Type::I => match (self.get_funct3(), self.get_opcode()) {
