@@ -125,7 +125,12 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
+    interpreter.read_instruction_components(
+        module,
+        &key_prepared,
+        Some(&sk_glwe_prepared),
+        scratch.borrow(),
+    );
 
     let dec_rs1: u32 =
         interpreter
@@ -243,7 +248,12 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
+    interpreter.read_instruction_components(
+        module,
+        &key_prepared,
+        Some(&sk_glwe_prepared),
+        scratch.borrow(),
+    );
 
     interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
         module,
@@ -424,7 +434,12 @@ where
             &mut source_xe,
             scratch.borrow(),
         );
-        interpreter.read_instruction_components(module, &key_prepared, scratch.borrow());
+        interpreter.read_instruction_components(
+            module,
+            &key_prepared,
+            Some(&sk_glwe_prepared),
+            scratch.borrow(),
+        );
 
         let dec_rs1: u32 =
             interpreter

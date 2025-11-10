@@ -341,6 +341,7 @@ impl RD_UPDATE {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) static RD_UPDATE_RV32M_OP_LIST: &[RD_UPDATE] = &[
     RD_UPDATE::NONE,
     RD_UPDATE::LUI,

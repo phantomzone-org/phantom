@@ -109,7 +109,10 @@ impl InterpreterDebug {
             rd_map.insert(op.id(), op.eval_plain(imm, rs1, rs2, pc, ram));
         }
 
-        self.registers[self.rd_addr as usize] = *rd_map.get(&self.rdu).unwrap();
+        self.rd_val = *rd_map.get(&self.rdu).unwrap();
+
+        self.registers[self.rd_addr as usize] = self.rd_val;
+        self.registers[0] = 0;
     }
 
     pub fn update_ram(&mut self) {
@@ -121,7 +124,9 @@ impl InterpreterDebug {
             ram_map.insert(op.id(), op.eval_plain(rs2, ram, offset));
         }
 
-        self.ram[(self.ram_addr & 0xFFFF_FFFE) as usize] = *ram_map.get(&self.mu).unwrap()
+        self.ram_val = *ram_map.get(&self.mu).unwrap();
+
+        self.ram[(self.ram_addr & 0xFFFF_FFFE) as usize] = self.ram_val;
     }
 
     pub fn update_pc(&mut self) {
