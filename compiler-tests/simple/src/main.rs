@@ -37,7 +37,7 @@ fn main() {
     //
     // the `init` function transforms the risc-v binary
     // into suitable format for execution on fhe-vm
-    let pz = Phantom::init(elf_bytes);
+    let pz = Phantom::from_elf(elf_bytes);
 
     // prepare input
     let mut input_message = [0u8; 32];
@@ -52,6 +52,7 @@ fn main() {
     //
     // this is necessary because vm cannot know when to halt
     let max_cycles = 8725;
+    // let max_cycles = 10; // For testing purposes
 
     // create an encrypted vm instance
     let mut enc_vm = pz.encrypted_vm(input_buffer, max_cycles);
@@ -63,17 +64,14 @@ fn main() {
     let output_tape = enc_vm.output_tape();
 
     // TEST VM //
-    let mut test_vm = pz.test_vm();
+    let mut test_vm = pz.test_vm(max_cycles);
     test_vm.read_input_tape(to_u8_slice(&input));
-    let mut count = 0;
-    while test_vm.is_exec() && count < max_cycles {
-        test_vm.run();
-        count += 1;
-    }
+    test_vm.execute();
 
     // Check equivalance of encrypted vm output tape with test vm output tape
     let test_output_tape = test_vm.output_tape();
     assert_eq!(output_tape, test_output_tape);
+    println!("Encrypted Tape and Test VM Tape are equal");
     // End TEST VM //
 
     // Check output's correctness

@@ -26,7 +26,7 @@ struct Output {
 fn main() {
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
-    let pz = Phantom::init(elf_bytes);
+    let pz = Phantom::from_elf(elf_bytes);
 
     let client = ClientProfile::new(ClientType::PRIME);
     let trade = Trade::new(5.0);
@@ -39,11 +39,20 @@ fn main() {
 
     // test vm
     let max_cycles = 9_000;
+    // let max_cycles = 10; // For testing purposes
+    
+    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), max_cycles);
+    enc_vm.execute();
+
     let mut testvm = pz.test_vm(max_cycles);
     let testvm_input = to_u8_slice(&input);
     testvm.read_input_tape(&testvm_input);
     testvm.execute();
-    let testvm_output = from_u8_slice::<Output>(&testvm.output_tape());
+    let testvm_output_tape = testvm.output_tape();
+    let testvm_output = from_u8_slice::<Output>(&testvm_output_tape);
+
+    assert_eq!(testvm_output_tape, enc_vm.output_tape());
+    println!("Encrypted Tape and Test VM Tape are equal");
 
     let have_quote = testvm_output.quote;
     let want_quote = quote(&input.client, &input.trade, &input.market_data);
