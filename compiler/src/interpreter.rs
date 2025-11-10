@@ -94,7 +94,10 @@ impl OutputInfo {
 }
 
 pub struct EncryptedVM {
-    // params: Parameters,
+    params: CryptographicParameters<BackendImpl>,
+    sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl>,
+    key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl>,
+    scratch: ScratchOwned<BackendImpl>,
     interpreter: Interpreter<BackendImpl>,
     output_info: OutputInfo,
     ram_offset: usize,
@@ -106,22 +109,36 @@ impl EncryptedVM {
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
             // let time = std::time::Instant::now();
-            // self.interpreter.cycle();
+            self.interpreter.cycle(self.params.module(), &self.key_prepared, self.scratch.borrow());
             // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
     }
 
-    pub fn output_tape(&self) -> Vec<u8> {
-        // let mem_bytes: Vec<u8> = (&self.interpreter.ram).into();
+    pub fn output_tape(&mut self) -> Vec<u8> {
+        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE];
+        // let mem_bytes: Vec<u8> =
+        self.interpreter.ram_decrypt(
+            self.params.module(),
+            &mut data_decrypted,
+            &self.sk_prepared,
+            self.scratch.borrow(),
+        );
+        let mut mem_bytes = Vec::with_capacity(data_decrypted.len() * 4);
+        for word in &data_decrypted {
+            mem_bytes.push((*word & 0xFF) as u8);
+            mem_bytes.push(((*word >> 8) & 0xFF) as u8);
+            mem_bytes.push(((*word >> 16) & 0xFF) as u8);
+            mem_bytes.push(((*word >> 24) & 0xFF) as u8);
+        }
         // assert!(mem_bytes.len() == RAM_SIZE);
 
-        // let mut output = Vec::with_capacity(self.output_info.size);
-        // for i in 0..self.output_info.size {
-        //     output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
-        // }
-        // output
-        vec![]
+        let mut output = Vec::with_capacity(self.output_info.size);
+        for i in 0..self.output_info.size {
+            output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
+        }
+        output
+        // vec![]
     }
 }
 
@@ -274,7 +291,7 @@ impl Phantom {
             })
             .for_each(|i| parser.add(i));
 
-        // setup RAM
+        // // setup RAM
         let ram_offset = self.boot_ram.offset;
         let mut ram_with_input = self.boot_ram.data.clone();
         // read input tape
@@ -283,33 +300,31 @@ impl Phantom {
             ..(self.input_info.start_addr + self.input_info.size - ram_offset)]
             .copy_from_slice(input_tape);
         // RAM: byte vector -> u32 vec
-        // let ram_data_u32 = ram_with_input
-        //     .chunks_exact(4)
-        //     .map(|four_bytes| {
-        //         let mut date_u32 = 0u32;
-        //         for i in 0..4 {
-        //             date_u32 += (four_bytes[i] as u32) << (i * 8);
-        //         }
-        //         date_u32
-        //     })
-        //     .collect_vec();
+        let ram_data_u32 = ram_with_input
+            .chunks_exact(4)
+            .map(|four_bytes| {
+                let mut date_u32 = 0u32;
+                for i in 0..4 {
+                    date_u32 += (four_bytes[i] as u32) << (i * 8);
+                }
+                date_u32
+            })
+            .collect::<Vec<u32>>();
 
         // Initializing cryptographic parameters
         let params = CryptographicParameters::<BackendImpl>::new();
-        let module = params.module();
-
         let mut source_xs: Source = Source::new([0u8; 32]);
         let mut source_xa: Source = Source::new([0u8; 32]);
         let mut source_xe: Source = Source::new([0u8; 32]);
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 22);
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
 
         // Generates a new secret-key along with the public evaluation keys.
         let mut sk_glwe: GLWESecret<Vec<u8>> =
             GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
         sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
 
-        let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.module().n().into());
-        sk_lwe.fill_binary_block(8, &mut source_xs);
+        let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+        sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
         let mut interpreter: Interpreter<BackendImpl> = Interpreter::new(
             &params,
@@ -323,7 +338,7 @@ impl Phantom {
         sk_prepared.prepare(params.module(), &sk_glwe);
 
         interpreter.instructions_encrypt_sk(
-            module,
+            params.module(),
             &parser,
             &sk_prepared,
             &mut source_xa,
@@ -335,11 +350,26 @@ impl Phantom {
 
         let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> =
             VMKeysPrepared::alloc(&params);
-        key_prepared.prepare(module, &key, scratch.borrow());
+        key_prepared.prepare(params.module(), &key, scratch.borrow());
 
-        interpreter.cycle(module, &key_prepared, scratch.borrow());
+        interpreter.ram_encrypt_sk_internal(
+            params.module(),
+            &ram_data_u32,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+
+        // let time = std::time::Instant::now();
+        // interpreter.cycle(params.module(), &key_prepared, scratch.borrow());
+        // println!("Time: {:?}", time.elapsed());
 
         EncryptedVM {
+            params,
+            sk_prepared,
+            key_prepared,
+            scratch,
             interpreter,
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,

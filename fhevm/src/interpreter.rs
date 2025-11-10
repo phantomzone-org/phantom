@@ -347,6 +347,23 @@ impl<BE: Backend> Interpreter<BE> {
             .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
+    pub fn ram_decrypt<M, S>(
+        &mut self,
+        module: &M,
+        data_decrypted: &mut [u32],
+        sk_prepared: &S,
+        scratch: &mut Scratch<BE>,
+    ) where
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
+        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEDecrypt<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        assert_eq!(data_decrypted.len(), self.ram.max_addr());
+
+        self.ram
+            .decrypt(module, data_decrypted, sk_prepared, scratch);
+    }
+
     pub fn cycle<M, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
         M: GGSWPreparedFactory<BE>

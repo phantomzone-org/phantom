@@ -51,7 +51,7 @@ struct Input {
 fn main() {
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
-    let pz = Phantom::init(elf_bytes);
+    let pz = Phantom::from_elf(elf_bytes);
 
     let mut rng = StdRng::from_seed([0; 32]);
     let mut pool = Pool { t0: 100, t1: 500 };
@@ -70,10 +70,10 @@ fn main() {
         account: account.clone(),
     };
 
-    const MAX_CYCLES: usize = 1000;
+    const MAX_CYCLES: usize = 10;
 
-    // let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
-    // enc_vm.execute();
+    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), MAX_CYCLES);
+    enc_vm.execute();
 
     // Init -> read input tape -> run -> read output tape
     let mut vm = pz.test_vm(MAX_CYCLES);
@@ -81,7 +81,7 @@ fn main() {
     vm.execute();
     let output_tape = vm.output_tape();
     println!("Output tape={:?}", output_tape);
-    // assert_eq!(output_tape, enc_vm.output_tape());
+    assert_eq!(output_tape, enc_vm.output_tape());
 
     // Check output
     let mut want_pool = pool;
