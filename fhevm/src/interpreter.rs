@@ -426,25 +426,25 @@ impl<BE: Backend> Interpreter<BE> {
         // - imm
         // - opids=[rdu, mu, pcu]
         println!("Reading instruction components");
-        self.read_instruction_components(module, keys, scratch);
+        self.read_instruction_components(module, keys, sk, scratch);
 
         // Reads Register[rs1] and Register[rs2]
         println!("Reading registers");
-        self.read_registers(module, keys, scratch);
+        self.read_registers(module, keys, sk, scratch);
 
         // Prepares FheUint imm, rs1, rs2 to FheUintPrepared
         println!("Preparing imm, rs1, rs2");
         self.prepare_imm_rs1_rs2_values(module, keys, scratch);
 
         println!("Reading ram");
-        self.read_ram(module, keys, scratch);
+        self.read_ram(module, keys, sk, scratch);
 
         // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
         println!("Updating registers");
         match self.instruction_set {
             InstructionSet::RV32M => unimplemented!(),
             InstructionSet::RV32I => {
-                self.update_registers(module, RD_UPDATE_RV32I_OP_LIST, keys, scratch)
+                self.update_registers(module, RD_UPDATE_RV32I_OP_LIST, keys, sk, scratch)
             }
         };
 
@@ -457,10 +457,11 @@ impl<BE: Backend> Interpreter<BE> {
         self.update_pc(module, keys, sk, scratch);
     }
 
-    pub(crate) fn read_instruction_components<M, D, BRA, H>(
+    pub(crate) fn read_instruction_components<M, D, BRA, H, S>(
         &mut self,
         module: &M,
         keys: &H,
+        sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
         M: GGSWPreparedFactory<BE>
@@ -471,10 +472,12 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPrepare<BRA, u32, BE>
             + ModuleN
             + GGSWBlindRotation<u32, BE>
-            + GGSWPreparedFactory<BE>,
+            + GGSWPreparedFactory<BE>
+            + GLWEDecrypt<BE>,
         H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         BRA: BlindRotationAlgo,
         D: DataRef,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.pc_fhe_uint_prepared.prepare_custom(
@@ -510,12 +513,45 @@ impl<BE: Backend> Interpreter<BE> {
             .read(module, &mut self.rs2_addr_fhe_uint, &address, keys, scratch);
         self.rd_rom
             .read(module, &mut self.rd_addr_fhe_uint, &address, keys, scratch);
+
+        if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
+            vm_debug.read_instructions();
+            assert_eq!(
+                self.imm_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.imm
+            );
+            assert_eq!(
+                self.rdu_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rdu
+            );
+            assert_eq!(
+                self.mu_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.mu
+            );
+            assert_eq!(
+                self.pcu_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.pcu
+            );
+            assert_eq!(
+                self.rs1_addr_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rs1_addr
+            );
+            assert_eq!(
+                self.rs2_addr_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rs2_addr
+            );
+            assert_eq!(
+                self.rd_addr_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rd_addr
+            );
+        }
     }
 
-    pub(crate) fn read_registers<M, DK, H, BRA>(
+    pub(crate) fn read_registers<M, DK, H, BRA, S>(
         &mut self,
         module: &M,
         keys: &H,
+        sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
         BRA: BlindRotationAlgo,
@@ -530,8 +566,10 @@ impl<BE: Backend> Interpreter<BE> {
             + ModuleN
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, u32, BE>
-            + GGSWBlindRotation<u32, BE>,
+            + GGSWBlindRotation<u32, BE>
+            + GLWEDecrypt<BE>,
         H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut address: AddressRead<Vec<u8>, BE> =
@@ -565,6 +603,18 @@ impl<BE: Backend> Interpreter<BE> {
             keys,
             scratch,
         );
+
+        if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
+            vm_debug.read_registers();
+            assert_eq!(
+                self.rs1_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rs1_val
+            );
+            assert_eq!(
+                self.rs2_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rs2_val
+            );
+        }
     }
 
     pub fn prepare_imm_rs1_rs2_values<D, M, BRA, K>(
@@ -587,8 +637,13 @@ impl<BE: Backend> Interpreter<BE> {
             .prepare(module, &self.rs2_val_fhe_uint, keys, scratch);
     }
 
-    pub(crate) fn read_ram<D, M, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
-    where
+    pub(crate) fn read_ram<D, M, H, BRA, S>(
+        &mut self,
+        module: &M,
+        keys: &H,
+        sk: Option<&S>,
+        scratch: &mut Scratch<BE>,
+    ) where
         M: GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
@@ -603,6 +658,7 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
         H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         BRA: BlindRotationAlgo,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
     {
         // Derives ram address = [rs2 + imm + 2^18]
@@ -632,13 +688,22 @@ impl<BE: Backend> Interpreter<BE> {
         // Read ram_val_fhe_uint from Ram[rs2 + imm]
         self.ram
             .read_prepare_write(module, &mut self.ram_val_fhe_uint, &address, keys, scratch);
+
+        if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
+            vm_debug.read_ram();
+            assert_eq!(
+                self.ram_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.ram_val
+            )
+        }
     }
 
-    pub(crate) fn update_registers<M, H, D, BRA>(
+    pub(crate) fn update_registers<M, H, D, BRA, S>(
         &mut self,
         module: &M,
         ops: &[RD_UPDATE],
         keys: &H,
+        sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
         M: ExecuteBDDCircuit2WTo1W<u32, BE>
@@ -659,6 +724,7 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         D: DataRef,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let rs1: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs1_val_fhe_uint_prepared;
@@ -718,6 +784,14 @@ impl<BE: Backend> Interpreter<BE> {
             .write(module, &self.rd_val_fhe_uint, &address, keys, scratch);
 
         self.registers.zero(module, 0, keys, scratch);
+
+        if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
+            vm_debug.update_registers(ops);
+            assert_eq!(
+                self.rd_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.rd_val
+            )
+        }
     }
 
     pub(crate) fn update_ram<D, M, H, BRA, S>(
@@ -785,20 +859,19 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         // Derives address for write
-        let mut address =
+        let mut address: AddressWrite<Vec<u8>, BE> =
             AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
         address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
 
         self.ram
             .write(module, &self.ram_val_fhe_uint, &address, keys, scratch);
 
-        if let Some(sk) = sk {
-            if let Some(vm_debug) = &mut self.vm_debug {
-                vm_debug.update_ram();
-                assert_eq!(self.pc_fhe_uint.decrypt(module, sk, scratch), vm_debug.pc)
-            } else {
-                panic!("something went wrong")
-            }
+        if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
+            vm_debug.update_ram();
+            assert_eq!(
+                self.ram_val_fhe_uint.decrypt(module, sk, scratch),
+                vm_debug.ram_val
+            )
         }
     }
 
