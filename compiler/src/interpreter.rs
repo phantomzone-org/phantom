@@ -37,7 +37,7 @@ mod macros {
     pub(crate) use verbose_println;
 }
 
-struct BootMemory {
+pub struct BootMemory {
     data: Vec<u8>,
     offset: usize,
     size: usize,
@@ -47,18 +47,50 @@ impl BootMemory {
     fn new(offset: usize, size: usize, data: Vec<u8>) -> Self {
         Self { data, offset, size }
     }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+
+    pub fn offset(&self) -> &usize {
+        &self.offset
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
 }
 
 #[derive(Clone)]
-struct InputInfo {
+pub struct InputInfo {
     start_addr: usize,
     size: usize,
 }
 
+impl InputInfo {
+    pub fn start_addr(&self) -> &usize {
+        &self.start_addr
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
+}
+
 #[derive(Clone)]
-struct OutputInfo {
+pub struct OutputInfo {
     start_addr: usize,
     size: usize,
+}
+
+impl OutputInfo {
+    pub fn start_addr(&self) -> &usize {
+        &self.start_addr
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
 }
 
 pub struct EncryptedVM {
@@ -99,11 +131,11 @@ pub struct Phantom {
     boot_ram: BootMemory,
     output_info: OutputInfo,
     input_info: InputInfo,
-    _elf_bytes: Vec<u8>,
+    _elf_bytes: Option<Vec<u8>>,
 }
 
 impl Phantom {
-    pub fn init(elf_bytes: Vec<u8>) -> Self {
+    pub fn from_elf(elf_bytes: Vec<u8>) -> Self {
         let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&elf_bytes).unwrap();
 
         let phdrs: Vec<ProgramHeader> = elf
@@ -205,8 +237,24 @@ impl Phantom {
             boot_ram,
             output_info,
             input_info,
-            _elf_bytes: elf_bytes,
+            _elf_bytes: Some(elf_bytes),
         }
+    }
+
+    pub fn boot_rom(&self) -> &BootMemory {
+        &self.boot_rom
+    }
+
+    pub fn boot_ram(&self) -> &BootMemory {
+        &self.boot_ram
+    }
+
+    pub fn input_info(&self) -> &InputInfo {
+        &self.input_info
+    }
+
+    pub fn output_info(&self) -> &OutputInfo {
+        &self.output_info
     }
 
     pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
