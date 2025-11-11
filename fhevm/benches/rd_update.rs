@@ -8,7 +8,7 @@ use fhevm::{
 };
 use std::hint::black_box;
 
-use poulpy_backend::FFT64Avx;
+use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -31,10 +31,10 @@ use poulpy_schemes::tfhe::{
 };
 
 fn benc_rd_update_fft64_avx(c: &mut Criterion) {
-    benc_rd_update::<CGGI, FFT64Avx>(c, "fft64_ref");
+    benc_rd_update::<CGGI, FFT64Ref>(c, "fft64_ref");
 }
 
-pub fn benc_rd_update<BRA: BlindRotationAlgo, BE: Backend>(c: &mut Criterion, label: &str)
+pub fn benc_rd_update<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>(c: &mut Criterion, label: &str)
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>

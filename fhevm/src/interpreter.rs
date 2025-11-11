@@ -108,7 +108,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 }
 
-impl<BE: Backend> Interpreter<BE> {
+impl<BE: Backend + Sync> Interpreter<BE> {
     pub fn new(
         params: &CryptographicParameters<BE>,
         rom_size: usize,
@@ -855,16 +855,16 @@ impl<BE: Backend> Interpreter<BE> {
             rd_map.insert(op.id(), tmp);
         }
 
-        
-        let mut rd_map: HashMap<u32, FheUint<Vec<u8>, u32>> =
-        ops.par_iter()
-        .map(|op| {
-            let mut scratch = ScratchOwned::alloc(scratch.available());
-            let mut tmp = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
-            op.eval_enc(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch.borrow());
-            (op.id(), tmp)
-        })
-        .collect();
+        // let scratch_size: usize = scratch.available();
+        // let mut rd_map: HashMap<u32, FheUint<Vec<u8>, u32>> =
+        // ops.par_iter()
+        // .map(|op| {
+        //     let mut scratch = ScratchOwned::alloc(scratch_size);
+        //     let mut tmp = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
+        //     op.eval_enc(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch.borrow());
+        //     (op.id(), tmp)
+        // })
+        // .collect();
 
         // Blind selection of the correct rd value using rdu_val_fhe_uint_prepared
         let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
