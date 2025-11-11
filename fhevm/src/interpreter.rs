@@ -1,22 +1,25 @@
 use std::collections::HashMap;
-
+use rayon::iter::ParallelIterator;
 use crate::{
-    address_read::AddressRead,
-    address_write::AddressWrite,
-    base::{get_base_2d, Base2D},
     debug::InterpreterDebug,
+    instructions::{RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST},
     keys::RAMKeysHelper,
     parameters::CryptographicParameters,
-    ram::ram::Ram,
+    pc_update::update_pc,
+    ram::{
+        address_read::AddressRead,
+        address_write::AddressWrite,
+        base::{get_base_2d, Base2D},
+        ram::Ram,
+    },
     ram_offset::ram_offset,
     ram_update::Store,
     rd_update::Evaluate,
-    update_pc, RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST,
 };
 
 use poulpy_hal::{
-    api::{ModuleLogN, ModuleN},
-    layouts::{Backend, DataRef, Module, Scratch},
+    api::{ModuleLogN, ModuleN, ScratchAvailable, ScratchOwnedAlloc, ScratchOwnedBorrow},
+    layouts::{Backend, DataRef, Module, Scratch, ScratchOwned},
     source::Source,
 };
 
@@ -35,6 +38,7 @@ use poulpy_schemes::tfhe::{
     },
     blind_rotation::BlindRotationAlgo,
 };
+use rayon::iter::{IntoParallelRefIterator};
 
 use crate::instructions::InstructionsParser;
 
@@ -370,7 +374,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn cycle<M, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
-        M: GGSWPreparedFactory<BE>
+        M: Sync + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -384,7 +388,8 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>
     {
         self.cycle_internal(
             module,
@@ -401,7 +406,7 @@ impl<BE: Backend> Interpreter<BE> {
         sk: &S,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -416,7 +421,8 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>
     {
         self.cycle_internal(module, keys, Some(sk), scratch);
     }
@@ -428,7 +434,7 @@ impl<BE: Backend> Interpreter<BE> {
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -443,7 +449,8 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>
     {
         // Retrive instructions components:
         // - addresses=[rs1, rs2, rd]
@@ -801,7 +808,7 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_registers<M, H, D, BRA, S>(
+    pub fn update_registers<M, H, D, BRA, S>(
         &mut self,
         module: &M,
         ops: &[RD_UPDATE],
@@ -809,7 +816,7 @@ impl<BE: Backend> Interpreter<BE> {
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: Sync + ExecuteBDDCircuit2WTo1W<u32, BE>
             + GLWEBlinSelection<u32, BE>
             + ModuleLogN
             + GLWERotate<BE>
@@ -827,10 +834,11 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWENoise<BE>
             + GLWEPackerOps<BE>,
         BRA: BlindRotationAlgo,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        H: Sync + RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
         D: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
+        ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     {
         let rs1: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs1_val_fhe_uint_prepared;
         let rs2: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs2_val_fhe_uint_prepared;
@@ -846,6 +854,17 @@ impl<BE: Backend> Interpreter<BE> {
             op.eval_enc(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch);
             rd_map.insert(op.id(), tmp);
         }
+
+        
+        let mut rd_map: HashMap<u32, FheUint<Vec<u8>, u32>> =
+        ops.par_iter()
+        .map(|op| {
+            let mut scratch = ScratchOwned::alloc(scratch.available());
+            let mut tmp = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
+            op.eval_enc(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch.borrow());
+            (op.id(), tmp)
+        })
+        .collect();
 
         // Blind selection of the correct rd value using rdu_val_fhe_uint_prepared
         let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();

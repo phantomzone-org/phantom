@@ -13,7 +13,7 @@ use poulpy_core::{
     GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
 };
 
-use crate::{base::Base1D, parameters::CryptographicParameters};
+use crate::{parameters::CryptographicParameters, ram::base::Base1D};
 
 /// Coordinate stores Vec<GGSW(X^a_i)> such that prod X^{a_i} = X^a.
 /// This provides a second decomposition over the one in base N to

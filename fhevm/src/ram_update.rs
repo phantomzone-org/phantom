@@ -9,7 +9,7 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     FheUint, FheUintPrepared, GLWEBlinSelection, UnsignedInteger,
 };
 
-use crate::{keys::RAMKeysHelper, RAM_UPDATE};
+use crate::{instructions::RAM_UPDATE, keys::RAMKeysHelper};
 
 pub trait Store<T: UnsignedInteger> {
     fn eval_enc<R, D, A, H, K, M, BE: Backend>(

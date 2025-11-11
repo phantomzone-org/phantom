@@ -24,7 +24,7 @@ use rand_core::RngCore;
 use crate::{
     keys::{VMKeys, VMKeysPrepared},
     parameters::CryptographicParameters,
-    update_pc, PCU,
+    pc_update::{update_pc, PCU},
 };
 
 #[test]

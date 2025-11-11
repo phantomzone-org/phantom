@@ -14,7 +14,7 @@ use poulpy_schemes::{
     },
 };
 
-use crate::RD_UPDATE;
+use crate::instructions::RD_UPDATE;
 
 define_bdd_2w_to_1w_trait!(pub Auipc, auipc);
 impl_bdd_2w_to_1w_trait!(

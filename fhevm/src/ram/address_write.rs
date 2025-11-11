@@ -20,8 +20,8 @@ use poulpy_schemes::tfhe::{
 };
 
 use crate::{
-    base::Base2D, coordinate::TakeCoordinate, coordinate_prepared::CoordinatePrepared,
-    parameters::CryptographicParameters,
+    parameters::CryptographicParameters, ram::base::Base2D, ram::coordinate::TakeCoordinate,
+    ram::coordinate_prepared::CoordinatePrepared,
 };
 
 /// [Address] stores GGSW(X^{addr}) in d

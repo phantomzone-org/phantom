@@ -8,7 +8,7 @@ use fhevm::{
     instructions::{Instruction, InstructionsParser},
     keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
-    Interpreter,
+    interpreter::Interpreter,
 };
 use poulpy_backend::FFT64Ref as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{InstructionsParser, PC_UPDATE_OP_LIST, RAM_UPDATE_OP_LIST, RD_UPDATE};
+use crate::instructions::{InstructionsParser, PC_UPDATE_OP_LIST, RAM_UPDATE_OP_LIST, RD_UPDATE};
 
 pub(crate) struct InterpreterDebug {
     pub(crate) ram_size: u32,

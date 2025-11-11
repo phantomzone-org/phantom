@@ -11,11 +11,11 @@ use poulpy_hal::{
 };
 
 use crate::{
-    address_read::AddressRead,
-    address_write::AddressWrite,
-    base::{get_base_2d, Base2D},
     keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
+    ram::address_read::AddressRead,
+    ram::address_write::AddressWrite,
+    ram::base::{get_base_2d, Base2D},
     ram::ram::Ram,
 };
 

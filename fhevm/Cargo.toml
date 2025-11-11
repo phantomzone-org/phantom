@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
+criterion = "0.7.0"
 poulpy-hal = {path = "../../poulpy/poulpy-hal"}
 poulpy-core = {path = "../../poulpy/poulpy-core"}
 poulpy-backend = {path = "../../poulpy/poulpy-backend"}
@@ -12,6 +13,11 @@ poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
 rand_core = "0.9.3"
 strum = "0.27.2"
 strum_macros = "0.27.2"
+rayon = "1.11.0"
 
 [profile.release]
 debug = true
+
+[[bench]]
+name = "rd_update"
+harness = false

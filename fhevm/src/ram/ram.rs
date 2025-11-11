@@ -16,9 +16,9 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, ToBits, UnsignedInteger};
 
 use crate::{
-    address_read::AddressRead, address_write::AddressWrite,
-    coordinate_prepared::CoordinatePrepared, keys::RAMKeysHelper,
-    parameters::CryptographicParameters, reverse_bits_msb,
+    keys::RAMKeysHelper, parameters::CryptographicParameters, ram::address_read::AddressRead,
+    ram::address_write::AddressWrite, ram::coordinate_prepared::CoordinatePrepared,
+    ram::reverse_bits_msb,
 };
 
 /// [Ram] core implementation of the FHE-RAM.

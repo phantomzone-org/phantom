@@ -11,11 +11,11 @@ use poulpy_schemes::tfhe::{
     circuit_bootstrapping::CircuitBootstrappingKeyLayout,
 };
 
-const N_GLWE: u32 = 512;
-const N_LWE: u32 = 77;
+const N_GLWE: u32 = 1024;
+const N_LWE: u32 = 574;
 const LWE_BLOCK_SIZE: u32 = 7;
 const BASE2K: u32 = 14;
-const RANK: u32 = 1;
+const RANK: u32 = 2;
 const K_GLWE_PT: u32 = 2;
 const K_GLWE_CT: u32 = BASE2K * 3;
 const K_EVK_GLWE: u32 = BASE2K * 4;

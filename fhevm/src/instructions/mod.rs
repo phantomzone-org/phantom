@@ -281,7 +281,7 @@ pub(crate) static PC_UPDATE_OP_LIST: &[PC_UPDATE] = &[
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy)]
 #[repr(u32)]
-pub(crate) enum RD_UPDATE {
+pub enum RD_UPDATE {
     NONE = 0,
     LUI = 1,
     AUIPC = 2,
@@ -459,7 +459,7 @@ pub(crate) static RD_UPDATE_RV32M_OP_LIST: &[RD_UPDATE] = &[
     RD_UPDATE::REMU,
 ];
 
-pub(crate) static RD_UPDATE_RV32I_OP_LIST: &[RD_UPDATE] = &[
+pub static RD_UPDATE_RV32I_OP_LIST: &[RD_UPDATE] = &[
     RD_UPDATE::NONE,
     RD_UPDATE::LUI,
     RD_UPDATE::AUIPC,
