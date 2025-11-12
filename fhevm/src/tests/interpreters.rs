@@ -125,12 +125,14 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
     interpreter.read_instruction_components(
-        1, 
+        1,
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
         scratch.borrow(),
+        &mut this_cycle_measurement,
     );
 
     let dec_rs1: u32 =
@@ -251,12 +253,14 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
     interpreter.read_instruction_components(
-        1, 
+        1,
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
         scratch.borrow(),
+        &mut this_cycle_measurement,
     );
 
     interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
@@ -439,12 +443,14 @@ where
             &mut source_xe,
             scratch.borrow(),
         );
+        let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
         interpreter.read_instruction_components(
-            1, 
+            1,
             module,
             &key_prepared,
             Some(&sk_glwe_prepared),
             scratch.borrow(),
+            &mut this_cycle_measurement,
         );
 
         let dec_rs1: u32 =

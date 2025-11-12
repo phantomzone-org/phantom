@@ -144,7 +144,9 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let mut fheuint_prepared = FheUintPrepared::alloc_from_infos(module, self);
-        fheuint_prepared.prepare_custom_multi_thread(threads, module, &fheuint, bit_start, bit_end, keys, scratch);
+        fheuint_prepared.prepare_custom_multi_thread(
+            threads, module, &fheuint, bit_start, bit_end, keys, scratch,
+        );
         self.set_from_fhe_uint_prepared(module, &fheuint_prepared, 0, scratch);
     }
 
