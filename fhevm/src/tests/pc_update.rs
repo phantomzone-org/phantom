@@ -48,7 +48,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>

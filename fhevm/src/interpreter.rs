@@ -30,8 +30,7 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare,
-        FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
+        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -376,15 +375,15 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
+            + FheUintPrepare<BRA, BE>
+            + ExecuteBDDCircuit2WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
     {
         self.cycle_internal(
             module,
@@ -407,8 +406,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
+            + FheUintPrepare<BRA, BE>
+            + ExecuteBDDCircuit2WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>,
@@ -416,7 +415,7 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
     {
         self.cycle_internal(module, keys, Some(sk), scratch);
     }
@@ -434,8 +433,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
+            + FheUintPrepare<BRA, BE>
+            + ExecuteBDDCircuit2WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>,
@@ -443,7 +442,7 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
     {
         // Retrive instructions components:
         // - addresses=[rs1, rs2, rd]
@@ -488,13 +487,13 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
             + GLWEPacking<BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + FheUintPrepare<BRA, BE>
             + ModuleN
             + GGSWBlindRotation<u32, BE>
             + GGSWPreparedFactory<BE>
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         BRA: BlindRotationAlgo,
         D: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
@@ -633,7 +632,7 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         M: FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + FheUintPrepare<BRA, BE>
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
@@ -641,11 +640,11 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + ModuleN
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + FheUintPrepare<BRA, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE>,
+        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
@@ -708,10 +707,10 @@ impl<BE: Backend> Interpreter<BE> {
         keys: &K,
         scratch: &mut Scratch<BE>,
     ) where
-        K: BDDKeyHelper<D, BRA, BE>,
+        K: BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         D: DataRef,
         BRA: BlindRotationAlgo,
-        M: FheUintPrepare<BRA, u32, BE>,
+        M: FheUintPrepare<BRA, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.imm_val_fhe_uint_prepared
@@ -737,12 +736,12 @@ impl<BE: Backend> Interpreter<BE> {
             + ModuleN
             + GGSWBlindRotation<u32, BE>
             + GGSWPreparedFactory<BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + ExecuteBDDCircuit2WTo1W<BE>
+            + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         BRA: BlindRotationAlgo,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
@@ -809,7 +808,7 @@ impl<BE: Backend> Interpreter<BE> {
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: ExecuteBDDCircuit2WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + ModuleLogN
             + GLWERotate<BE>
@@ -820,14 +819,14 @@ impl<BE: Backend> Interpreter<BE> {
             + GGSWPreparedFactory<BE>
             + ModuleN
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + FheUintPrepare<BRA, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENormalize<BE>
             + GLWEExternalProduct<BE>
             + GLWENoise<BE>
             + GLWEPackerOps<BE>,
         BRA: BlindRotationAlgo,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         D: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
@@ -947,12 +946,12 @@ impl<BE: Backend> Interpreter<BE> {
             + ModuleN
             + GGSWBlindRotation<u32, BE>
             + GGSWPreparedFactory<BE>
-            + ExecuteBDDCircuit2WTo1W<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + ExecuteBDDCircuit2WTo1W<BE>
+            + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         BRA: BlindRotationAlgo,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
@@ -1038,13 +1037,13 @@ impl<BE: Backend> Interpreter<BE> {
         M: ModuleLogN
             + GLWEPacking<BE>
             + GLWECopy
-            + ExecuteBDDCircuit<u32, BE>
-            + FheUintPrepare<BRA, u32, BE>
+            + ExecuteBDDCircuit<BE>
+            + FheUintPrepare<BRA, BE>
             + Cmux<BE>
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE>,
+        K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {

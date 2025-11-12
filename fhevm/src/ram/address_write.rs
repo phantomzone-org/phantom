@@ -13,8 +13,7 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory,
-        GGSWBlindRotation, UnsignedInteger,
+        BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, UnsignedInteger
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -134,11 +133,11 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
     ) where
         F: DataRef + DataMut,
         DK: DataRef,
-        K: BDDKeyHelper<DK, BRA, BE>,
+        K: BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos,
         T: UnsignedInteger,
         M: ModuleN
             + FheUintPreparedFactory<T, BE>
-            + FheUintPrepare<BRA, T, BE>
+            + FheUintPrepare<BRA, BE>
             + GGSWBlindRotation<T, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {

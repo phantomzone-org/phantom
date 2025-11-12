@@ -5,24 +5,19 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKey, BDDKeyEncryptSk, BDDKeyHelper, BDDKeyLayout, BDDKeyPrepared, BDDKeyPreparedFactory,
+        BDDKey, BDDKeyEncryptSk, BDDKeyHelper, BDDKeyInfos, BDDKeyLayout, BDDKeyPrepared, BDDKeyPreparedFactory
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory},
     circuit_bootstrapping::{
-        CircuitBootstrappingKeyPrepared, CircuitBootstrappingKeyPreparedFactory,
+        CircuitBootstrappingKeyLayout, CircuitBootstrappingKeyPrepared, CircuitBootstrappingKeyPreparedFactory
     },
 };
 use std::collections::HashMap;
 
 use poulpy_core::{
-    layouts::{
-        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory,
-        GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared,
-        GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWEToLWEKeyPrepared,
-        LWEInfos, LWESecretToRef, GLWE,
-    },
-    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution,
-    ScratchTakeCore,
+    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution, ScratchTakeCore, layouts::{
+        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory, GLWE, GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared, GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWEToLWEKeyLayout, GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef
+    }
 };
 
 use crate::parameters::CryptographicParameters;
@@ -62,6 +57,16 @@ pub struct VMKeysPrepared<D: Data, BRA: BlindRotationAlgo, B: Backend> {
     pub(crate) tsk_ggsw_inv: GGLWEToGGSWKeyPrepared<D, B>,
 
     pub(crate) bdd_key: BDDKeyPrepared<D, BRA, B>,
+}
+
+impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> BDDKeyInfos for VMKeysPrepared<D, BRA, BE>{
+    fn cbt_infos(&self) ->CircuitBootstrappingKeyLayout {
+        self.bdd_key.cbt_infos()
+    }
+
+    fn ks_infos(&self) -> GLWEToLWEKeyLayout {
+        self.bdd_key.ks_infos()
+    }
 }
 
 impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend>

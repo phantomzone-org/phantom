@@ -24,7 +24,7 @@ pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
     RS1: DataRef,
     IMM: DataRef,
     H: RAMKeysHelper<K, BE>,
-    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<u32, BE>,
+    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {
     let inputs: Vec<&dyn GetGGSWBit<BE>> =

@@ -64,7 +64,7 @@ pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
         RA: DataRef,
         K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
         H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: ExecuteBDDCircuit2WTo1W<BE>
             + ModuleLogN
             + GLWERotate<BE>
             + GLWETrace<BE>
@@ -95,7 +95,7 @@ impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
         RA: DataRef,
         K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
         H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: ExecuteBDDCircuit2WTo1W<BE>
             + ModuleLogN
             + GLWERotate<BE>
             + GLWETrace<BE>

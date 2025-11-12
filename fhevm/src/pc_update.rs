@@ -32,7 +32,7 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     RS2: DataRef,
     IMM: DataRef,
     H: RAMKeysHelper<K, BE>,
-    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<u32, BE>,
+    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {
     let inputs: Vec<&dyn GetGGSWBit<BE>> = [
