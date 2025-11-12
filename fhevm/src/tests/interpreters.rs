@@ -126,6 +126,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.read_instruction_components(
+        1, 
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
@@ -214,6 +215,8 @@ where
 {
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
 
+    let threads = 4;
+
     let module: &Module<BE> = params.module();
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 22);
@@ -249,6 +252,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.read_instruction_components(
+        1, 
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
@@ -301,6 +305,7 @@ where
 
     for op in RD_UPDATE_RV32I_OP_LIST {
         op.eval_enc(
+            threads,
             module,
             &mut res,
             &interpreter.rs1_val_fhe_uint_prepared,
@@ -435,6 +440,7 @@ where
             scratch.borrow(),
         );
         interpreter.read_instruction_components(
+            1, 
             module,
             &key_prepared,
             Some(&sk_glwe_prepared),
@@ -592,7 +598,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     println!("Cycle");
-    interpreter.cycle(module, &key_prepared, scratch.borrow());
+    interpreter.cycle(1, module, &key_prepared, scratch.borrow());
     println!("Cycle done");
 
     let pc = interpreter

@@ -130,6 +130,6 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     for _ in 0..rom.len() {
-        interpreter.cycle_debug(module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
+        interpreter.cycle_debug(1, module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
     }
 }

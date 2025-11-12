@@ -45,7 +45,6 @@ pub enum InstructionSet {
 }
 
 pub struct Interpreter<BE: Backend> {
-    pub(crate) threads: usize,
     pub(crate) cycle: u32,
     pub(crate) vm_debug: Option<InterpreterDebug>,
     pub(crate) instruction_set: InstructionSet,
@@ -166,7 +165,6 @@ impl<BE: Backend> Interpreter<BE> {
         };
 
         Self {
-            threads: 1,
             vm_debug,
             instruction_set: InstructionSet::RV32I,
             ggsw_infos: params.ggsw_infos(),
@@ -371,7 +369,7 @@ impl<BE: Backend> Interpreter<BE> {
             .decrypt(module, data_decrypted, sk_prepared, scratch);
     }
 
-    pub fn cycle<M, DK, H, K, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    pub fn cycle<M, DK, H, K, BRA>(&mut self, threads: usize, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
         M: Sync
             + GGSWPreparedFactory<BE>
@@ -392,6 +390,7 @@ impl<BE: Backend> Interpreter<BE> {
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
         self.cycle_internal(
+            threads,
             module,
             keys,
             None::<&GLWESecretPrepared<Vec<u8>, BE>>,
@@ -401,6 +400,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn cycle_debug<M, DK, H, BRA, K, S>(
         &mut self,
+        threads: usize, 
         module: &M,
         keys: &H,
         sk: &S,
@@ -425,11 +425,12 @@ impl<BE: Backend> Interpreter<BE> {
         H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
-        self.cycle_internal(module, keys, Some(sk), scratch);
+        self.cycle_internal(threads, module, keys, Some(sk), scratch);
     }
 
     fn cycle_internal<M, DK, H, BRA, K, S>(
         &mut self,
+        threads: usize, 
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -460,33 +461,34 @@ impl<BE: Backend> Interpreter<BE> {
         // - opids=[rdu, mu, pcu]
         println!();
         println!(">>>>>>>>> CYCLE[{:03}] <<<<<<<<<<<", self.cycle);
-        self.read_instruction_components(module, keys, sk, scratch);
+        self.read_instruction_components(threads, module, keys, sk, scratch);
 
         // Reads Register[rs1] and Register[rs2]
-        self.read_registers(module, keys, sk, scratch);
+        self.read_registers(threads, module, keys, sk, scratch);
 
         // Prepares FheUint imm, rs1, rs2 to FheUintPrepared
-        self.prepare_imm_rs1_rs2_values(module, keys, scratch);
-        self.read_ram(module, keys, sk, scratch);
+        self.prepare_imm_rs1_rs2_values(threads, module, keys, scratch);
+        self.read_ram(threads, module, keys, sk, scratch);
 
         // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
         match self.instruction_set {
             InstructionSet::RV32M => unimplemented!(),
             InstructionSet::RV32I => {
-                self.update_registers(module, RD_UPDATE_RV32I_OP_LIST, keys, sk, scratch)
+                self.update_registers(threads, module, RD_UPDATE_RV32I_OP_LIST, keys, sk, scratch)
             }
         };
 
         // Stores value in Ram[rs2 + imm + offset]
-        self.update_ram(module, keys, sk, scratch);
+        self.update_ram(threads, module, keys, sk, scratch);
 
         // Updates PC
-        self.update_pc(module, keys, sk, scratch);
+        self.update_pc(threads, module, keys, sk, scratch);
         self.cycle += 1;
     }
 
     pub(crate) fn read_instruction_components<M, D, BRA, H, K, S>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -511,7 +513,8 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.pc_fhe_uint_prepared.prepare_custom(
+        self.pc_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
             module,
             &self.pc_fhe_uint,
             0,
@@ -527,7 +530,7 @@ impl<BE: Backend> Interpreter<BE> {
         address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, 2, scratch);
 
         self.imm_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.imm_val_fhe_uint,
             &address,
@@ -536,7 +539,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.rdu_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.rdu_val_fhe_uint,
             &address,
@@ -545,7 +548,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.mu_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.mu_val_fhe_uint,
             &address,
@@ -554,7 +557,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.pcu_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.pcu_val_fhe_uint,
             &address,
@@ -563,7 +566,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.rs1_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.rs1_addr_fhe_uint,
             &address,
@@ -571,7 +574,7 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         self.rs2_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.rs2_addr_fhe_uint,
             &address,
@@ -579,7 +582,7 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         self.rd_rom.read(
-            self.threads,
+            threads,
             module,
             &mut self.rd_addr_fhe_uint,
             &address,
@@ -678,6 +681,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub(crate) fn read_registers<M, DK, H, BRA, K, S>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -717,7 +721,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.registers.read(
-            self.threads,
+            threads,
             module,
             &mut self.rs1_val_fhe_uint,
             &address,
@@ -735,7 +739,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         self.registers.read(
-            self.threads,
+            threads,
             module,
             &mut self.rs2_val_fhe_uint,
             &address,
@@ -771,6 +775,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn prepare_imm_rs1_rs2_values<D, M, BRA, K>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &K,
         scratch: &mut Scratch<BE>,
@@ -782,15 +787,16 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         self.imm_val_fhe_uint_prepared
-            .prepare(module, &self.imm_val_fhe_uint, keys, scratch); // TODO switch to 20 bits immediate & update circuits
+            .prepare_custom_multi_thread(threads, module, &self.imm_val_fhe_uint, 0, 32,keys, scratch); // TODO switch to 20 bits immediate & update circuits
         self.rs1_val_fhe_uint_prepared
-            .prepare(module, &self.rs1_val_fhe_uint, keys, scratch);
+            .prepare_custom_multi_thread(threads, module, &self.rs1_val_fhe_uint, 0, 32,keys, scratch);
         self.rs2_val_fhe_uint_prepared
-            .prepare(module, &self.rs2_val_fhe_uint, keys, scratch);
+            .prepare_custom_multi_thread(threads, module, &self.rs2_val_fhe_uint, 0, 32,keys, scratch);
     }
 
     pub(crate) fn read_ram<D, M, H, BRA, K, S>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -818,6 +824,7 @@ impl<BE: Backend> Interpreter<BE> {
     {
         // Derives ram address = [rs2 + imm + 2^18]
         ram_offset(
+            threads,
             module,
             &mut self.ram_addr_fhe_uint,
             &self.imm_val_fhe_uint_prepared,
@@ -826,7 +833,8 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        self.ram_addr_fhe_uint_prepared.prepare_custom(
+        self.ram_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
             module,
             &self.ram_addr_fhe_uint,
             0,
@@ -842,7 +850,7 @@ impl<BE: Backend> Interpreter<BE> {
 
         // Read ram_val_fhe_uint from Ram[rs2 + imm]
         self.ram.read_prepare_write(
-            self.threads,
+            threads,
             module,
             &mut self.ram_val_fhe_uint,
             &address,
@@ -878,6 +886,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub(crate) fn update_registers<M, H, D, BRA, K, S>(
         &mut self,
+        threads: usize,
         module: &M,
         ops: &[RD_UPDATE],
         keys: &H,
@@ -920,7 +929,7 @@ impl<BE: Backend> Interpreter<BE> {
         // Evaluates arithmetic operations & store in map with respective op ID
         for op in ops {
             let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
-            op.eval_enc(module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch);
+            op.eval_enc(threads, module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch);
             rd_map.insert(op.id(), tmp);
         }
 
@@ -932,7 +941,8 @@ impl<BE: Backend> Interpreter<BE> {
 
         let ops_bit_size: usize = (usize::BITS - (ops.len() - 1).leading_zeros()) as usize;
 
-        self.rdu_val_fhe_uint_prepared.prepare_custom(
+        self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
             module,
             &self.rdu_val_fhe_uint,
             0,
@@ -977,7 +987,7 @@ impl<BE: Backend> Interpreter<BE> {
 
         // Stores rd value in register
         self.registers.read_prepare_write(
-            self.threads,
+            threads,
             module,
             &mut tmp,
             &address_read,
@@ -985,7 +995,7 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         self.registers.write(
-            self.threads,
+            threads,
             module,
             &self.rd_val_fhe_uint,
             &address_write,
@@ -993,7 +1003,7 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        self.registers.zero(self.threads, module, 0, keys, scratch);
+        self.registers.zero(threads, module, 0, keys, scratch);
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.update_registers(ops);
@@ -1023,6 +1033,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub(crate) fn update_ram<D, M, H, BRA, K, S>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -1053,6 +1064,7 @@ impl<BE: Backend> Interpreter<BE> {
         for op in RAM_UPDATE_OP_LIST {
             let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
             op.eval_enc(
+                threads,
                 module,
                 &mut tmp,
                 &self.rs2_val_fhe_uint,
@@ -1071,7 +1083,8 @@ impl<BE: Backend> Interpreter<BE> {
         }
         let ops_bit_size: usize =
             (usize::BITS - (RAM_UPDATE_OP_LIST.len() - 1).leading_zeros()) as usize;
-        self.mu_val_fhe_uint_prepared.prepare_custom(
+        self.mu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
             module,
             &self.mu_val_fhe_uint,
             0,
@@ -1094,7 +1107,7 @@ impl<BE: Backend> Interpreter<BE> {
         address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
 
         self.ram.write(
-            self.threads,
+            threads,
             module,
             &self.ram_val_fhe_uint,
             &address,
@@ -1127,6 +1140,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub(crate) fn update_pc<M, K, S, H, BRA: BlindRotationAlgo, D>(
         &mut self,
+        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -1146,7 +1160,8 @@ impl<BE: Backend> Interpreter<BE> {
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        self.pcu_val_fhe_uint_prepared.prepare_custom(
+        self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
             module,
             &self.pcu_val_fhe_uint,
             0,
@@ -1156,6 +1171,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         update_pc(
+            threads,
             module,
             &mut self.pc_fhe_uint,
             &self.rs1_val_fhe_uint_prepared,

@@ -60,6 +60,9 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
+
+    let threads = 4;
+
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
     let module: &Module<BE> = params.module();
 
@@ -115,6 +118,7 @@ where
     keys_prepared.prepare(module, &keys, scratch.borrow());
 
     ram_offset(
+        threads,
         module,
         &mut ram,
         &rs1_prep,

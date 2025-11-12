@@ -17,6 +17,7 @@ use crate::RAM_UPDATE;
 pub trait Store<T: UnsignedInteger> {
     fn eval_enc<R, D, A, B, H, K, M, BE: Backend>(
         &self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<R, T>,
         rs2: &FheUint<A, T>,
@@ -44,6 +45,7 @@ pub trait Store<T: UnsignedInteger> {
 impl Store<u32> for RAM_UPDATE {
     fn eval_enc<R, D, A, B, H, K, M, BE: Backend>(
         &self,
+        _threads: usize,
         module: &M,
         res: &mut FheUint<R, u32>,
         rs2: &FheUint<A, u32>,

@@ -11,8 +11,8 @@ use poulpy_schemes::tfhe::{
     circuit_bootstrapping::CircuitBootstrappingKeyLayout,
 };
 
-const N_GLWE: u32 = 512;
-const N_LWE: u32 = 77;
+const N_GLWE: u32 = 1024;
+const N_LWE: u32 = 574;
 const LWE_BLOCK_SIZE: u32 = 7;
 const BASE2K: u32 = 15;
 const RANK: u32 = 1;

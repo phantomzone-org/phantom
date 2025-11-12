@@ -18,6 +18,7 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
 use crate::PC_UPDATE;
 
 pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
+    threads: usize,
     module: &M,
     res: &mut FheUint<R, u32>,
     rs1: &FheUintPrepared<RS1, u32, BE>,
@@ -55,7 +56,8 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     let (mut out_bits, scratch_1) = scratch.take_glwe_slice(u32::BITS as usize, res);
 
     // Evaluates out[i] = circuit[i](a, b)
-    module.execute_bdd_circuit(
+    module.execute_bdd_circuit_multi_thread(
+        threads,
         &mut out_bits,
         &helper,
         &crate::codegen::codegen_pc_update::OUTPUT_CIRCUITS,
