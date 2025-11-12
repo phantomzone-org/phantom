@@ -26,6 +26,8 @@ use rand_core::RngCore;
 fn test_fhe_ram() {
     println!("Starting!");
 
+    let threads = 8;
+
     let seed_xs: [u8; 32] = [0u8; 32];
     let seed_xa: [u8; 32] = [0u8; 32];
     let seed_xe: [u8; 32] = [0u8; 32];
@@ -108,6 +110,7 @@ fn test_fhe_ram() {
     let start: Instant = Instant::now();
     let mut res: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
     ram.read(
+        threads,
         params.module(),
         &mut res,
         &addr,
@@ -136,6 +139,7 @@ fn test_fhe_ram() {
 
     let start: Instant = Instant::now();
     ram.read_prepare_write(
+        threads,
         params.module(),
         &mut res,
         &addr,
@@ -196,6 +200,7 @@ fn test_fhe_ram() {
     // Writes on the FHE-RAM
     let start: Instant = Instant::now();
     ram.write(
+        threads,
         params.module(),
         &ct_write,
         &address_write,
@@ -207,6 +212,7 @@ fn test_fhe_ram() {
 
     // Reads back at the written index
     ram.read(
+        threads,
         params.module(),
         &mut res,
         &addr,

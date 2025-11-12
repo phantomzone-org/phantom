@@ -1,6 +1,11 @@
 use std::marker::PhantomData;
 
-use poulpy_core::{layouts::GGSWPrepared, GLWECopy, GLWEPacking, ScratchTakeCore};
+use poulpy_core::{
+    layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPrepared, GLWEAutomorphismKeyHelper, GetGaloisElement,
+    },
+    GLWECopy, GLWEPacking, ScratchTakeCore,
+};
 use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
@@ -9,7 +14,6 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 
-use crate::keys::RAMKeysHelper;
 #[cfg(test)]
 use crate::PC_UPDATE;
 
@@ -25,13 +29,13 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     scratch: &mut Scratch<BE>,
 ) where
     R: DataMut,
-    K: DataRef,
     OPID: DataRef,
     PC: DataRef,
     RS1: DataRef,
     RS2: DataRef,
     IMM: DataRef,
-    H: RAMKeysHelper<K, BE>,
+    H: GLWEAutomorphismKeyHelper<K, BE>,
+    K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {
@@ -193,6 +197,7 @@ impl PCU {
 
     pub(crate) fn expected_update(&self) -> u32 {
         use crate::sext;
-        self.op_type.eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
+        self.op_type
+            .eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
     }
 }

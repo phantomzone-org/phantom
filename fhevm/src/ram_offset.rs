@@ -1,6 +1,11 @@
 use std::marker::PhantomData;
 
-use poulpy_core::{layouts::GGSWPrepared, GLWECopy, GLWEPacking, ScratchTakeCore};
+use poulpy_core::{
+    layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPrepared, GLWEAutomorphismKeyHelper, GetGaloisElement,
+    },
+    GLWECopy, GLWEPacking, ScratchTakeCore,
+};
 use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
@@ -8,8 +13,6 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
-
-use crate::keys::RAMKeysHelper;
 
 pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
     module: &M,
@@ -20,10 +23,10 @@ pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
     scratch: &mut Scratch<BE>,
 ) where
     R: DataMut,
-    K: DataRef,
     RS1: DataRef,
     IMM: DataRef,
-    H: RAMKeysHelper<K, BE>,
+    H: GLWEAutomorphismKeyHelper<K, BE>,
+    K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {

@@ -5,42 +5,29 @@ use poulpy_hal::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKey, BDDKeyEncryptSk, BDDKeyHelper, BDDKeyInfos, BDDKeyLayout, BDDKeyPrepared, BDDKeyPreparedFactory
+        BDDKey, BDDKeyEncryptSk, BDDKeyHelper, BDDKeyInfos, BDDKeyLayout, BDDKeyPrepared,
+        BDDKeyPreparedFactory,
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory},
     circuit_bootstrapping::{
-        CircuitBootstrappingKeyLayout, CircuitBootstrappingKeyPrepared, CircuitBootstrappingKeyPreparedFactory
+        CircuitBootstrappingKeyLayout, CircuitBootstrappingKeyPrepared,
+        CircuitBootstrappingKeyPreparedFactory,
     },
 };
 use std::collections::HashMap;
 
 use poulpy_core::{
-    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution, ScratchTakeCore, layouts::{
-        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory, GLWE, GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared, GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWEToLWEKeyLayout, GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef
-    }
+    layouts::{
+        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory,
+        GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared,
+        GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWEToLWEKeyLayout,
+        GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef, GLWE,
+    },
+    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution,
+    ScratchTakeCore,
 };
 
 use crate::parameters::CryptographicParameters;
-
-pub trait RAMKeysHelper<D: DataRef, BE: Backend>
-where
-    Self: GLWEAutomorphismKeyHelper<GLWEAutomorphismKeyPrepared<D, BE>, BE>,
-{
-    fn get_ggsw_inv_key(&self) -> &GLWEAutomorphismKeyPrepared<D, BE>;
-    fn get_gglwe_to_ggsw_key(&self) -> &GGLWEToGGSWKeyPrepared<D, BE>;
-}
-
-impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> RAMKeysHelper<D, BE>
-    for VMKeysPrepared<D, BRA, BE>
-{
-    fn get_gglwe_to_ggsw_key(&self) -> &GGLWEToGGSWKeyPrepared<D, BE> {
-        &self.tsk_ggsw_inv
-    }
-
-    fn get_ggsw_inv_key(&self) -> &GLWEAutomorphismKeyPrepared<D, BE> {
-        &self.atk_ggsw_inv
-    }
-}
 
 /// Struct storing the FHE evaluation keys for the read/write on FHE-RAM.
 pub struct VMKeys<D: Data, BRA: BlindRotationAlgo> {
@@ -59,8 +46,8 @@ pub struct VMKeysPrepared<D: Data, BRA: BlindRotationAlgo, B: Backend> {
     pub(crate) bdd_key: BDDKeyPrepared<D, BRA, B>,
 }
 
-impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> BDDKeyInfos for VMKeysPrepared<D, BRA, BE>{
-    fn cbt_infos(&self) ->CircuitBootstrappingKeyLayout {
+impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> BDDKeyInfos for VMKeysPrepared<D, BRA, BE> {
+    fn cbt_infos(&self) -> CircuitBootstrappingKeyLayout {
         self.bdd_key.cbt_infos()
     }
 

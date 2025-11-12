@@ -13,7 +13,8 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, UnsignedInteger
+        BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared,
+        FheUintPreparedFactory, GGSWBlindRotation, UnsignedInteger,
     },
     blind_rotation::BlindRotationAlgo,
 };

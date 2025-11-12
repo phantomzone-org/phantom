@@ -5,7 +5,6 @@ use crate::{
     address_write::AddressWrite,
     base::{get_base_2d, Base2D},
     debug::InterpreterDebug,
-    keys::RAMKeysHelper,
     parameters::CryptographicParameters,
     ram::ram::Ram,
     ram_offset::ram_offset,
@@ -22,15 +21,18 @@ use poulpy_hal::{
 
 use poulpy_core::{
     layouts::{
-        GGSWLayout, GGSWPreparedFactory, GLWEInfos, GLWELayout, GLWESecretPrepared,
-        GLWESecretPreparedFactory, GLWESecretPreparedToRef,
+        GGLWEInfos, GGLWEPreparedToRef, GGSWLayout, GGSWPreparedFactory, GLWEAutomorphismKeyHelper,
+        GLWEInfos, GLWELayout, GLWESecretPrepared, GLWESecretPreparedFactory,
+        GLWESecretPreparedToRef, GetGaloisElement,
     },
     GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENoise, GLWENormalize,
     GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection
+        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint,
+        FheUintPrepare, FheUintPrepared, FheUintPreparedFactory, GGSWBlindRotation,
+        GLWEBlinSelection,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -43,6 +45,7 @@ pub enum InstructionSet {
 }
 
 pub struct Interpreter<BE: Backend> {
+    pub(crate) threads: usize,
     pub(crate) cycle: u32,
     pub(crate) vm_debug: Option<InterpreterDebug>,
     pub(crate) instruction_set: InstructionSet,
@@ -163,6 +166,7 @@ impl<BE: Backend> Interpreter<BE> {
         };
 
         Self {
+            threads: 1,
             vm_debug,
             instruction_set: InstructionSet::RV32I,
             ggsw_infos: params.ggsw_infos(),
@@ -367,9 +371,10 @@ impl<BE: Backend> Interpreter<BE> {
             .decrypt(module, data_decrypted, sk_prepared, scratch);
     }
 
-    pub fn cycle<M, DK, H, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    pub fn cycle<M, DK, H, K, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
     where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -383,7 +388,8 @@ impl<BE: Backend> Interpreter<BE> {
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
         self.cycle_internal(
             module,
@@ -393,14 +399,15 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn cycle_debug<M, DK, H, BRA, S>(
+    pub fn cycle_debug<M, DK, H, BRA, K, S>(
         &mut self,
         module: &M,
         keys: &H,
         sk: &S,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -415,19 +422,21 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
         self.cycle_internal(module, keys, Some(sk), scratch);
     }
 
-    fn cycle_internal<M, DK, H, BRA, S>(
+    fn cycle_internal<M, DK, H, BRA, K, S>(
         &mut self,
         module: &M,
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -442,7 +451,8 @@ impl<BE: Backend> Interpreter<BE> {
         BRA: BlindRotationAlgo,
         DK: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
         // Retrive instructions components:
         // - addresses=[rs1, rs2, rd]
@@ -475,14 +485,15 @@ impl<BE: Backend> Interpreter<BE> {
         self.cycle += 1;
     }
 
-    pub(crate) fn read_instruction_components<M, D, BRA, H, S>(
+    pub(crate) fn read_instruction_components<M, D, BRA, H, K, S>(
         &mut self,
         module: &M,
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -493,7 +504,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GGSWPreparedFactory<BE>
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
         D: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
@@ -514,24 +526,66 @@ impl<BE: Backend> Interpreter<BE> {
         // Skip the first 2 bits because our rom is word alined instead of byte alined.
         address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, 2, scratch);
 
-        self.imm_rom
-            .read(module, &mut self.imm_val_fhe_uint, &address, keys, scratch);
+        self.imm_rom.read(
+            self.threads,
+            module,
+            &mut self.imm_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
-        self.rdu_rom
-            .read(module, &mut self.rdu_val_fhe_uint, &address, keys, scratch);
+        self.rdu_rom.read(
+            self.threads,
+            module,
+            &mut self.rdu_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
-        self.mu_rom
-            .read(module, &mut self.mu_val_fhe_uint, &address, keys, scratch);
+        self.mu_rom.read(
+            self.threads,
+            module,
+            &mut self.mu_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
-        self.pcu_rom
-            .read(module, &mut self.pcu_val_fhe_uint, &address, keys, scratch);
+        self.pcu_rom.read(
+            self.threads,
+            module,
+            &mut self.pcu_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
-        self.rs1_rom
-            .read(module, &mut self.rs1_addr_fhe_uint, &address, keys, scratch);
-        self.rs2_rom
-            .read(module, &mut self.rs2_addr_fhe_uint, &address, keys, scratch);
-        self.rd_rom
-            .read(module, &mut self.rd_addr_fhe_uint, &address, keys, scratch);
+        self.rs1_rom.read(
+            self.threads,
+            module,
+            &mut self.rs1_addr_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
+        self.rs2_rom.read(
+            self.threads,
+            module,
+            &mut self.rs2_addr_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
+        self.rd_rom.read(
+            self.threads,
+            module,
+            &mut self.rd_addr_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.read_instructions();
@@ -622,7 +676,7 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn read_registers<M, DK, H, BRA, S>(
+    pub(crate) fn read_registers<M, DK, H, BRA, K, S>(
         &mut self,
         module: &M,
         keys: &H,
@@ -631,7 +685,8 @@ impl<BE: Backend> Interpreter<BE> {
     ) where
         BRA: BlindRotationAlgo,
         DK: DataRef,
-        M: FheUintPreparedFactory<u32, BE>
+        M: Sync
+            + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
@@ -644,7 +699,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GGSWBlindRotation<u32, BE>
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
-        H: BDDKeyHelper<DK, BRA, BE> + RAMKeysHelper<DK, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
@@ -660,8 +716,14 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        self.registers
-            .read(module, &mut self.rs1_val_fhe_uint, &address, keys, scratch);
+        self.registers.read(
+            self.threads,
+            module,
+            &mut self.rs1_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
         address.set_from_fhe_uint(
             module,
@@ -672,8 +734,14 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        self.registers
-            .read(module, &mut self.rs2_val_fhe_uint, &address, keys, scratch);
+        self.registers.read(
+            self.threads,
+            module,
+            &mut self.rs2_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.read_registers();
@@ -721,14 +789,15 @@ impl<BE: Backend> Interpreter<BE> {
             .prepare(module, &self.rs2_val_fhe_uint, keys, scratch);
     }
 
-    pub(crate) fn read_ram<D, M, H, BRA, S>(
+    pub(crate) fn read_ram<D, M, H, BRA, K, S>(
         &mut self,
         module: &M,
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -741,7 +810,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
@@ -771,8 +841,14 @@ impl<BE: Backend> Interpreter<BE> {
         address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
 
         // Read ram_val_fhe_uint from Ram[rs2 + imm]
-        self.ram
-            .read_prepare_write(module, &mut self.ram_val_fhe_uint, &address, keys, scratch);
+        self.ram.read_prepare_write(
+            self.threads,
+            module,
+            &mut self.ram_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.read_ram();
@@ -800,7 +876,7 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_registers<M, H, D, BRA, S>(
+    pub(crate) fn update_registers<M, H, D, BRA, K, S>(
         &mut self,
         module: &M,
         ops: &[RD_UPDATE],
@@ -808,7 +884,8 @@ impl<BE: Backend> Interpreter<BE> {
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ExecuteBDDCircuit2WTo1W<BE>
+        M: Sync
+            + ExecuteBDDCircuit2WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + ModuleLogN
             + GLWERotate<BE>
@@ -826,7 +903,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWENoise<BE>
             + GLWEPackerOps<BE>,
         BRA: BlindRotationAlgo,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         D: DataRef,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
@@ -898,12 +976,24 @@ impl<BE: Backend> Interpreter<BE> {
         let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.rd_addr_fhe_uint);
 
         // Stores rd value in register
-        self.registers
-            .read_prepare_write(module, &mut tmp, &address_read, keys, scratch);
-        self.registers
-            .write(module, &self.rd_val_fhe_uint, &address_write, keys, scratch);
+        self.registers.read_prepare_write(
+            self.threads,
+            module,
+            &mut tmp,
+            &address_read,
+            keys,
+            scratch,
+        );
+        self.registers.write(
+            self.threads,
+            module,
+            &self.rd_val_fhe_uint,
+            &address_write,
+            keys,
+            scratch,
+        );
 
-        self.registers.zero(module, 0, keys, scratch);
+        self.registers.zero(self.threads, module, 0, keys, scratch);
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.update_registers(ops);
@@ -931,14 +1021,15 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_ram<D, M, H, BRA, S>(
+    pub(crate) fn update_ram<D, M, H, BRA, K, S>(
         &mut self,
         module: &M,
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
@@ -951,7 +1042,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
-        H: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
+        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
@@ -1001,8 +1093,14 @@ impl<BE: Backend> Interpreter<BE> {
             AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_rom);
         address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
 
-        self.ram
-            .write(module, &self.ram_val_fhe_uint, &address, keys, scratch);
+        self.ram.write(
+            self.threads,
+            module,
+            &self.ram_val_fhe_uint,
+            &address,
+            keys,
+            scratch,
+        );
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
             vm_debug.update_ram();
@@ -1027,10 +1125,10 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_pc<M, K, S, BRA: BlindRotationAlgo, D>(
+    pub(crate) fn update_pc<M, K, S, H, BRA: BlindRotationAlgo, D>(
         &mut self,
         module: &M,
-        keys: &K,
+        keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
     ) where
@@ -1043,7 +1141,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEDecrypt<BE>
             + GLWENoise<BE>,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        K: RAMKeysHelper<D, BE> + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
+        H: BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
