@@ -712,6 +712,7 @@ impl<BE: Backend> Interpreter<BE> {
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
 
         address.set_from_fhe_uint(
+            threads,
             module,
             &self.rs1_addr_fhe_uint,
             0,
@@ -730,6 +731,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         address.set_from_fhe_uint(
+            threads,
             module,
             &self.rs2_addr_fhe_uint,
             0,
@@ -964,6 +966,7 @@ impl<BE: Backend> Interpreter<BE> {
         let mut address_read: AddressRead<Vec<u8>, BE> =
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
         address_read.set_from_fhe_uint(
+            threads,
             module,
             &self.rd_addr_fhe_uint,
             0,
@@ -975,6 +978,7 @@ impl<BE: Backend> Interpreter<BE> {
         let mut address_write: AddressWrite<Vec<u8>, BE> =
             AddressWrite::alloc_from_infos(module, &self.ggsw_infos, &self.base_2d_registers);
         address_write.set_from_fhe_uint(
+            threads,
             module,
             &self.rd_addr_fhe_uint,
             0,
