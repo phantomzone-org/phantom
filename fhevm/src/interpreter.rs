@@ -1,18 +1,7 @@
 use std::{collections::HashMap, time::Instant};
 
 use crate::{
-    address_read::AddressRead,
-    address_write::AddressWrite,
-    base::{get_base_2d, Base2D},
-    debug::InterpreterDebug,
-    measure_duration,
-    parameters::CryptographicParameters,
-    ram::ram::Ram,
-    ram_offset::ram_offset,
-    ram_update::Store,
-    rd_update::Evaluate,
-    update_pc, Measurements, PerCycleMeasurements, RAM_UPDATE_OP_LIST, RD_UPDATE,
-    RD_UPDATE_RV32I_OP_LIST,
+    Measurements, PerCycleMeasurements, RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST, address_read::AddressRead, address_write::AddressWrite, base::{Base2D, get_base_2d}, debug::InterpreterDebug, measure_duration, parameters::CryptographicParameters, ram::ram::Ram, ram_offset::ram_offset, ram_update::Store, rd_update::Evaluate, update_pc
 };
 
 use poulpy_hal::{
@@ -496,11 +485,18 @@ impl<BE: Backend> Interpreter<BE> {
         });
 
         this_cycle_measurement.cycle_time_read_ram = measure_duration(|| {
-            self.read_ram(threads, module, keys, sk, scratch);
+            self.read_ram(
+                threads,
+                module,
+                keys,
+                sk,
+                scratch,
+                &mut this_cycle_measurement,
+            );
         });
 
         // Evaluates arithmetic over Register[rs1], Register[rs2], imm and pc
-        this_cycle_measurement.cycle_time_evaluate_rd_ops = measure_duration(|| {
+        this_cycle_measurement.cycle_time_update_registers = measure_duration(|| {
             match self.instruction_set {
                 InstructionSet::RV32M => unimplemented!(),
                 InstructionSet::RV32I => self.update_registers(
@@ -611,7 +607,7 @@ impl<BE: Backend> Interpreter<BE> {
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
-        _this_cycle_measurement: &mut PerCycleMeasurements,
+        this_cycle_measurement: &mut PerCycleMeasurements,
     ) where
         M: Sync
             + GGSWPreparedFactory<BE>
@@ -731,68 +727,89 @@ impl<BE: Backend> Interpreter<BE> {
             let pcu_want: u32 = vm_debug.pcu;
 
             println!("READ ROM");
+            let pc_val_fhe_uint_noise = self
+                .pc_fhe_uint
+                .noise(module, pc_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   pc_val  : {pc_have:08x} - {pc_want:08x} - {:.2}",
-                self.pc_fhe_uint
-                    .noise(module, pc_want, sk, scratch)
-                    .max()
-                    .log2()
+                pc_val_fhe_uint_noise
             );
+            this_cycle_measurement.pc_val_fhe_uint_noise = pc_val_fhe_uint_noise;
             assert_eq!(pc_have, pc_want);
+
+
+            let imm_val_fhe_uint_noise = self
+                .imm_val_fhe_uint
+                .noise(module, imm_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   imm_val : {imm_have:08x} - {imm_want:08x} - {:.2}",
-                self.imm_val_fhe_uint
-                    .noise(module, imm_want, sk, scratch)
-                    .max()
-                    .log2()
+                imm_val_fhe_uint_noise
             );
+            this_cycle_measurement.imm_val_fhe_uint_noise = imm_val_fhe_uint_noise;
             assert_eq!(imm_have, imm_want);
+
+            let rs1_addr_fhe_uint_noise = self
+                .rs1_addr_fhe_uint
+                .noise(module, rs1_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   rs1_addr: {rs1_have:08x} - {rs1_want:08x} - {:.2}",
-                self.rs1_addr_fhe_uint
-                    .noise(module, rs1_want, sk, scratch)
-                    .max()
-                    .log2()
+                rs1_addr_fhe_uint_noise
             );
             assert_eq!(rs1_have, rs1_want);
+            let rs2_addr_fhe_uint_noise = self
+                .rs2_addr_fhe_uint
+                .noise(module, rs2_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   rs2_addr: {rs2_have:08x} - {rs2_want:08x} - {:.2}",
-                self.rs2_addr_fhe_uint
-                    .noise(module, rs2_want, sk, scratch)
-                    .max()
-                    .log2()
+                rs2_addr_fhe_uint_noise
             );
             assert_eq!(rs2_have, rs2_want);
+            let rd_addr_fhe_uint_noise = self
+                .rd_addr_fhe_uint
+                .noise(module, rd_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   rd_addr : {rd_have:08x} - {rd_want:08x} - {:.2}",
-                self.rd_addr_fhe_uint
-                    .noise(module, rd_want, sk, scratch)
-                    .max()
-                    .log2()
+                rd_addr_fhe_uint_noise
             );
             assert_eq!(rd_have, rd_want);
+            let rdu_val_fhe_uint_noise = self
+                .rdu_val_fhe_uint
+                .noise(module, rdu_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   rdu_val : {rdu_have:08x} - {rdu_want:08x} - {:.2}",
-                self.rdu_val_fhe_uint
-                    .noise(module, rdu_want, sk, scratch)
-                    .max()
-                    .log2()
+                rdu_val_fhe_uint_noise
             );
             assert_eq!(rdu_have, rdu_want);
+            let mu_val_fhe_uint_noise = self
+                .mu_val_fhe_uint
+                .noise(module, mu_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   mu_val  : {mu_have:08x} - {mu_want:08x} - {:.2}",
-                self.mu_val_fhe_uint
-                    .noise(module, mu_want, sk, scratch)
-                    .max()
-                    .log2()
+                mu_val_fhe_uint_noise
             );
             assert_eq!(mu_have, mu_want);
+            let pcu_val_fhe_uint_noise = self
+                .pcu_val_fhe_uint
+                .noise(module, pcu_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   pcu_val : {pcu_have:08x} - {pcu_want:08x} - {:.2}",
-                self.pcu_val_fhe_uint
-                    .noise(module, pcu_want, sk, scratch)
-                    .max()
-                    .log2()
+                pcu_val_fhe_uint_noise
             );
             assert_eq!(pcu_have, pcu_want);
         }
@@ -943,6 +960,7 @@ impl<BE: Backend> Interpreter<BE> {
         keys: &H,
         sk: Option<&S>,
         scratch: &mut Scratch<BE>,
+        this_cycle_measurement: &mut PerCycleMeasurements,
     ) where
         M: Sync
             + GGSWPreparedFactory<BE>
@@ -1007,22 +1025,32 @@ impl<BE: Backend> Interpreter<BE> {
             let ram_addr_want: u32 = vm_debug.ram_addr;
             let ram_val_want: u32 = vm_debug.ram_val;
             println!("READ RAM");
+            let ram_addr_read_noise = self
+                .ram_addr_fhe_uint
+                .noise(module, ram_addr_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   ram_addr: {ram_addr_have:08x} - {ram_addr_want:08x} - {:.2}",
-                self.ram_addr_fhe_uint
-                    .noise(module, ram_addr_want, sk, scratch)
-                    .max()
-                    .log2()
+                ram_addr_read_noise
             );
-            assert_eq!(ram_addr_have, ram_addr_want);
+            this_cycle_measurement.ram_addr_read_noise = ram_addr_read_noise;
+            assert_eq!(
+                ram_addr_have, ram_addr_want,
+                "ram addr noise {ram_addr_read_noise:.2}"
+            );
+            let ram_val_read_noise = self
+                .ram_val_fhe_uint
+                .noise(module, ram_val_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   ram_val : {ram_val_have:08x} - {ram_val_want:08x} - {:.2}",
-                self.ram_val_fhe_uint
-                    .noise(module, ram_val_want, sk, scratch)
-                    .max()
-                    .log2()
+                ram_val_read_noise
             );
+            this_cycle_measurement.ram_val_read_noise = ram_val_read_noise;
             assert_eq!(ram_val_have, ram_val_want);
+
         }
     }
 
@@ -1167,14 +1195,17 @@ impl<BE: Backend> Interpreter<BE> {
             let rd_have: u32 = self.rd_val_fhe_uint.decrypt(module, sk, scratch);
             let rd_want: u32 = vm_debug.rd_val;
             println!("WRITE RD");
+            let rd_val_fhe_uint_noise = self
+                .rd_val_fhe_uint
+                .noise(module, rd_want, sk, scratch)
+                .max()
+                .log2();
             println!(
                 "   rd_val  : {rd_have:08x} - {rd_want:08x} - {:.2}",
-                self.rd_val_fhe_uint
-                    .noise(module, rd_want, sk, scratch)
-                    .max()
-                    .log2()
+                rd_val_fhe_uint_noise
             );
             assert_eq!(rd_have, rd_want);
+            this_cycle_measurement.rd_val_fhe_uint_noise = rd_val_fhe_uint_noise;
 
             let mut registers_have: Vec<u32> = vec![0u32; 32];
             self.registers

@@ -136,6 +136,46 @@ impl Measurements {
             .sum::<Duration>();
         total_cycle_time / self.cycle_measurements.len() as u32
     }
+
+    #[allow(dead_code)]
+    pub fn get_pc_val_fhe_uint_noise_list(&self) -> Vec<f64> {
+        self.cycle_measurements
+            .iter()
+            .map(|measurement| measurement.pc_val_fhe_uint_noise)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_imm_val_fhe_uint_noise_list(&self) -> Vec<f64> {
+        self.cycle_measurements
+            .iter()
+            .map(|measurement| measurement.imm_val_fhe_uint_noise)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_ram_addr_read_noise_list(&self) -> Vec<f64> {
+        self.cycle_measurements
+            .iter()
+            .map(|measurement| measurement.ram_addr_read_noise)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_ram_val_read_noise_list(&self) -> Vec<f64> {
+        self.cycle_measurements
+            .iter()
+            .map(|measurement| measurement.ram_val_read_noise)
+            .collect()
+    }
+
+    #[allow(dead_code)]
+    pub fn get_rd_val_fhe_uint_noise_list(&self) -> Vec<f64> {
+        self.cycle_measurements
+            .iter()
+            .map(|measurement| measurement.rd_val_fhe_uint_noise)
+            .collect()
+    }
 }
 
 pub struct PerCycleMeasurements {
@@ -160,6 +200,14 @@ pub struct PerCycleMeasurements {
     // Layer two - update_pc
     pub cycle_time_pcu_prepare: Duration,
     pub cycle_time_pc_update_bdd: Duration,
+
+    pub pc_val_fhe_uint_noise: f64,
+    pub imm_val_fhe_uint_noise: f64,
+
+    pub ram_addr_read_noise: f64,
+    pub ram_val_read_noise: f64,
+
+    pub rd_val_fhe_uint_noise: f64,
 }
 
 impl PerCycleMeasurements {
@@ -184,6 +232,12 @@ impl PerCycleMeasurements {
             // Layer two - update_pc
             cycle_time_pcu_prepare: Duration::from_secs(0),
             cycle_time_pc_update_bdd: Duration::from_secs(0),
+
+            pc_val_fhe_uint_noise: 0.0,
+            imm_val_fhe_uint_noise: 0.0,
+            ram_addr_read_noise: 0.0,
+            ram_val_read_noise: 0.0,
+            rd_val_fhe_uint_noise: 0.0,
         }
     }
 }

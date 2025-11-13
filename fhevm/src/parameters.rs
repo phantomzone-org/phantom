@@ -14,7 +14,7 @@ use poulpy_schemes::tfhe::{
 const N_GLWE: u32 = 1024;
 const N_LWE: u32 = 574;
 const LWE_BLOCK_SIZE: u32 = 7;
-const BASE2K: u32 = 15;
+const BASE2K: u32 = 17;
 const RANK: u32 = 2;
 const K_GLWE_PT: u32 = 2;
 const K_GLWE_CT: u32 = BASE2K * 3;
