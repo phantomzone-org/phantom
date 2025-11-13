@@ -1,14 +1,11 @@
 use poulpy_hal::{
-    api::ModuleN,
+    api::{ModuleLogN, ModuleN},
     layouts::{Backend, Data, DataMut, DataRef, Module, ScalarZnx, Scratch, ZnxViewMut},
     source::Source,
 };
 
 use poulpy_core::{
-    layouts::{
-        GGSWInfos, GGSWPreparedFactory, GLWEInfos, GLWESecretPreparedFactory,
-        GLWESecretPreparedToRef, LWEInfos,
-    },
+    layouts::{GGSWInfos, GGSWPreparedFactory, GLWEInfos, GLWESecretPreparedToRef, LWEInfos},
     GGSWEncryptSk, GetDistribution, ScratchTakeCore,
 };
 use poulpy_schemes::tfhe::{
@@ -20,7 +17,7 @@ use poulpy_schemes::tfhe::{
 };
 
 use crate::{
-    base::Base2D, coordinate::TakeCoordinate, coordinate_prepared::CoordinatePrepared,
+    coordinate::Coordinate, coordinate_prepared::CoordinatePrepared,
     parameters::CryptographicParameters,
 };
 
@@ -33,7 +30,6 @@ use crate::{
 /// N is smaller than the maximum supported address.
 pub(crate) struct AddressWrite<D: Data, BE: Backend> {
     pub coordinates: Vec<CoordinatePrepared<D, BE>>,
-    pub base2d: Base2D,
 }
 
 impl<D: Data, BE: Backend> LWEInfos for AddressWrite<D, BE> {
@@ -69,26 +65,32 @@ impl<D: Data, BE: Backend> GGSWInfos for AddressWrite<D, BE> {
 impl<BE: Backend> AddressWrite<Vec<u8>, BE> {
     #[allow(dead_code)]
     /// Allocates a new [Address].
-    pub fn alloc_from_params(params: &CryptographicParameters<BE>, base_2d: &Base2D) -> Self
+    pub fn alloc_from_params(params: &CryptographicParameters<BE>, max_value: u32) -> Self
     where
         Module<BE>: GGSWPreparedFactory<BE>,
     {
-        Self::alloc_from_infos(params.module(), &params.ggsw_infos(), base_2d)
+        Self::alloc_from_infos(params.module(), &params.ggsw_infos(), max_value)
     }
 
-    pub fn alloc_from_infos<M, A>(module: &M, infos: &A, base_2d: &Base2D) -> Self
+    pub fn alloc_from_infos<M, A>(module: &M, infos: &A, max_value: u32) -> Self
     where
-        M: GGSWPreparedFactory<BE>,
+        M: ModuleLogN + GGSWPreparedFactory<BE>,
         A: GGSWInfos,
     {
+        let max_value_bits =
+            (u32::BITS - (max_value - 1).leading_zeros()).div_ceil(module.log_n() as u32);
+
         Self {
-            coordinates: base_2d
-                .0
-                .iter()
-                .map(|base1d| CoordinatePrepared::alloc(module, infos, base1d))
+            coordinates: (0..max_value_bits)
+                .map(|_| CoordinatePrepared::alloc_from_infos(module, infos))
                 .collect(),
-            base2d: base_2d.clone(),
         }
+    }
+}
+
+impl<D: Data, BE: Backend> AddressWrite<D, BE> {
+    fn max_value(&self) -> u32 {
+        (1 << (self.coordinates[0].log_n() * self.coordinates.len())) - 1
     }
 }
 
@@ -104,22 +106,23 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
         source_xe: &mut Source,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GGSWEncryptSk<BE> + GLWESecretPreparedFactory<BE> + GGSWPreparedFactory<BE>,
+        M: ModuleN + ModuleLogN + GGSWEncryptSk<BE> + GGSWPreparedFactory<BE>,
         S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        debug_assert!(self.base2d.max() > value as usize);
+        debug_assert!(self.max_value() > value);
 
         let mut remain: usize = value as _;
+        let log_n = module.log_n();
+        let mask = (1 << log_n) - 1;
 
-        for i in 0..self.base2d.0.len() {
-            let base1d = &self.base2d.0[i];
-            let max: usize = base1d.max();
-            let k: usize = remain & (max - 1);
-            let (mut tmp, scratch_1) = scratch.take_coordinate(self.at(i), base1d);
-            tmp.encrypt_sk(k as i64, module, sk, source_xa, source_xe, scratch_1);
-            self.at_mut(i).prepare(module, &tmp, scratch_1);
-            remain /= max;
+        let (tmp, scratch_1) = scratch.take_ggsw(self.at(0));
+        let mut coordinate_tmp: Coordinate<&mut [u8]> = Coordinate(tmp);
+        for coordinate in self.coordinates.iter_mut() {
+            let k: usize = remain & mask;
+            coordinate_tmp.encrypt_sk(k as i64, module, sk, source_xa, source_xe, scratch_1);
+            coordinate.prepare(module, &coordinate_tmp, scratch_1);
+            remain >>= log_n;
         }
     }
 
@@ -166,31 +169,26 @@ impl<D: DataMut, BE: Backend> AddressWrite<D, BE> {
         let mut test_vector: ScalarZnx<Vec<u8>> = ScalarZnx::alloc(module.n(), 1);
         test_vector.raw_mut()[0] = 1;
 
+        let log_n = self.log_n();
+
         let (mut ggsw, scratch_1) = scratch.take_ggsw(self);
 
         let mut bit_rsh: usize = bit_start;
         for coordinate in self.coordinates.iter_mut() {
-            let mut bit_lsh: usize = 0;
-            let base1d = coordinate.base1d.clone();
+            // X^{(fheuint>>bit_rsh) % 2^bit_mask)<<bit_lsh}
+            module.scalar_to_ggsw_blind_rotation(
+                &mut ggsw,
+                &test_vector,
+                fheuint,
+                true,
+                bit_rsh,
+                log_n,
+                0,
+                scratch_1,
+            );
 
-            for (ggsw_prepared, bit_mask) in coordinate.value.iter_mut().zip(base1d.0) {
-                // X^{(fheuint>>bit_rsh) % 2^bit_mask)<<bit_lsh}
-                module.scalar_to_ggsw_blind_rotation(
-                    &mut ggsw,
-                    &test_vector,
-                    fheuint,
-                    true,
-                    bit_rsh,
-                    bit_mask as usize,
-                    bit_lsh,
-                    scratch_1,
-                );
-
-                ggsw_prepared.prepare(module, &ggsw, scratch_1);
-
-                bit_lsh += bit_mask as usize;
-                bit_rsh += bit_mask as usize;
-            }
+            coordinate.0.prepare(module, &ggsw, scratch_1);
+            bit_rsh += log_n as usize;
         }
     }
 }
@@ -204,6 +202,7 @@ impl<D: Data, BE: Backend> AddressWrite<D, BE> {
         &self.coordinates[i]
     }
 
+    #[allow(dead_code)]
     pub(crate) fn at_mut(&mut self, i: usize) -> &mut CoordinatePrepared<D, BE> {
         &mut self.coordinates[i]
     }

@@ -59,7 +59,7 @@ where
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
-{   
+{
     let threads = 2;
 
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();

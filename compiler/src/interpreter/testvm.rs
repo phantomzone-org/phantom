@@ -406,6 +406,7 @@ impl TestVM {
         while counter < self.max_cycles {
             self.run();
             counter += 1;
+            //println!("ram: {:?}", cast_mut::<u8,u32>(&self.ram.data));
         }
     }
 

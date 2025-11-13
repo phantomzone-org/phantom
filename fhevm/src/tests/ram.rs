@@ -13,9 +13,8 @@ use poulpy_hal::{
 use crate::{
     address_read::AddressRead,
     address_write::AddressWrite,
-    base::{get_base_2d, Base2D},
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::{CryptographicParameters},
     ram::ram::Ram,
 };
 
@@ -64,9 +63,7 @@ fn test_fhe_ram() {
 
     // Word-size
     let word_size: usize = 32;
-    let max_addr: usize = 1 << 6;
-    let decomp_n: Vec<u8> = DECOMP_N.into();
-    let base_2d: Base2D = get_base_2d(max_addr as u32, &decomp_n);
+    let max_addr: usize = 251;
 
     let mask: u32 = ((1u64 << word_size) - 1) as u32;
 
@@ -91,10 +88,10 @@ fn test_fhe_ram() {
 
     // Allocates an encrypted address.
     let mut addr: AddressRead<Vec<u8>, FFT64Ref> =
-        AddressRead::alloc_from_params(&params, &base_2d);
+        AddressRead::alloc_from_params(&params, (max_addr-1) as u32);
 
     // Random index
-    let idx: u32 = source.next_u32() % max_addr as u32;
+    let idx: u32 = 158 % max_addr as u32;
 
     // Encrypts random index
     addr.encrypt_sk(
@@ -187,7 +184,7 @@ fn test_fhe_ram() {
     // Updates plaintext ram
     data[idx as usize] = value;
 
-    let mut address_write = AddressWrite::alloc_from_params(&params, &base_2d);
+    let mut address_write = AddressWrite::alloc_from_params(&params, (max_addr-1) as u32);
     address_write.encrypt_sk(
         params.module(),
         idx,

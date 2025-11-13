@@ -49,7 +49,6 @@ struct Input {
 }
 
 fn main() {
-
     let threads = 16;
 
     let compiler = CompileOpts::new("guest");
@@ -73,7 +72,7 @@ fn main() {
         account: account.clone(),
     };
 
-    let max_cycles = 1000;
+    let max_cycles = 300;
     // let max_cycles = 10; // For testing purposes
 
     let mut enc_vm = pz.encrypted_vm::<true>(to_u8_slice(&input), max_cycles);

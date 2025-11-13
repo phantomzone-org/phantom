@@ -1,8 +1,5 @@
 use crate::{
-    address_read::AddressRead,
-    address_write::AddressWrite,
-    base::{get_base_2d, Base1D, Base2D},
-    parameters::{CryptographicParameters, DECOMP_N},
+    address_read::AddressRead, address_write::AddressWrite, parameters::CryptographicParameters,
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
@@ -64,67 +61,61 @@ fn test_fhe_uint_prepared_to_address_read() {
         scratch.borrow(),
     );
 
-    let base_2d_ram: Base2D = get_base_2d(max_addr as u32, &DECOMP_N.to_vec());
-
     let mut address: AddressRead<Vec<u8>, FFT64Ref> =
-        AddressRead::alloc_from_infos(params.module(), ggsw_infos, &base_2d_ram);
+        AddressRead::alloc_from_infos(params.module(), ggsw_infos, max_addr - 1);
 
     address.set_from_fhe_uint_prepared(params.module(), &fheuint, 2, scratch.borrow());
 
+    let mask: u32 = (1 << params.module().log_n()) - 1;
+
     let mut bit_rsh: usize = 2;
+
     for coordinate in address.coordinates.iter_mut() {
-        let mut bit_lsh: usize = 0;
-        let base1d: Base1D = coordinate.base1d.clone();
+        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
 
-        for (ggsw, bit_mask) in coordinate.value.iter_mut().zip(base1d.0) {
-            let mask: u32 = (1 << bit_mask) - 1;
+        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
 
-            let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
-            pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
+        glwe.encrypt_sk(
+            params.module(),
+            &pt_want,
+            &sk_glwe_prep,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
 
-            let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
+        let rot: i64 = ((k >> bit_rsh) & mask) as i64;
 
-            glwe.encrypt_sk(
-                params.module(),
-                &pt_want,
-                &sk_glwe_prep,
-                &mut source_xa,
-                &mut source_xe,
-                scratch.borrow(),
-            );
+        params
+            .module()
+            .glwe_rotate_inplace(-rot, &mut pt_want, scratch.borrow());
 
-            let rot: i64 = (((k >> bit_rsh) & mask) << bit_lsh) as i64;
+        coordinate.product_inplace(params.module(), &mut glwe, scratch.borrow());
 
-            params
-                .module()
-                .glwe_rotate_inplace(-rot, &mut pt_want, scratch.borrow());
+        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        glwe.decrypt(
+            params.module(),
+            &mut pt_have,
+            &sk_glwe_prep,
+            scratch.borrow(),
+        );
 
-            glwe.external_product_inplace(params.module(), ggsw, scratch.borrow());
+        println!(
+            "noise: {}",
+            glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
+                .std()
+                .log2()
+        );
 
-            let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
-            glwe.decrypt(
-                params.module(),
-                &mut pt_have,
-                &sk_glwe_prep,
-                scratch.borrow(),
-            );
+        glwe.assert_noise(
+            params.module(),
+            &sk_glwe_prep,
+            &pt_want,
+            -(params.base2k().as_u32() as f64),
+        );
 
-            println!(
-                "noise: {}",
-                glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
-                    .std()
-                    .log2()
-            );
-
-            glwe.assert_noise(
-                params.module(),
-                &sk_glwe_prep,
-                &pt_want,
-                -(params.base2k().as_u32() as f64),
-            );
-            bit_lsh += bit_mask as usize;
-            bit_rsh += bit_mask as usize;
-        }
+        bit_rsh += params.module().log_n() as usize;
     }
 }
 
@@ -174,66 +165,58 @@ fn test_fhe_uint_prepared_to_address_write() {
         scratch.borrow(),
     );
 
-    let base_2d_ram: Base2D = get_base_2d(max_addr as u32, &DECOMP_N.to_vec());
-
     let mut address: AddressWrite<Vec<u8>, FFT64Ref> =
-        AddressWrite::alloc_from_infos(params.module(), ggsw_infos, &base_2d_ram);
+        AddressWrite::alloc_from_infos(params.module(), ggsw_infos, max_addr - 1);
 
     address.set_from_fhe_uint_prepared(params.module(), &fheuint, 0, scratch.borrow());
 
+    let mask: u32 = (1 << params.module().log_n()) - 1;
+
     let mut bit_rsh: usize = 0;
     for coordinate in address.coordinates.iter_mut() {
-        let mut bit_lsh: usize = 0;
-        let base1d: Base1D = coordinate.base1d.clone();
+        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
 
-        for (ggsw, bit_mask) in coordinate.value.iter_mut().zip(base1d.0) {
-            let mask: u32 = (1 << bit_mask) - 1;
+        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
 
-            let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
-            pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
+        glwe.encrypt_sk(
+            params.module(),
+            &pt_want,
+            &sk_glwe_prep,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
 
-            let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
+        let rot: i64 = ((k >> bit_rsh) & mask) as i64;
 
-            glwe.encrypt_sk(
-                params.module(),
-                &pt_want,
-                &sk_glwe_prep,
-                &mut source_xa,
-                &mut source_xe,
-                scratch.borrow(),
-            );
+        params
+            .module()
+            .glwe_rotate_inplace(rot, &mut pt_want, scratch.borrow());
 
-            let rot: i64 = (((k >> bit_rsh) & mask) << bit_lsh) as i64;
+        coordinate.product_inplace(params.module(), &mut glwe, scratch.borrow());
 
-            params
-                .module()
-                .glwe_rotate_inplace(rot, &mut pt_want, scratch.borrow());
+        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        glwe.decrypt(
+            params.module(),
+            &mut pt_have,
+            &sk_glwe_prep,
+            scratch.borrow(),
+        );
 
-            glwe.external_product_inplace(params.module(), ggsw, scratch.borrow());
+        println!(
+            "noise: {}",
+            glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
+                .std()
+                .log2()
+        );
 
-            let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
-            glwe.decrypt(
-                params.module(),
-                &mut pt_have,
-                &sk_glwe_prep,
-                scratch.borrow(),
-            );
-
-            println!(
-                "noise: {}",
-                glwe.noise(params.module(), &sk_glwe_prep, &pt_want, scratch.borrow())
-                    .std()
-                    .log2()
-            );
-
-            glwe.assert_noise(
-                params.module(),
-                &sk_glwe_prep,
-                &pt_want,
-                -(params.base2k().as_u32() as f64),
-            );
-            bit_lsh += bit_mask as usize;
-            bit_rsh += bit_mask as usize;
-        }
+        glwe.assert_noise(
+            params.module(),
+            &sk_glwe_prep,
+            &pt_want,
+            -(params.base2k().as_u32() as f64),
+        );
+        bit_rsh += params.module().log_n() as usize;
     }
 }

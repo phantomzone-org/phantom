@@ -1,6 +1,6 @@
 use crate::{
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::CryptographicParameters,
     rd_update::Evaluate,
     Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
@@ -67,8 +67,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let mut source_xs: Source = Source::new([0u8; 32]);
     let mut source_xa: Source = Source::new([0u8; 32]);
@@ -100,7 +99,7 @@ where
 
     let instruction: Instruction = instructions.get_raw(idx);
     let correct_imm: u32 = instruction.get_imm();
-    let (rs1, rs2, rd) = instruction.get_registers();
+    let (rs2, rs1, rd) = instruction.get_registers();
     let correct_rs1: u32 = rs1 as u32;
     let correct_rs2: u32 = rs2 as u32;
     let correct_rd: u32 = rd as u32;
@@ -225,8 +224,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let mut source_xs: Source = Source::new([0u8; 32]);
     let mut source_xa: Source = Source::new([0u8; 32]);
@@ -389,8 +387,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
@@ -426,7 +423,7 @@ where
     for idx in 0..instructions_u32.len() {
         let instruction = instructions.get_raw(idx);
         let correct_imm = instruction.get_imm();
-        let (rs1, rs2, rd) = instruction.get_registers();
+        let (rs2, rs1, rd) = instruction.get_registers();
         let correct_rs1: u32 = rs1 as u32;
         let correct_rs2: u32 = rs2 as u32;
         let correct_rd: u32 = rd as u32;
@@ -557,8 +554,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         // 258455

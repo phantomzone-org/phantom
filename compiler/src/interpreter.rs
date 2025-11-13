@@ -7,10 +7,10 @@ use elf::{
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::{CryptographicParameters},
     Interpreter,
 };
-use poulpy_backend::FFT64Ref as BackendImpl;
+use poulpy_backend::FFT64Avx as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
 use poulpy_hal::{
@@ -355,14 +355,12 @@ impl Phantom {
                 &params,
                 self.boot_rom.size >> 2,
                 self.boot_ram.size >> 2,
-                DECOMP_N.into(),
             )
         } else {
             Interpreter::new(
                 &params,
                 self.boot_rom.size >> 2,
                 self.boot_ram.size >> 2,
-                DECOMP_N.into(),
             )
         };
 

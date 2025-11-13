@@ -1,6 +1,6 @@
 use crate::{
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::CryptographicParameters,
     Instruction, InstructionsParser, Interpreter, RV32I,
 };
 use plotters::prelude::*;
@@ -93,7 +93,7 @@ where
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let mut interpreter: Interpreter<BE> =
-        Interpreter::new_with_debug(&params, rom.len(), ram.len(), DECOMP_N.into());
+        Interpreter::new_with_debug(&params, rom.len(), ram.len());
 
     let mut instructions = InstructionsParser::new();
     for inst in &rom {
@@ -225,7 +225,7 @@ where
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let mut interpreter: Interpreter<BE> =
-        Interpreter::new_with_debug(&params, rom.len(), ram.len(), DECOMP_N.into());
+        Interpreter::new_with_debug(&params, rom.len(), ram.len());
 
     let mut instructions = InstructionsParser::new();
     for inst in &rom {
@@ -292,7 +292,7 @@ where
                 interpreter.measurements.get_rd_val_fhe_uint_noise_list(),
             ),
         ];
-    
+
         if series.iter().any(|(_, data)| !data.is_empty()) {
             let plot_dir = std::path::PathBuf::from("artifacts");
             if let Err(err) = std::fs::create_dir_all(&plot_dir) {
@@ -308,7 +308,6 @@ where
             }
         }
     }
-
 }
 
 fn plot_noise_progression<P: AsRef<std::path::Path>>(

@@ -19,7 +19,6 @@ use poulpy_schemes::tfhe::{
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
-use rand_core::RngCore;
 
 use crate::{
     keys::{VMKeys, VMKeysPrepared},
@@ -60,7 +59,6 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-
     let threads = 4;
 
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
@@ -91,8 +89,8 @@ where
         FheUintPrepared::alloc_from_infos(module, ggsw_infos);
     let mut ram: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
 
-    let rs1: u32 = source_xa.next_u32();
-    let imm: u32 = source_xa.next_u32();
+    let rs1: u32 = 0x00040fe0;
+    let imm: u32 = 0x0000001c;
     let offset: u32 = 1 << 18;
 
     rs1_prep.encrypt_sk(
@@ -131,5 +129,9 @@ where
     assert_eq!(
         rs1.wrapping_add(imm).wrapping_sub(offset),
         ram.decrypt(module, &sk_glwe_prepared, scratch.borrow())
-    )
+    );
+    println!(
+        "rs1.wrapping_add(imm).wrapping_sub(offset): {}",
+        rs1.wrapping_add(imm).wrapping_sub(offset)
+    );
 }

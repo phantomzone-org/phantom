@@ -3,8 +3,8 @@ use std::thread;
 use poulpy_core::{
     layouts::{
         GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos, GGSWPreparedFactory,
-        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedFactory,
-        GLWESecretPreparedToRef, GLWEToMut, GetGaloisElement, TorusPrecision, GLWE,
+        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedToRef, GLWEToMut,
+        GetGaloisElement, TorusPrecision, GLWE,
     },
     GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker,
     GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
@@ -74,7 +74,7 @@ impl Ram {
         source_xe: &mut Source,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
+        M: ModuleN + GLWEEncryptSk<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         S: GLWESecretPreparedToRef<BE>,
     {
@@ -389,6 +389,7 @@ struct SubRam {
 
 impl SubRam {
     fn alloc<BE: Backend>(params: &CryptographicParameters<BE>, max_addr: usize) -> Self {
+
         let module: &Module<BE> = params.module();
 
         let glwe_infos: GLWELayout = params.glwe_ct_infos();
@@ -431,7 +432,7 @@ impl SubRam {
         source_xe: &mut Source,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
+        M: ModuleN + GLWEEncryptSk<BE>,
         S: GLWESecretPreparedToRef<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
@@ -545,7 +546,7 @@ impl SubRam {
             } else if i == 0 {
                 coordinate.product(module, res, &self.data[0], scratch);
             } else {
-                coordinate.product(module, res, &self.tree[i][0], scratch);
+                coordinate.product(module, res, &self.tree[i-1][0], scratch);
             }
         }
         res.trace_inplace(module, 0, keys, scratch);
@@ -609,7 +610,7 @@ impl SubRam {
             } else if i == 0 {
                 coordinate.product_inplace(module, &mut self.data[0], scratch);
             } else {
-                coordinate.product_inplace(module, &mut self.tree[i][0], scratch);
+                coordinate.product_inplace(module, &mut self.tree[i-1][0], scratch);
             }
         }
         self.state = true;
