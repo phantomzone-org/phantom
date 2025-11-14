@@ -14,7 +14,7 @@ use crate::{
     address_read::AddressRead,
     address_write::AddressWrite,
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters},
+    parameters::CryptographicParameters,
     ram::ram::Ram,
 };
 
@@ -37,14 +37,15 @@ fn test_fhe_ram() {
 
     // See parameters.rs for configuration
     let params: CryptographicParameters<FFT64Ref> = CryptographicParameters::<FFT64Ref>::new();
-    let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
 
     // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     // Generates a new secret-key along with the public evaluation keys.
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
+
+    let fhe_uint_infos: &GLWELayout = &params.fhe_uint_infos();
 
     let keys: VMKeys<Vec<u8>, CGGI> =
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
@@ -68,7 +69,7 @@ fn test_fhe_ram() {
     let mask: u32 = ((1u64 << word_size) - 1) as u32;
 
     // Instantiates the FHE-RAM
-    let mut ram: Ram = Ram::new(&params, word_size, max_addr);
+    let mut ram: Ram = Ram::new(&params.ram_infos(), word_size, max_addr);
 
     // Allocates some dummy data
     let mut data: Vec<u32> = vec![0u32; ram.max_addr()];
@@ -88,7 +89,7 @@ fn test_fhe_ram() {
 
     // Allocates an encrypted address.
     let mut addr: AddressRead<Vec<u8>, FFT64Ref> =
-        AddressRead::alloc_from_params(&params, (max_addr-1) as u32);
+        AddressRead::alloc_from_params(params.module(), &params.address_ram_infos(), (max_addr - 1) as u32);
 
     // Random index
     let idx: u32 = 158 % max_addr as u32;
@@ -105,7 +106,7 @@ fn test_fhe_ram() {
 
     // Reads from the FHE-RAM
     let start: Instant = Instant::now();
-    let mut res: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
+    let mut res: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(fhe_uint_infos);
     ram.read(
         threads,
         params.module(),
@@ -122,17 +123,18 @@ fn test_fhe_ram() {
         data[idx as usize],
         res.decrypt(params.module(), &sk_prep, scratch.borrow())
     );
-    assert!(
-        res.noise(
+    let noise = res.noise(
             params.module(),
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
         )
         .std()
-        .log2()
-            < -32.0
-    );
+        .log2();
+    assert!(
+        noise
+            < -16.0,
+    "{noise} > -16");
 
     let start: Instant = Instant::now();
     ram.read_prepare_write(
@@ -155,23 +157,24 @@ fn test_fhe_ram() {
         data[idx as usize],
         res.decrypt(params.module(), &sk_prep, scratch.borrow())
     );
-    assert!(
-        res.noise(
+    let noise = res.noise(
             params.module(),
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
         )
         .std()
-        .log2()
-            < -32.0
-    );
+        .log2();
+    assert!(
+        noise
+            < -16.0,
+    "{noise} > -16");
 
     // Value to write on the FHE-RAM
     let value: u32 = source.next_u32() & mask;
 
     // Encryptes value to write on the FHE-RAM
-    let mut ct_write: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
+    let mut ct_write: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(fhe_uint_infos);
     ct_write.encrypt_sk(
         params.module(),
         value,
@@ -184,7 +187,7 @@ fn test_fhe_ram() {
     // Updates plaintext ram
     data[idx as usize] = value;
 
-    let mut address_write = AddressWrite::alloc_from_params(&params, (max_addr-1) as u32);
+    let mut address_write = AddressWrite::alloc_from_params(params.module(), &params.address_ram_infos(), (max_addr - 1) as u32);
     address_write.encrypt_sk(
         params.module(),
         idx,
@@ -222,17 +225,19 @@ fn test_fhe_ram() {
         data[idx as usize],
         res.decrypt(params.module(), &sk_prep, scratch.borrow())
     );
-    assert!(
-        res.noise(
+    let noise = res.noise(
             params.module(),
             data[idx as usize],
             &sk_prep,
             scratch.borrow()
         )
         .std()
-        .log2()
-            < -32.0
-    );
+        .log2();
+
+    assert!(
+        noise
+            < -16.0,
+    "{noise} > -16");
 
     let mut ram_decrypted: Vec<u32> = vec![0u32; ram.max_addr()];
     ram.decrypt(

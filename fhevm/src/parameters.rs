@@ -1,6 +1,5 @@
 use poulpy_core::layouts::{
-    Base2K, Degree, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout,
-    GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
+    Base2K, Degree, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision
 };
 use poulpy_hal::{
     api::ModuleNew,
@@ -15,26 +14,38 @@ const LOGN_GLWE: u32 = 10;
 const N_GLWE: u32 = 1 << LOGN_GLWE;
 const N_LWE: u32 = 574;
 const LWE_BLOCK_SIZE: u32 = 7;
-const BASE2K: u32 = 17;
-const RANK: u32 = 2;
+const BASE2K: u32 = 14;
+const RANK: u32 = 3;
 const K_GLWE_PT: u32 = 2;
-const K_GLWE_CT: u32 = BASE2K * 3;
-const K_EVK_GLWE: u32 = BASE2K * 4;
+
+const K_ROM: u32 = BASE2K * 3;
+const K_RAM: u32 = BASE2K * 3;
+const K_FHE_UINT: u32 = BASE2K * 3;
+
 const K_EVK_RAM_READ: u32 = BASE2K * 4;
-const K_GGSW: u32 = BASE2K * 4;
-const K_EVK_GGSW: u32 = BASE2K * 5;
+const K_FHE_UINT_PREPARED: u32 = BASE2K * 5;
+const K_ADDRESS: u32 = BASE2K * 5;
+
+const K_PBS: u32 = BASE2K * 6;
 
 pub struct CryptographicParameters<B: Backend> {
-    module: Module<B>, // FFT/NTT tables.
+    module: Module<B>,
     n_lwe: usize,
     lwe_block_size: usize,
     base2k: Base2K,
     rank: Rank,
-    k_glwe_pt: TorusPrecision,
-    k_glwe_ct: TorusPrecision,
-    k_evk_glwe: TorusPrecision,
-    k_ggsw: TorusPrecision,
-    k_evk_ggsw: TorusPrecision,
+    k_pt: TorusPrecision,
+
+    k_fhe_uint_prepared: TorusPrecision,
+    k_fhe_uint: TorusPrecision,
+
+    k_rom: TorusPrecision,
+    k_ram: TorusPrecision,
+    k_evk_ram: TorusPrecision,
+
+    k_address: TorusPrecision,
+
+    k_pbs: TorusPrecision,
 }
 
 impl<B: Backend> CryptographicParameters<B>
@@ -48,11 +59,14 @@ where
             lwe_block_size: LWE_BLOCK_SIZE as usize,
             base2k: BASE2K.into(),
             rank: RANK.into(),
-            k_glwe_ct: K_GLWE_CT.into(),
-            k_glwe_pt: K_GLWE_PT.into(),
-            k_evk_glwe: K_EVK_GLWE.into(),
-            k_ggsw: K_GGSW.into(),
-            k_evk_ggsw: K_EVK_GGSW.into(),
+            k_pt: K_GLWE_PT.into(),
+            k_fhe_uint_prepared: K_FHE_UINT_PREPARED.into(),
+            k_fhe_uint: K_FHE_UINT.into(),
+            k_rom: K_ROM.into(),
+            k_ram: K_RAM.into(),
+            k_evk_ram: K_EVK_RAM_READ.into(),
+            k_address: K_ADDRESS.into(),
+            k_pbs: K_PBS.into(),
         }
     }
 }
@@ -61,52 +75,80 @@ impl<B: Backend> CryptographicParameters<B> {
     pub fn glwe_pt_infos(&self) -> GLWELayout {
         GLWELayout {
             n: self.module.n().into(),
-            k: self.k_glwe_pt(),
+            k: self.k_pt(),
             base2k: self.base2k(),
             rank: self.rank(),
         }
     }
 
-    pub fn glwe_ct_infos(&self) -> GLWELayout {
+    pub fn fhe_uint_infos(&self) -> GLWELayout {
         GLWELayout {
             n: self.module.n().into(),
-            k: self.k_glwe_ct(),
+            k: self.k_fhe_uint(),
             base2k: self.base2k(),
             rank: self.rank(),
         }
     }
 
-    pub fn evk_glwe_infos(&self) -> GGLWELayout {
-        GGLWELayout {
-            n: self.module.n().into(),
-            base2k: self.base2k(),
-            k: self.k_evk_glwe(),
-            rank_in: self.rank(),
-            rank_out: self.rank(),
-            dnum: self.k_glwe_ct().div_ceil(self.base2k).into(),
-            dsize: Dsize(1),
-        }
-    }
-
-    pub fn ggsw_infos(&self) -> GGSWLayout {
+    pub fn fhe_uint_prepared_infos(&self) -> GGSWLayout {
         GGSWLayout {
             n: self.module.n().into(),
+            k: self.k_fhe_uint_prepared(),
             base2k: self.base2k(),
-            k: self.k_ggsw(),
             rank: self.rank(),
-            dnum: self.k_glwe_ct().div_ceil(self.base2k).into(),
+            dnum: self.k_address().div_ceil(self.base2k).into(),
             dsize: Dsize(1),
         }
     }
 
-    pub fn evk_ggsw_infos(&self) -> GGLWELayout {
+    pub fn address_rom_infos(&self) -> GGSWLayout {
+        GGSWLayout {
+            n: self.module.n().into(),
+            k: self.k_address(),
+            base2k: self.base2k(),
+            rank: self.rank(),
+            dnum: self.k_rom().div_ceil(self.base2k).into(),
+            dsize: Dsize(1),
+        }
+    }
+
+    pub fn address_ram_infos(&self) -> GGSWLayout {
+        GGSWLayout {
+            n: self.module.n().into(),
+            k: self.k_address(),
+            base2k: self.base2k(),
+            rank: self.rank(),
+            dnum: self.k_ram().div_ceil(self.base2k).into(),
+            dsize: Dsize(1),
+        }
+    }
+
+    pub fn rom_infos(&self) -> GLWELayout {
+        GLWELayout {
+            n: self.module.n().into(),
+            k: self.k_rom(),
+            base2k: self.base2k(),
+            rank: self.rank(),
+        }
+    }
+
+    pub fn ram_infos(&self) -> GLWELayout {
+        GLWELayout {
+            n: self.module.n().into(),
+            k: self.k_ram(),
+            base2k: self.base2k(),
+            rank: self.rank(),
+        }
+    }
+
+    pub fn evk_ram_infos(&self) -> GGLWELayout {
         GGLWELayout {
             n: self.module.n().into(),
             base2k: self.base2k(),
-            k: self.k_evk_ggsw(),
+            k: self.k_evk_ram(),
             rank_in: self.rank(),
             rank_out: self.rank(),
-            dnum: self.k_ggsw().div_ceil(self.base2k).into(),
+            dnum: self.k_ram().div_ceil(self.base2k).into(),
             dsize: Dsize(1),
         }
     }
@@ -131,24 +173,36 @@ impl<B: Backend> CryptographicParameters<B> {
         self.base2k
     }
 
-    pub fn k_glwe_pt(&self) -> TorusPrecision {
-        self.k_glwe_pt
+    pub fn k_pt(&self) -> TorusPrecision {
+        self.k_pt
     }
 
-    pub fn k_glwe_ct(&self) -> TorusPrecision {
-        self.k_glwe_ct
+    pub fn k_rom(&self) -> TorusPrecision {
+        self.k_rom
     }
 
-    pub fn k_evk_glwe(&self) -> TorusPrecision {
-        self.k_evk_glwe
+    pub fn k_fhe_uint(&self) -> TorusPrecision {
+        self.k_fhe_uint
     }
 
-    pub fn k_ggsw(&self) -> TorusPrecision {
-        self.k_ggsw
+    pub fn k_fhe_uint_prepared(&self) -> TorusPrecision {
+        self.k_fhe_uint_prepared
     }
 
-    pub fn k_evk_ggsw(&self) -> TorusPrecision {
-        self.k_evk_ggsw
+    pub fn k_ram(&self) -> TorusPrecision {
+        self.k_ram
+    }
+
+    pub fn k_evk_ram(&self) -> TorusPrecision {
+        self.k_evk_ram
+    }
+
+    pub fn k_address(&self) -> TorusPrecision {
+        self.k_address
+    }
+
+    pub fn k_pbs(&self) -> TorusPrecision{
+        self.k_pbs
     }
 
     pub fn rank(&self) -> Rank {
@@ -163,24 +217,24 @@ impl<B: Backend> CryptographicParameters<B> {
                 n_glwe: self.module.n().into(),
                 n_lwe: self.n_lwe.into(),
                 base2k: self.base2k,
-                k: self.k_evk_ggsw(),
-                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
+                k: self.k_pbs(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
                 rank: self.rank(),
             },
             layout_atk: GLWEAutomorphismKeyLayout {
                 n: self.module.n().into(),
                 base2k: self.base2k,
-                k: self.k_evk_ggsw(),
+                k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
                 dsize: Dsize(1),
             },
             layout_tsk: GGLWEToGGSWKeyLayout {
                 n: self.module.n().into(),
                 base2k: self.base2k,
-                k: self.k_evk_ggsw(),
+                k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_ggsw().div_ceil(self.base2k()).into(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
                 dsize: Dsize(1),
             },
         }
@@ -190,9 +244,9 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWEToLWEKeyLayout {
             n: self.module.n().into(),
             base2k: self.base2k,
-            k: self.k_evk_glwe(),
+            k: self.k_fhe_uint(),
             rank_in: self.rank(),
-            dnum: self.k_glwe_ct().div_ceil(self.base2k()).into(),
+            dnum: self.k_fhe_uint().div_ceil(self.base2k()).into(),
         }
     }
 
