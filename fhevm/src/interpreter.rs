@@ -127,7 +127,9 @@ impl<BE: Backend> Interpreter<BE> {
         Module<BE>: FheUintPreparedFactory<u32, BE>,
     {
 
-        let verbose_timings = true; // get from env
+        let verbose_timings = std::env::var("VERBOSE_TIMINGS")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
         let imm_rom: Ram = Ram::new(params, 32, rom_size);
         let rs1_rom: Ram = Ram::new(params, 32, rom_size);
@@ -516,10 +518,10 @@ impl<BE: Backend> Interpreter<BE> {
         let total_cycle_time = end_cycle_time.duration_since(start_cycle_time);
         this_cycle_measurement.total_cycle_time = total_cycle_time;
 
-        self.measurements
+        if self.verbose_timings {
+            self.measurements
             .cycle_measurements
             .push(this_cycle_measurement);
-        if let Some(_) = &mut self.vm_debug {
             println!();
             println!("Average cycle measurements:");
             println!(
@@ -1122,32 +1124,36 @@ impl<BE: Backend> Interpreter<BE> {
         });
 
         // Blind selection of the correct rd value using rdu_val_fhe_uint_prepared
-        this_cycle_measurement.cycle_time_blind_selection = measure_duration(|| {
-            let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
-            for (key, object) in rd_map.iter_mut() {
-                ops_ref.insert(*key as usize, object);
-            }
+        let start_time_blind_selection = if self.verbose_timings { Some(Instant::now()) } else { None };
+        
+        let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+        for (key, object) in rd_map.iter_mut() {
+            ops_ref.insert(*key as usize, object);
+        }
 
-            let ops_bit_size: usize = (usize::BITS - (ops.len() - 1).leading_zeros()) as usize;
+        let ops_bit_size: usize = (usize::BITS - (ops.len() - 1).leading_zeros()) as usize;
 
-            self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-                threads,
-                module,
-                &self.rdu_val_fhe_uint,
-                0,
-                ops_bit_size,
-                keys,
-                scratch,
-            );
-            module.glwe_blind_selection(
-                &mut self.rd_val_fhe_uint,
-                ops_ref,
-                &self.rdu_val_fhe_uint_prepared,
-                0,
-                ops_bit_size,
-                scratch,
-            );
-        });
+        self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rdu_val_fhe_uint,
+            0,
+            ops_bit_size,
+            keys,
+            scratch,
+        );
+        module.glwe_blind_selection(
+            &mut self.rd_val_fhe_uint,
+            ops_ref,
+            &self.rdu_val_fhe_uint_prepared,
+            0,
+            ops_bit_size,
+            scratch,
+        );
+        
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_blind_selection = Instant::now().duration_since(start_time_blind_selection.unwrap());
+        }
 
         let mut address_read: AddressRead<Vec<u8>, BE> =
             AddressRead::alloc_from_infos(module, &self.ggsw_infos, 31);
@@ -1155,51 +1161,56 @@ impl<BE: Backend> Interpreter<BE> {
             AddressWrite::alloc_from_infos(module, &self.ggsw_infos, 31);
 
         // Computes rd address
-        this_cycle_measurement.cycle_time_compute_rd_address = measure_duration(|| {
-            address_read.set_from_fhe_uint(
-                threads,
-                module,
-                &self.rd_addr_fhe_uint,
-                0,
-                self.reg_bits_size,
-                keys,
-                scratch,
-            );
+        let start_time_compute_rd_address = if self.verbose_timings { Some(Instant::now()) } else { None };
+        address_read.set_from_fhe_uint(
+            threads,
+            module,
+            &self.rd_addr_fhe_uint,
+            0,
+            self.reg_bits_size,
+            keys,
+            scratch,
+        );
 
-            address_write.set_from_fhe_uint(
-                threads,
-                module,
-                &self.rd_addr_fhe_uint,
-                0,
-                self.reg_bits_size,
-                keys,
-                scratch,
-            );
-        });
+        address_write.set_from_fhe_uint(
+            threads,
+            module,
+            &self.rd_addr_fhe_uint,
+            0,
+            self.reg_bits_size,
+            keys,
+            scratch,
+        );
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_compute_rd_address = Instant::now().duration_since(start_time_compute_rd_address.unwrap());
+        }
 
         let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.rd_addr_fhe_uint);
 
         // Stores rd value in register
-        this_cycle_measurement.cycle_time_write_rd = measure_duration(|| {
-            self.registers.read_prepare_write(
-                threads,
-                module,
-                &mut tmp,
-                &address_read,
-                keys,
-                scratch,
-            );
-            self.registers.write(
-                threads,
-                module,
-                &self.rd_val_fhe_uint,
-                &address_write,
-                keys,
-                scratch,
-            );
+        let start_time_write_rd = if self.verbose_timings { Some(Instant::now()) } else { None };
+        self.registers.read_prepare_write(
+            threads,
+            module,
+            &mut tmp,
+            &address_read,
+            keys,
+            scratch,
+        );
+        self.registers.write(
+            threads,
+            module,
+            &self.rd_val_fhe_uint,
+            &address_write,
+            keys,
+            scratch,
+        );
 
-            self.registers.zero(threads, module, 0, keys, scratch);
-        });
+        self.registers.zero(threads, module, 0, keys, scratch);
+
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_write_rd = Instant::now().duration_since(start_time_write_rd.unwrap());
+        }
 
         if self.verbose_timings {
             this_cycle_measurement.cycle_time_update_registers = Instant::now().duration_since(start_time.unwrap());
@@ -1388,32 +1399,36 @@ impl<BE: Backend> Interpreter<BE> {
     {
         let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
 
-        this_cycle_measurement.cycle_time_pcu_prepare = measure_duration(|| {
-            self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-                threads,
-                module,
-                &self.pcu_val_fhe_uint,
-                0,
-                4,
-                keys,
-                scratch,
-            );
-        });
+        let start_time_pcu_prepare = if self.verbose_timings { Some(Instant::now()) } else { None };
+        self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.pcu_val_fhe_uint,
+            0,
+            4,
+            keys,
+            scratch,
+        );
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_pcu_prepare = Instant::now().duration_since(start_time_pcu_prepare.unwrap());
+        }
 
-        this_cycle_measurement.cycle_time_pc_update_bdd = measure_duration(|| {
-            update_pc(
-                threads,
-                module,
-                &mut self.pc_fhe_uint,
-                &self.rs1_val_fhe_uint_prepared,
-                &self.rs2_val_fhe_uint_prepared,
-                &self.pc_fhe_uint_prepared,
-                &self.imm_val_fhe_uint_prepared,
-                &self.pcu_val_fhe_uint_prepared,
-                keys,
-                scratch,
-            );
-        });
+        let start_time_pc_update_bdd = if self.verbose_timings { Some(Instant::now()) } else { None };
+        update_pc(
+            threads,
+            module,
+            &mut self.pc_fhe_uint,
+            &self.rs1_val_fhe_uint_prepared,
+            &self.rs2_val_fhe_uint_prepared,
+            &self.pc_fhe_uint_prepared,
+            &self.imm_val_fhe_uint_prepared,
+            &self.pcu_val_fhe_uint_prepared,
+            keys,
+            scratch,
+        );
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_pc_update_bdd = Instant::now().duration_since(start_time_pc_update_bdd.unwrap());
+        }
 
         if self.verbose_timings {
             this_cycle_measurement.cycle_time_update_pc = Instant::now().duration_since(start_time.unwrap());

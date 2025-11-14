@@ -173,39 +173,12 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-    let rom: Vec<Instruction> = vec![
-        // RD[31] <- 1<<18
-        RV32I::LUI.new().set_imm(1 << 6).set_rd(31),
-        // RD[1] <- 0xABCD<<12
-        RV32I::LUI.new().set_imm(0xABCD).set_rd(1),
-        // RD[2] <- 0xEF10<<12
-        RV32I::LUI.new().set_imm(0xEF10).set_rd(2),
-        // RAM[RD[31] - 1<<18] <- RD[1] + 1<<12
-        RV32I::ADDI.new().set_imm(0x1).set_rs1(1).set_rd(3),
-        RV32I::SW.new().set_imm(0).set_rs1(31).set_rs2(3),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        // RAM[RD[31] - 1<<18] <- RD[1] < 0xEF10<<12
-        RV32I::SLTI.new().set_imm(0xEF10).set_rs1(1).set_rd(3),
-        RV32I::SW.new().set_imm(0).set_rs1(31).set_rs2(3),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-        RV32I::ADDI.new().set_imm(4).set_rs1(31).set_rd(31),
-    ];
+
+    std::env::set_var("VERBOSE_TIMINGS", "0");
+
+    let num_instructions = 100;
+    let instruction = Instruction::new(0b00000000_00000000_00000000_1110011);
+    let rom: Vec<Instruction> = vec![instruction; num_instructions];
 
     let ram: Vec<u32> = vec![0u32; 64];
 
@@ -302,7 +275,7 @@ where
                 );
             }
             let plot_path = plot_dir.join("noise_progression.svg");
-            match plot_noise_progression(&plot_path, &series) {
+            match plot_noise_progression(&params, &plot_path, &series) {
                 Ok(()) => println!("RAM noise plot written to {}", plot_path.display()),
                 Err(err) => println!("Failed to render RAM noise plot: {err}"),
             }
@@ -310,7 +283,8 @@ where
     }
 }
 
-fn plot_noise_progression<P: AsRef<std::path::Path>>(
+fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
+    params: &CryptographicParameters<BE>,
     output_path: P,
     series: &[(String, Vec<f64>)],
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -347,8 +321,9 @@ fn plot_noise_progression<P: AsRef<std::path::Path>>(
     let drawing_area = SVGBackend::new(output_path.as_ref(), (1280, 720)).into_drawing_area();
     drawing_area.fill(&WHITE)?;
 
+    let caption = format!("Noise Progression (N_GLWE: {}, N_LWE: {}, RANK: {})", params.n_glwe(), params.n_lwe(), params.rank());
     let mut chart = ChartBuilder::on(&drawing_area)
-        .caption("RAM Noise Progression", ("sans-serif", 30))
+        .caption(caption, ("sans-serif", 30))
         .margin(20)
         .x_label_area_size(40)
         .y_label_area_size(60)
@@ -356,8 +331,8 @@ fn plot_noise_progression<P: AsRef<std::path::Path>>(
 
     chart
         .configure_mesh()
-        .x_desc("Sample Index")
-        .y_desc("Noise")
+        .x_desc("Number of Cycles")
+        .y_desc("|Log2(Noise)|")
         .draw()?;
 
     for (idx, (label, data)) in series.iter().enumerate() {
