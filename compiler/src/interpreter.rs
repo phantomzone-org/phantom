@@ -10,7 +10,12 @@ use fhevm::{
     parameters::{CryptographicParameters},
     Interpreter,
 };
+
+#[cfg(target_arch = "x86_64")]
 use poulpy_backend::FFT64Avx as BackendImpl;
+#[cfg(not(target_arch = "x86_64"))]
+use poulpy_backend::FFT64Ref as BackendImpl;
+
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
 use poulpy_hal::{
