@@ -10,7 +10,8 @@ use fhevm::{
     parameters::{CryptographicParameters},
     Interpreter,
 };
-use poulpy_backend::FFT64Avx as BackendImpl;
+use poulpy_backend::FFT64Ref as BackendImpl;
+
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
 use poulpy_hal::{
