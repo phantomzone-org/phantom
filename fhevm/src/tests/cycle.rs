@@ -30,7 +30,7 @@ fn test_interpreter_cycles_fft64_ref() {
     test_interpreter_cycles::<CGGI, FFT64Ref>()
 }
 
-fn test_interpreter_cycles<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>()
+fn test_interpreter_cycles<BRA: BlindRotationAlgo, BE: Backend>()
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>

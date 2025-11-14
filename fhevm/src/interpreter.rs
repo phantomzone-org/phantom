@@ -104,7 +104,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 }
 
-impl<BE: Backend + Sync> Interpreter<BE> {
+impl<BE: Backend> Interpreter<BE> {
     pub fn new(
         params: &CryptographicParameters<BE>,
         rom_size: usize,

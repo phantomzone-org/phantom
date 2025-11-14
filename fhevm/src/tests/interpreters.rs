@@ -32,7 +32,7 @@ fn test_interpreter_init_one_instruction_fft64_ref() {
     test_interpreter_init_one_instruction::<CGGI, FFT64Ref>()
 }
 
-pub fn test_interpreter_init_one_instruction<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>()
+pub fn test_interpreter_init_one_instruction<BRA: BlindRotationAlgo, BE: Backend>()
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
@@ -185,7 +185,7 @@ fn test_interpreter_init_one_op_fft64_ref() {
     test_interpreter_init_one_op::<CGGI, FFT64Ref>()
 }
 
-pub fn test_interpreter_init_one_op<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>()
+pub fn test_interpreter_init_one_op<BRA: BlindRotationAlgo, BE: Backend>()
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
@@ -334,7 +334,7 @@ fn test_interpreter_init_many_instructions_fft64_ref() {
     test_interpreter_init_many_instructions::<CGGI, FFT64Ref>()
 }
 
-fn test_interpreter_init_many_instructions<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>()
+fn test_interpreter_init_many_instructions<BRA: BlindRotationAlgo, BE: Backend>()
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
@@ -498,9 +498,9 @@ fn test_interpreter_cycle_single_instruction_noop_fft64_ref() {
     test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Ref>();
 }
 
-fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo + Sync, BE: Backend + Sync>()
+fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo, BE: Backend>()
 where
-    Module<BE>: Sync + ModuleNew<BE>
+    Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
         + ModuleN
