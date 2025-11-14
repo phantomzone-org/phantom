@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::instructions::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
+    use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 
     use super::*;
 
@@ -185,7 +185,8 @@ mod tests {
     }
 }
 
-use crate::instructions::{Instruction, InstructionsParser, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
+use crate::instructions::{Instruction, InstructionsParser};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 #[allow(dead_code)]
 fn test_instruction(
     funct7: u32,

@@ -1,10 +1,8 @@
 use crate::{
-    instructions::RD_UPDATE_RV32I_OP_LIST,
-    instructions::{Instruction, InstructionsParser},
-    interpreter::Interpreter,
     keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
     rd_update::Evaluate,
+    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
@@ -363,6 +361,8 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
+    use crate::Instruction;
+
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
     let module: &Module<BE> = params.module();
 
@@ -526,6 +526,8 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
+    use crate::Instruction;
+
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
     let module: &Module<BE> = params.module();
 

@@ -1,9 +1,7 @@
 use crate::{
-    instructions::RV32I,
-    instructions::{Instruction, InstructionsParser},
-    interpreter::Interpreter,
     keys::{VMKeys, VMKeysPrepared},
     parameters::{CryptographicParameters, DECOMP_N},
+    Instruction, InstructionsParser, Interpreter, RV32I,
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{

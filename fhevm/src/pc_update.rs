@@ -9,9 +9,9 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 
-#[cfg(test)]
-use crate::instructions::PC_UPDATE;
 use crate::keys::RAMKeysHelper;
+#[cfg(test)]
+use crate::PC_UPDATE;
 
 pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     module: &M,
@@ -192,9 +192,7 @@ impl PCU {
     }
 
     pub(crate) fn expected_update(&self) -> u32 {
-        use crate::instructions::sext;
-
-        self.op_type
-            .eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
+        use crate::sext;
+        self.op_type.eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
     }
 }

@@ -8,7 +8,7 @@ use poulpy_core::{
     GLWEExternalProduct, ScratchTakeCore,
 };
 
-use crate::{ram::base::Base1D, ram::coordinate::Coordinate};
+use crate::{base::Base1D, coordinate::Coordinate};
 
 pub(crate) struct CoordinatePrepared<D: Data, B: Backend> {
     pub(crate) value: Vec<GGSWPrepared<D, B>>,

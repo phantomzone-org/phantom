@@ -229,14 +229,12 @@ checksum = "4445909572dbd556c457c849c4ca58623d84b27c8fff1e74b0b4227d8b90d17b"
 name = "fhevm"
 version = "0.1.0"
 dependencies = [
- "criterion",
  "itertools 0.14.0",
  "poulpy-backend",
  "poulpy-core",
  "poulpy-hal",
  "poulpy-schemes",
  "rand_core",
- "rayon",
  "strum",
  "strum_macros",
 ]

@@ -1,8 +1,8 @@
 use crate::{
+    address_read::AddressRead,
+    address_write::AddressWrite,
+    base::{get_base_2d, Base1D, Base2D},
     parameters::{CryptographicParameters, DECOMP_N},
-    ram::address_read::AddressRead,
-    ram::address_write::AddressWrite,
-    ram::base::{get_base_2d, Base1D, Base2D},
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{

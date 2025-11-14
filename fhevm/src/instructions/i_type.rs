@@ -17,7 +17,7 @@ pub fn get_immediate(instruction: &u32) -> u32 {
 mod tests {
 
     use super::*;
-    use crate::instructions::{sext, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
+    use crate::{instructions::sext, PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 
     #[test]
     fn imm_encoding() {
@@ -195,7 +195,7 @@ fn test_instruction(funct3: u32, op_code: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_
     );
 }
 
-use crate::instructions::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
+use crate::{PC_UPDATE, RAM_UPDATE, RD_UPDATE};
 #[allow(dead_code)]
 fn test_instruction_shamt(imm: u32, funct3: u32, opid: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
     // 0000000 | shamt[24:20] | rs1[19:15] | funct3 | rd[11:7] | 0010011
