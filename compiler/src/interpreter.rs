@@ -344,7 +344,7 @@ impl Phantom {
 
         // Generates a new secret-key along with the public evaluation keys.
         let mut sk_glwe: GLWESecret<Vec<u8>> =
-            GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+            GLWESecret::alloc(params.n_glwe(), params.rank());
         sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
 
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
@@ -365,7 +365,7 @@ impl Phantom {
         };
 
         let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
-            GLWESecretPrepared::alloc_from_infos(params.module(), &params.glwe_ct_infos());
+            GLWESecretPrepared::alloc(params.module(), params.rank());
         sk_prepared.prepare(params.module(), &sk_glwe);
 
         interpreter.instructions_encrypt_sk(

@@ -4,7 +4,8 @@ use crate::{
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
-        GGSWLayout, GLWEPlaintext, GLWESecret, GLWESecretPrepared, LWESecret, TorusPrecision, GLWE,
+        GGSWLayout, GLWELayout, GLWEPlaintext, GLWESecret, GLWESecretPrepared, LWESecret,
+        TorusPrecision, GLWE,
     },
     GLWERotate,
 };
@@ -47,12 +48,16 @@ fn test_fhe_uint_prepared_to_address_read() {
 
     let k: u32 = source.next_u32() % max_addr;
 
-    let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
-    let glwe_infos: &poulpy_core::layouts::GLWELayout = &params.glwe_ct_infos();
+    let address_infos: &GGSWLayout = &params.address_ram_infos();
+    let fhe_uint_infos: &GLWELayout = &params.fhe_uint_infos();
+    let fhe_uint_prepared_infos: &GGSWLayout = &params.fhe_uint_prepared_infos();
 
-    let mut fheuint: FheUintPrepared<Vec<u8>, u32, FFT64Ref> =
-        FheUintPrepared::<Vec<u8>, u32, FFT64Ref>::alloc_from_infos(params.module(), ggsw_infos);
-    fheuint.encrypt_sk(
+    let mut fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, FFT64Ref> =
+        FheUintPrepared::<Vec<u8>, u32, FFT64Ref>::alloc_from_infos(
+            params.module(),
+            fhe_uint_prepared_infos,
+        );
+    fhe_uint_prepared.encrypt_sk(
         params.module(),
         k,
         &sk_glwe_prep,
@@ -62,19 +67,19 @@ fn test_fhe_uint_prepared_to_address_read() {
     );
 
     let mut address: AddressRead<Vec<u8>, FFT64Ref> =
-        AddressRead::alloc_from_infos(params.module(), ggsw_infos, max_addr - 1);
+        AddressRead::alloc_from_infos(params.module(), address_infos, max_addr - 1);
 
-    address.set_from_fhe_uint_prepared(params.module(), &fheuint, 2, scratch.borrow());
+    address.set_from_fhe_uint_prepared(params.module(), &fhe_uint_prepared, 2, scratch.borrow());
 
     let mask: u32 = (1 << params.module().log_n()) - 1;
 
     let mut bit_rsh: usize = 2;
 
     for coordinate in address.coordinates.iter_mut() {
-        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(fhe_uint_infos);
         pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
 
-        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
+        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(fhe_uint_infos);
 
         glwe.encrypt_sk(
             params.module(),
@@ -93,7 +98,7 @@ fn test_fhe_uint_prepared_to_address_read() {
 
         coordinate.product_inplace(params.module(), &mut glwe, scratch.borrow());
 
-        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(fhe_uint_infos);
         glwe.decrypt(
             params.module(),
             &mut pt_have,
@@ -151,11 +156,15 @@ fn test_fhe_uint_prepared_to_address_write() {
 
     let k: u32 = source.next_u32() % max_addr;
 
-    let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
-    let glwe_infos: &poulpy_core::layouts::GLWELayout = &params.glwe_ct_infos();
+    let address_infos: &GGSWLayout = &params.address_ram_infos();
+    let fhe_uint_infos: &GLWELayout = &params.fhe_uint_infos();
+    let fhe_uint_prepared_infos: &GGSWLayout = &params.fhe_uint_prepared_infos();
 
     let mut fheuint: FheUintPrepared<Vec<u8>, u32, FFT64Ref> =
-        FheUintPrepared::<Vec<u8>, u32, FFT64Ref>::alloc_from_infos(params.module(), ggsw_infos);
+        FheUintPrepared::<Vec<u8>, u32, FFT64Ref>::alloc_from_infos(
+            params.module(),
+            fhe_uint_prepared_infos,
+        );
     fheuint.encrypt_sk(
         params.module(),
         k,
@@ -166,7 +175,7 @@ fn test_fhe_uint_prepared_to_address_write() {
     );
 
     let mut address: AddressWrite<Vec<u8>, FFT64Ref> =
-        AddressWrite::alloc_from_infos(params.module(), ggsw_infos, max_addr - 1);
+        AddressWrite::alloc_from_infos(params.module(), address_infos, max_addr - 1);
 
     address.set_from_fhe_uint_prepared(params.module(), &fheuint, 0, scratch.borrow());
 
@@ -174,10 +183,10 @@ fn test_fhe_uint_prepared_to_address_write() {
 
     let mut bit_rsh: usize = 0;
     for coordinate in address.coordinates.iter_mut() {
-        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        let mut pt_want: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(fhe_uint_infos);
         pt_want.encode_coeff_i64(1, TorusPrecision(2), 0);
 
-        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(glwe_infos);
+        let mut glwe: GLWE<Vec<u8>> = GLWE::alloc_from_infos(fhe_uint_infos);
 
         glwe.encrypt_sk(
             params.module(),
@@ -196,7 +205,7 @@ fn test_fhe_uint_prepared_to_address_write() {
 
         coordinate.product_inplace(params.module(), &mut glwe, scratch.borrow());
 
-        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(glwe_infos);
+        let mut pt_have: GLWEPlaintext<Vec<u8>> = GLWEPlaintext::alloc_from_infos(fhe_uint_infos);
         glwe.decrypt(
             params.module(),
             &mut pt_have,

@@ -1,6 +1,6 @@
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN},
-    layouts::{Backend, Data, DataMut, DataRef, Module, ScalarZnx, Scratch, ZnxViewMut},
+    layouts::{Backend, Data, DataMut, DataRef, ScalarZnx, Scratch, ZnxViewMut},
     source::Source,
 };
 
@@ -18,7 +18,7 @@ use poulpy_schemes::tfhe::{
 
 use crate::{
     coordinate::Coordinate, coordinate_prepared::CoordinatePrepared,
-    parameters::CryptographicParameters,
+
 };
 
 /// [Address] stores GGSW(X^{addr}) in d
@@ -65,11 +65,12 @@ impl<D: Data, BE: Backend> GGSWInfos for AddressWrite<D, BE> {
 impl<BE: Backend> AddressWrite<Vec<u8>, BE> {
     #[allow(dead_code)]
     /// Allocates a new [Address].
-    pub fn alloc_from_params(params: &CryptographicParameters<BE>, max_value: u32) -> Self
+    pub fn alloc_from_params<M, A>(module: &M, addr_infos: &A, max_value: u32) -> Self
     where
-        Module<BE>: GGSWPreparedFactory<BE>,
+        A: GGSWInfos,
+        M: ModuleLogN + GGSWPreparedFactory<BE>,
     {
-        Self::alloc_from_infos(params.module(), &params.ggsw_infos(), max_value)
+        Self::alloc_from_infos(module, addr_infos, max_value)
     }
 
     pub fn alloc_from_infos<M, A>(module: &M, infos: &A, max_value: u32) -> Self
