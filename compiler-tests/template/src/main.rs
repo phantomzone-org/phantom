@@ -12,19 +12,19 @@ fn from_u8_slice<T>(v: &[u8]) -> T {
 // TODO: Repeat the input and output structs here
 #[repr(C)]
 struct Output {
-    volume: f64,
+    volume: f32,
 }
 
 #[repr(C)]
 struct Input {
-    radius: f64,
-    height: f64,
+    radius: f32,
+    height: f32,
 }
 
 // For testing purposes only
 pub fn expected_output(input: Input) -> Output {
     Output {
-        volume: core::f64::consts::PI * input.radius * input.radius * input.height
+        volume: core::f64::consts::PI as f32 * input.radius * input.radius * input.height
     }
 }
 
@@ -35,11 +35,13 @@ fn main() {
     let elf_bytes = compiler.build();
     let pz = Phantom::from_elf(elf_bytes);
 
-    let max_cycles = 50;
+    // Allow enough cycles for the guest program to reach the point where it
+    // writes the output buffer before hitting the busy loop at the end.
+    let max_cycles = 2000;
 
     let input = Input {
-        radius: 4.5,
-        height: 5.3,
+        radius: 4.1,
+        height: 5.1,
     };
 
     // Running the encrypted VM
@@ -55,12 +57,13 @@ fn main() {
 
     assert_eq!(output_tape, encrypted_vm_output_tape);
     println!("Encrypted Tape and Test VM Tape are equal");
+    println!("output_tape={:?}", output_tape);
 
     let have_output = from_u8_slice::<Output>(&output_tape);
     let have_volume = have_output.volume;
 
     let want_output = expected_output(input);
     let want_volume = want_output.volume;
-
+    
     assert_eq!(have_volume, want_volume);
 }

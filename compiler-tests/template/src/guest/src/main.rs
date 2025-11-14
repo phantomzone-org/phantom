@@ -15,13 +15,13 @@ extern crate runtime;
 
 #[repr(C)]
 struct Output {
-    volume: f64,
+    volume: f32,
 }
 
 #[repr(C)]
 struct Input {
-    radius: f64,
-    height: f64,
+    radius: f32,
+    height: f32,
 }
 
 // End of input and output structs.
@@ -50,7 +50,7 @@ fn main() {
     // Write you code here
     // As an exmaple, we calculate the volume of a cylinder here.
 
-    let volume = core::f64::consts::PI * radius * radius * height;
+    let volume = core::f64::consts::PI as f32 * radius * radius * height;
 
     // WRITE OUTPUT
     let output_str = Output { volume };
