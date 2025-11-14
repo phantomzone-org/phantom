@@ -48,7 +48,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>
@@ -60,6 +60,8 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
+    let threads = 2;
+
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
     let module: &Module<BE> = params.module();
 
@@ -232,6 +234,7 @@ where
         );
 
         update_pc(
+            threads,
             module,
             &mut pc,
             &rs1_prep,

@@ -507,7 +507,9 @@ impl InstructionsParser {
     }
 
     pub fn add(&mut self, instruction: Instruction) {
+        //println!("instruction: {instruction}");
         let (rs2, rs1, rd) = instruction.get_registers();
+        //println!("rs2: {rs2} rs1: {rs1} rd: {rd}");
         let (rd_w, mem_w, pc_w) = instruction.get_opid();
         self.imm.push(instruction.get_imm() as i64);
         self.instructions.push(
@@ -518,6 +520,9 @@ impl InstructionsParser {
                 | (mem_w as i64) << 5
                 | (pc_w as i64),
         );
+        let imm: u32 = instruction.get_imm();
+        let rdu: u32 = rd_w.id();
+        //println!("rs1: {rs1:08x} imm: {imm:08x} rd: {rd:08x} rdu: {rdu:08x}");
         self.instructions_raw.push(instruction);
     }
 
@@ -527,7 +532,7 @@ impl InstructionsParser {
     }
 
     pub(crate) fn get_raw(&self, idx: usize) -> Instruction {
-        self.instructions_raw[idx].clone()
+        self.instructions_raw[idx]
     }
 
     pub(crate) fn get(&self, idx: usize) -> (i64, i64, i64, i64, i64, i64, i64) {

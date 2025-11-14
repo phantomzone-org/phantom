@@ -49,6 +49,8 @@ struct Input {
 }
 
 fn main() {
+    let threads = 16;
+
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
     let pz = Phantom::from_elf(elf_bytes);
@@ -70,11 +72,11 @@ fn main() {
         account: account.clone(),
     };
 
-    let max_cycles = 1000;
+    let max_cycles = 300;
     // let max_cycles = 10; // For testing purposes
 
     let mut enc_vm = pz.encrypted_vm::<true>(to_u8_slice(&input), max_cycles);
-    enc_vm.execute();
+    enc_vm.execute(threads);
 
     // Init -> read input tape -> run -> read output tape
     let mut vm = pz.test_vm(max_cycles);

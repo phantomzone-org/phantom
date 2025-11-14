@@ -1,15 +1,16 @@
-use itertools::{izip, Itertools};
+use std::thread;
+
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWEPreparedToRef, GGSWPreparedFactory, GLWEAutomorphismKeyHelper, GLWEInfos,
-        GLWELayout, GLWESecretPreparedFactory, GLWESecretPreparedToRef, GetGaloisElement,
-        TorusPrecision, GLWE,
+        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos, GGSWPreparedFactory,
+        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedToRef, GLWEToMut,
+        GetGaloisElement, TorusPrecision, GLWE,
     },
     GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize, GLWEPacker,
     GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
-    api::{ModuleLogN, ModuleN, TakeSlice},
+    api::{ModuleLogN, ModuleN, ScratchAvailable, TakeSlice},
     layouts::{Backend, DataMut, DataRef, Module, Scratch},
     source::Source,
 };
@@ -17,8 +18,7 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{FheUint, ToBits, UnsignedInteger};
 
 use crate::{
     address_read::AddressRead, address_write::AddressWrite,
-    coordinate_prepared::CoordinatePrepared, keys::RAMKeysHelper,
-    parameters::CryptographicParameters, reverse_bits_msb,
+    coordinate_prepared::CoordinatePrepared, parameters::CryptographicParameters, reverse_bits_msb,
 };
 
 /// [Ram] core implementation of the FHE-RAM.
@@ -74,7 +74,7 @@ impl Ram {
         source_xe: &mut Source,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
+        M: ModuleN + GLWEEncryptSk<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         S: GLWESecretPreparedToRef<BE>,
     {
@@ -124,57 +124,80 @@ impl Ram {
         }
     }
 
-    pub(crate) fn zero<M, D, BE: Backend, H>(
+    pub(crate) fn zero<M, BE: Backend, K, H>(
         &mut self,
+        threads: usize,
         module: &M,
         addr: usize,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWETrace<BE> + GLWESub + GLWERotate<BE>,
-        H: RAMKeysHelper<D, BE>,
-        D: DataRef,
+        M: Sync + ModuleN + GLWETrace<BE> + GLWESub + GLWERotate<BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         let poly: usize = addr / module.n();
         let idx: usize = poly % module.n();
 
-        let (mut tmp, scratch_1) = scratch.take_glwe(&self.subrams[0].data[0]);
+        let glwe_infos: GLWELayout = self.subram(0).data()[0].glwe_layout();
+        let key_infos: GGLWELayout = keys.automorphism_key_infos();
 
-        for subram in self.subrams.iter_mut() {
-            let a: &mut GLWE<Vec<u8>> = &mut subram.data[poly];
-            module.glwe_rotate_inplace(-(idx as i64), a, scratch_1);
-            module.glwe_trace(&mut tmp, 0, a, keys, scratch_1);
-            module.glwe_sub_inplace(a, &tmp);
-            module.glwe_rotate_inplace(idx as i64, a, scratch_1);
-        }
+        let scratch_thread_size: usize = module
+            .glwe_rotate_tmp_bytes()
+            .max(module.glwe_trace_tmp_bytes(&glwe_infos, &glwe_infos, &key_infos))
+            + GLWE::bytes_of_from_infos(&glwe_infos);
+
+        assert!(
+            scratch.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch.available()
+        );
+
+        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.subrams.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for (scratch_thread, subram_chunk) in scratches
+                .iter_mut()
+                .zip(self.subrams.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    let (mut tmp, scratch_1) = scratch_thread.take_glwe(&glwe_infos);
+
+                    for subram in subram_chunk.iter_mut() {
+                        let a: &mut GLWE<Vec<u8>> = &mut subram.data[poly];
+                        module.glwe_rotate_inplace(-(idx as i64), a, scratch_1);
+                        module.glwe_trace(&mut tmp, 0, a, keys, scratch_1);
+                        module.glwe_sub_inplace(a, &tmp);
+                        module.glwe_rotate_inplace(idx as i64, a, scratch_1);
+                    }
+                });
+            }
+        });
     }
 
     /// Simple read from the [Ram] at the provided encrypted address.
     /// Returns a vector of [GLWE], where each ciphertext stores
     /// Enc(m_i) where is the i-th digit of the word-size such that m = m_0 | m-1 | ...
-    pub(crate) fn read<
-        DR: DataMut,
-        DA: DataRef,
-        D: DataRef,
-        H,
-        M,
-        T: UnsignedInteger,
-        BE: Backend,
-    >(
+    pub(crate) fn read<DR: DataMut, DA: DataRef, H, M, K, T: UnsignedInteger, BE: Backend>(
         &mut self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<DR, T>,
         address: &AddressRead<DA, BE>,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
             + GLWEPacking<BE>,
-        H: RAMKeysHelper<D, BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         assert!(
@@ -182,15 +205,36 @@ impl Ram {
             "unitialized memory: self.data.len()=0"
         );
 
-        res.pack(
-            module,
-            self.subrams
-                .iter_mut()
-                .map(|subram| subram.read(module, address, keys, scratch))
-                .collect(),
-            keys,
-            scratch,
+        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(T::BITS as usize, res);
+
+        let scratch_thread_size =
+            SubRam::read_tmp_bytes(module, res, address, &keys.automorphism_key_infos());
+
+        assert!(
+            scratch_1.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch_1.available()
         );
+
+        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.subrams.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
+                .iter_mut()
+                .zip(self.subrams.chunks_mut(chunk_size))
+                .zip(tmp_res.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
+                        subram.read(module, res, address, keys, scratch_thread);
+                    }
+                });
+            }
+        });
+
+        res.pack(module, tmp_res, keys, scratch_1);
     }
 
     /// Read that prepares the [Ram] of a subsequent [Self::write].
@@ -201,24 +245,26 @@ impl Ram {
         DA: DataRef,
         H,
         M,
-        D,
+        K,
         T: UnsignedInteger,
         BE: Backend,
     >(
         &mut self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<DR, T>,
         address: &AddressRead<DA, BE>,
         keys: &H,
         scratch: &mut Scratch<BE>,
     ) where
-        M: GGSWPreparedFactory<BE>
+        M: Sync
+            + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWEPackerOps<BE>
             + GLWETrace<BE>
             + GLWEPacking<BE>,
-        H: RAMKeysHelper<D, BE>,
-        D: DataRef,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         assert!(
@@ -226,21 +272,43 @@ impl Ram {
             "unitialized memory: self.data.len()=0"
         );
 
-        res.pack(
-            module,
-            self.subrams
-                .iter_mut()
-                .map(|subram| subram.read_prepare_write(module, address, keys, scratch))
-                .collect(),
-            keys,
-            scratch,
+        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(T::BITS as usize, res);
+
+        let scratch_thread_size =
+            SubRam::read_tmp_bytes(module, res, address, &keys.automorphism_key_infos());
+
+        assert!(
+            scratch_1.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch_1.available()
         );
+
+        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.subrams.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
+                .iter_mut()
+                .zip(self.subrams.chunks_mut(chunk_size))
+                .zip(tmp_res.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
+                        subram.read_prepare_write(module, res, address, keys, scratch_thread);
+                    }
+                });
+            }
+        });
+
+        res.pack(module, tmp_res, keys, scratch_1);
     }
 
     /// Writes w to the [Ram]. Requires that [Self::read_prepare_write] was
     /// called Bforehand.
-    pub(crate) fn write<M, D, DA, DH, H, BE: Backend>(
+    pub(crate) fn write<M, D, DA, K, H, BE: Backend>(
         &mut self,
+        threads: usize,
         module: &M,
         w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
         address: &AddressWrite<DA, BE>,
@@ -249,7 +317,8 @@ impl Ram {
     ) where
         D: DataRef,
         DA: DataRef,
-        M: ModuleLogN
+        M: Sync
+            + ModuleLogN
             + GGSWPreparedFactory<BE>
             + GLWENormalize<BE>
             + GLWEAdd
@@ -257,37 +326,55 @@ impl Ram {
             + GLWETrace<BE>
             + GLWERotate<BE>
             + GLWEExternalProduct<BE>,
-        DH: DataRef,
-        H: RAMKeysHelper<DH, BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let bits = (0..32)
-            .map(|i| {
-                let mut bit = GLWE::alloc_from_infos(&self.subram(0).data()[0]);
-                w.get_bit_glwe(module, i, &mut bit, keys, scratch);
-                bit
-            })
-            .collect_vec();
+        let scratch_thread_size =
+            SubRam::write_tmp_bytes(module, w, address, &keys.automorphism_key_infos())
+                + GLWE::bytes_of_from_infos(w);
 
-        // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
-        for (i, subram) in self.subrams.iter_mut().enumerate() {
-            subram.write_first_step(module, &bits[i], address.n2(), keys, scratch);
-        }
+        assert!(
+            scratch.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch.available()
+        );
 
-        for i in (0..address.n2() - 1).rev() {
-            // Index polynomial X^{i}
-            let coordinate: &CoordinatePrepared<DA, BE> = address.at(i + 1);
+        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
 
-            for subram in self.subrams.iter_mut() {
-                subram.write_mid_step(i, module, &coordinate, keys, scratch);
+        let chunk_size: usize = self.subrams.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for (idx, (scratch_thread, subram_chunk)) in scratches
+                .iter_mut()
+                .zip(self.subrams.chunks_mut(chunk_size))
+                .enumerate()
+            {
+                scope.spawn(move || {
+                    // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
+                    for (i, subram) in subram_chunk.iter_mut().enumerate() {
+                        let (mut bit, scratch_1) = scratch_thread.take_glwe(w);
+                        w.get_bit_glwe(module, chunk_size * idx + i, &mut bit, keys, scratch_1);
+                        subram.write_first_step(module, &bit, address.n2(), keys, scratch_1);
+                    }
+
+                    for i in (0..address.n2() - 1).rev() {
+                        // Index polynomial X^{i}
+                        let coordinate: &CoordinatePrepared<DA, BE> = address.at(i + 1);
+
+                        for subram in subram_chunk.iter_mut() {
+                            subram.write_mid_step(i, module, &coordinate, keys, scratch_thread);
+                        }
+                    }
+
+                    let coordinate: &CoordinatePrepared<DA, BE> = address.at(0);
+
+                    for subram in subram_chunk.iter_mut() {
+                        subram.write_last_step(module, &coordinate, scratch_thread);
+                    }
+                });
             }
-        }
-
-        let coordinate: &CoordinatePrepared<DA, BE> = address.at(0);
-
-        for subram in self.subrams.iter_mut() {
-            subram.write_last_step(module, &coordinate, scratch);
-        }
+        });
     }
 }
 
@@ -302,6 +389,7 @@ struct SubRam {
 
 impl SubRam {
     fn alloc<BE: Backend>(params: &CryptographicParameters<BE>, max_addr: usize) -> Self {
+
         let module: &Module<BE> = params.module();
 
         let glwe_infos: GLWELayout = params.glwe_ct_infos();
@@ -344,7 +432,7 @@ impl SubRam {
         source_xe: &mut Source,
         scratch: &mut Scratch<BE>,
     ) where
-        M: ModuleN + GLWESecretPreparedFactory<BE> + GLWEEncryptSk<BE>,
+        M: ModuleN + GLWEEncryptSk<BE>,
         S: GLWESecretPreparedToRef<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
@@ -387,14 +475,33 @@ impl SubRam {
         }
     }
 
-    fn read<M, DA: DataRef, K, H, BE: Backend>(
+    fn read_tmp_bytes<R, A, K, M, BE: Backend>(
+        module: &M,
+        res_infos: &R,
+        addr_infos: &A,
+        key_infos: &K,
+    ) -> usize
+    where
+        R: GLWEInfos,
+        A: GGSWInfos,
+        K: GGLWEInfos,
+        M: GGSWPreparedFactory<BE> + GLWEExternalProduct<BE> + GLWEPackerOps<BE> + GLWETrace<BE>,
+    {
+        module
+            .glwe_external_product_tmp_bytes(res_infos, res_infos, addr_infos)
+            .max(GLWEPacker::tmp_bytes(module, res_infos, key_infos))
+            .max(module.glwe_trace_tmp_bytes(res_infos, res_infos, key_infos))
+    }
+
+    fn read<R, M, DA: DataRef, K, H, BE: Backend>(
         &mut self,
         module: &M,
+        res: &mut R,
         address: &AddressRead<DA, BE>,
-        auto_keys: &H,
+        keys: &H,
         scratch: &mut Scratch<BE>,
-    ) -> GLWE<Vec<u8>>
-    where
+    ) where
+        R: GLWEToMut,
         M: GGSWPreparedFactory<BE> + GLWEExternalProduct<BE> + GLWEPackerOps<BE> + GLWETrace<BE>,
         H: GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
@@ -409,57 +516,51 @@ impl SubRam {
 
         let packer: &mut GLWEPacker = &mut self.packer;
 
-        let mut results: Vec<GLWE<Vec<u8>>> = Vec::new();
-        let mut tmp_ct: GLWE<Vec<u8>> = GLWE::alloc_from_infos(&self.data[0]);
+        let res: &mut GLWE<&mut [u8]> = &mut res.to_mut();
 
         for i in 0..address.n2() {
             let coordinate: &CoordinatePrepared<DA, BE> = address.at(i);
 
-            let res_prev: &Vec<GLWE<Vec<u8>>> = if i == 0 { &self.data } else { &results };
-
             if i < address.n2() - 1 {
-                // let mut result_next: Vec<GLWE<Vec<u8>>> = Vec::new();
+                let (res_prev, res_next) = if i == 0 {
+                    (&mut self.data, &mut self.tree[0])
+                } else {
+                    let (a, b) = self.tree.split_at_mut(i + 1);
+                    (&mut a[0], &mut b[0])
+                };
 
-                for chunk in res_prev.chunks(module.n()) {
+                for (idx, chunk) in res_prev.chunks(module.n()).enumerate() {
                     for j in 0..module.n() {
                         let j_rev = reverse_bits_msb(j, log_n as u32);
 
                         if j_rev < chunk.len() {
-                            coordinate.product(module, &mut tmp_ct, &chunk[j_rev], scratch);
-                            packer.add(module, Some(&tmp_ct), auto_keys, scratch);
+                            coordinate.product(module, res, &chunk[j_rev], scratch);
+                            packer.add(module, Some(res), keys, scratch);
                         } else {
-                            packer.add(
-                                module,
-                                // &mut result_next,
-                                None::<&GLWE<Vec<u8>>>,
-                                auto_keys,
-                                scratch,
-                            );
+                            packer.add(module, None::<&GLWE<Vec<u8>>>, keys, scratch);
                         }
                     }
-                }
 
-                packer.flush(module, &mut tmp_ct); //, auto_keys, scratch); // TODO: that to put instead of tmp_ct
-                results.push(tmp_ct.clone());
+                    packer.flush(module, &mut res_next[idx]);
+                }
             } else if i == 0 {
-                coordinate.product(module, &mut tmp_ct, &self.data[0], scratch);
-                results.push(tmp_ct.clone());
+                coordinate.product(module, res, &self.data[0], scratch);
             } else {
-                coordinate.product(module, &mut tmp_ct, &results[0], scratch);
+                coordinate.product(module, res, &self.tree[i-1][0], scratch);
             }
         }
-        tmp_ct.trace_inplace(module, 0, auto_keys, scratch);
-        tmp_ct
+        res.trace_inplace(module, 0, keys, scratch);
     }
 
-    fn read_prepare_write<M, DA: DataRef, H, K, BE: Backend>(
+    fn read_prepare_write<R, M, DA: DataRef, H, K, BE: Backend>(
         &mut self,
         module: &M,
+        res: &mut R,
         address: &AddressRead<DA, BE>,
-        auto_keys: &H,
+        keys: &H,
         scratch: &mut Scratch<BE>,
-    ) -> GLWE<Vec<u8>>
-    where
+    ) where
+        R: GLWEToMut,
         M: GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
             + GLWECopy
@@ -477,59 +578,66 @@ impl SubRam {
         let log_n: usize = module.log_n();
         let packer: &mut GLWEPacker = &mut self.packer;
 
-        let mut results: Vec<GLWE<Vec<u8>>> = Vec::new();
-        let mut tmp_ct: GLWE<Vec<u8>> = GLWE::alloc_from_infos(&self.data[0]);
-
         for i in 0..address.n2() {
             let coordinate: &CoordinatePrepared<DA, BE> = address.at(i);
 
-            let res_prev: &mut Vec<GLWE<Vec<u8>>> = if i == 0 {
-                &mut self.data
-            } else {
-                &mut self.tree[i - 1]
-            };
-
-            // Shift polynomial of the last iteration by X^{-i}
-            for poly in res_prev.iter_mut() {
-                coordinate.product_inplace(module, poly, scratch);
-            }
-
             if i < address.n2() - 1 {
-                // let mut result_next: Vec<GLWE<Vec<u8>>> = Vec::new();
+                let (res_prev, res_next) = if i == 0 {
+                    (&mut self.data, &mut self.tree[0])
+                } else {
+                    let (a, b) = self.tree.split_at_mut(i + 1);
+                    (&mut a[0], &mut b[0])
+                };
+
+                // Shift polynomial of the last iteration by X^{-i}
+                for poly in res_prev.iter_mut() {
+                    coordinate.product_inplace(module, poly, scratch);
+                }
 
                 // Packs the first coefficient of each polynomial.
-                for chunk in res_prev.chunks(module.n()) {
+                for (idx, chunk) in res_prev.chunks(module.n()).enumerate() {
                     for i in 0..module.n() {
                         let i_rev: usize = reverse_bits_msb(i, log_n as u32);
                         if i_rev < chunk.len() {
-                            packer.add(module, Some(&chunk[i_rev]), auto_keys, scratch);
+                            packer.add(module, Some(&chunk[i_rev]), keys, scratch);
                         } else {
-                            packer.add(module, None::<&GLWE<Vec<u8>>>, auto_keys, scratch);
+                            packer.add(module, None::<&GLWE<Vec<u8>>>, keys, scratch);
                         }
                     }
+
+                    packer.flush(module, &mut res_next[idx]);
                 }
-
-                packer.flush(module, &mut tmp_ct);
-                results.push(tmp_ct.clone());
-
-                // Stores the packed polynomial
-                izip!(self.tree[i].iter_mut(), results.iter()).for_each(|(a, b)| {
-                    module.glwe_copy(a, b);
-                });
+            } else if i == 0 {
+                coordinate.product_inplace(module, &mut self.data[0], scratch);
+            } else {
+                coordinate.product_inplace(module, &mut self.tree[i-1][0], scratch);
             }
         }
-
-        let mut res: GLWE<Vec<u8>> = GLWE::alloc_from_infos(&self.data[0]);
-
         self.state = true;
         if address.n2() != 1 {
-            module.glwe_copy(&mut res, &self.tree.last().unwrap()[0]);
+            module.glwe_trace(res, 0, &self.tree.last().unwrap()[0], keys, scratch);
         } else {
-            module.glwe_copy(&mut res, &self.data[0]);
+            module.glwe_trace(res, 0, &self.data[0], keys, scratch);
         }
+    }
 
-        res.trace_inplace(module, 0, auto_keys, scratch);
-        res
+    fn write_tmp_bytes<R, A, K, M, BE: Backend>(
+        module: &M,
+        res_infos: &R,
+        addr_infos: &A,
+        key_infos: &K,
+    ) -> usize
+    where
+        R: GLWEInfos,
+        A: GGSWInfos,
+        K: GGLWEInfos,
+        M: GGSWPreparedFactory<BE> + GLWEExternalProduct<BE> + GLWETrace<BE> + GLWENormalize<BE>,
+    {
+        module
+            .glwe_external_product_tmp_bytes(res_infos, res_infos, addr_infos)
+            .max(module.glwe_trace_tmp_bytes(res_infos, res_infos, key_infos))
+            .max(module.glwe_normalize_tmp_bytes())
+            + GLWE::bytes_of_from_infos(res_infos)
     }
 
     fn write_first_step<DataW: DataRef, M, K, H, BE: Backend>(

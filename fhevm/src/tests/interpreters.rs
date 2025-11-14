@@ -1,6 +1,6 @@
 use crate::{
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::CryptographicParameters,
     rd_update::Evaluate,
     Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
@@ -48,7 +48,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>
@@ -67,8 +67,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let mut source_xs: Source = Source::new([0u8; 32]);
     let mut source_xa: Source = Source::new([0u8; 32]);
@@ -100,7 +99,7 @@ where
 
     let instruction: Instruction = instructions.get_raw(idx);
     let correct_imm: u32 = instruction.get_imm();
-    let (rs1, rs2, rd) = instruction.get_registers();
+    let (rs2, rs1, rd) = instruction.get_registers();
     let correct_rs1: u32 = rs1 as u32;
     let correct_rs2: u32 = rs2 as u32;
     let correct_rd: u32 = rd as u32;
@@ -125,11 +124,14 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
     interpreter.read_instruction_components(
+        1,
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
         scratch.borrow(),
+        &mut this_cycle_measurement,
     );
 
     let dec_rs1: u32 =
@@ -201,7 +203,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>
@@ -214,14 +216,15 @@ where
 {
     let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
 
+    let threads = 4;
+
     let module: &Module<BE> = params.module();
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 22);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let mut source_xs: Source = Source::new([0u8; 32]);
     let mut source_xa: Source = Source::new([0u8; 32]);
@@ -248,11 +251,14 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
     interpreter.read_instruction_components(
+        1,
         module,
         &key_prepared,
         Some(&sk_glwe_prepared),
         scratch.borrow(),
+        &mut this_cycle_measurement,
     );
 
     interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
@@ -301,6 +307,7 @@ where
 
     for op in RD_UPDATE_RV32I_OP_LIST {
         op.eval_enc(
+            threads,
             module,
             &mut res,
             &interpreter.rs1_val_fhe_uint_prepared,
@@ -350,7 +357,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>
@@ -380,8 +387,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
@@ -417,7 +423,7 @@ where
     for idx in 0..instructions_u32.len() {
         let instruction = instructions.get_raw(idx);
         let correct_imm = instruction.get_imm();
-        let (rs1, rs2, rd) = instruction.get_registers();
+        let (rs2, rs1, rd) = instruction.get_registers();
         let correct_rs1: u32 = rs1 as u32;
         let correct_rs2: u32 = rs2 as u32;
         let correct_rd: u32 = rd as u32;
@@ -434,11 +440,14 @@ where
             &mut source_xe,
             scratch.borrow(),
         );
+        let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
         interpreter.read_instruction_components(
+            1,
             module,
             &key_prepared,
             Some(&sk_glwe_prepared),
             scratch.borrow(),
+            &mut this_cycle_measurement,
         );
 
         let dec_rs1: u32 =
@@ -514,7 +523,7 @@ where
         + GLWEExternalProduct<BE>
         + GLWEPackerOps<BE>
         + GLWEPacking<BE>
-        + FheUintPrepare<BRA, u32, BE>
+        + FheUintPrepare<BRA, BE>
         + GGSWBlindRotation<u32, BE>
         + GGSWPreparedFactory<BE>
         + GLWEDecrypt<BE>
@@ -545,8 +554,7 @@ where
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> =
-        Interpreter::new(&params, rom_size, ram_size, DECOMP_N.into());
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         // 258455
@@ -592,7 +600,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     println!("Cycle");
-    interpreter.cycle(module, &key_prepared, scratch.borrow());
+    interpreter.cycle(1, module, &key_prepared, scratch.borrow());
     println!("Cycle done");
 
     let pc = interpreter

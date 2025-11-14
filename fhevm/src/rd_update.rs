@@ -46,6 +46,7 @@ impl_bdd_2w_to_1w_trait!(
 pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
     fn eval_enc<R, R1, R2, IM, PC, RA, H, K, M>(
         &self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<R, u32>,
         rs1: &FheUintPrepared<R1, u32, BE>,
@@ -64,7 +65,7 @@ pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
         RA: DataRef,
         K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
         H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: ExecuteBDDCircuit2WTo1W<BE>
             + ModuleLogN
             + GLWERotate<BE>
             + GLWETrace<BE>
@@ -77,6 +78,7 @@ pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
 impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
     fn eval_enc<R, R1, R2, IM, PC, RA, H, K, M>(
         &self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<R, u32>,
         rs1: &FheUintPrepared<R1, u32, BE>,
@@ -95,7 +97,7 @@ impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
         RA: DataRef,
         K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
         H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<u32, BE>
+        M: ExecuteBDDCircuit2WTo1W<BE>
             + ModuleLogN
             + GLWERotate<BE>
             + GLWETrace<BE>
@@ -106,29 +108,29 @@ impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
     {
         match self {
             Self::NONE => {}
-            Self::AUIPC => res.auipc(module, pc, imm, keys, scratch),
-            Self::JAL => res.jalr(module, pc, pc, keys, scratch), // ok? second input is not used
-            Self::JALR => res.jalr(module, pc, pc, keys, scratch), // ok? second input is not used
-            Self::LUI => res.lui(module, imm, imm, keys, scratch),
-            Self::ADD => res.add(module, rs1, rs2, keys, scratch),
-            Self::SUB => res.sub(module, rs1, rs2, keys, scratch),
-            Self::SLL => res.sll(module, rs1, rs2, keys, scratch),
-            Self::SLT => res.slt(module, rs1, rs2, keys, scratch),
-            Self::SLTU => res.sltu(module, rs1, rs2, keys, scratch),
-            Self::XOR => res.xor(module, rs1, rs2, keys, scratch),
-            Self::SRL => res.srl(module, rs1, rs2, keys, scratch),
-            Self::SRA => res.sra(module, rs1, rs2, keys, scratch),
-            Self::OR => res.or(module, rs1, rs2, keys, scratch),
-            Self::ADDI => res.add(module, rs1, imm, keys, scratch),
-            Self::AND => res.and(module, rs1, rs2, keys, scratch),
-            Self::SLTIU => res.sltu(module, rs1, imm, keys, scratch),
-            Self::XORI => res.xor(module, rs1, imm, keys, scratch),
-            Self::ORI => res.or(module, rs1, imm, keys, scratch),
-            Self::ANDI => res.and(module, rs1, imm, keys, scratch),
-            Self::SLLI => res.sll(module, rs1, imm, keys, scratch),
-            Self::SRLI => res.srl(module, rs1, imm, keys, scratch),
-            Self::SRAI => res.sra(module, rs1, imm, keys, scratch),
-            Self::SLTI => res.slt(module, rs1, imm, keys, scratch),
+            Self::AUIPC => res.auipc_multi_thread(threads, module, pc, imm, keys, scratch),
+            Self::JAL => res.jalr_multi_thread(threads, module, pc, pc, keys, scratch), // ok? second input is not used
+            Self::JALR => res.jalr_multi_thread(threads, module, pc, pc, keys, scratch), // ok? second input is not used
+            Self::LUI => res.lui_multi_thread(threads, module, imm, imm, keys, scratch),
+            Self::ADD => res.add_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SUB => res.sub_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SLL => res.sll_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SLT => res.slt_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SLTU => res.sltu_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::XOR => res.xor_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SRL => res.srl_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SRA => res.sra_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::OR => res.or_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::ADDI => res.add_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::AND => res.and_multi_thread(threads, module, rs1, rs2, keys, scratch),
+            Self::SLTIU => res.sltu_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::XORI => res.xor_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::ORI => res.or_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::ANDI => res.and_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::SLLI => res.sll_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::SRLI => res.srl_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::SRAI => res.sra_multi_thread(threads, module, rs1, imm, keys, scratch),
+            Self::SLTI => res.slt_multi_thread(threads, module, rs1, imm, keys, scratch),
             Self::LB => {
                 module.glwe_copy(res, ram);
                 res.zero_byte(module, 1, keys, scratch);

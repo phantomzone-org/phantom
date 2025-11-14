@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use poulpy_core::{GLWEAdd, GLWECopy, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore};
+use poulpy_core::{
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GLWEInfos, GLWEPlaintext, GLWESecretPreparedToRef, GetGaloisElement}
+};
 use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
@@ -9,57 +11,65 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     FheUint, FheUintPrepared, GLWEBlinSelection, UnsignedInteger,
 };
 
-use crate::{keys::RAMKeysHelper, RAM_UPDATE};
+use crate::RAM_UPDATE;
 
 pub trait Store<T: UnsignedInteger> {
-    fn eval_enc<R, D, A, H, K, M, BE: Backend>(
+    fn eval_enc<R, D, A, B, S, H, K, M, BE: Backend>(
         &self,
+        threads: usize,
         module: &M,
         res: &mut FheUint<R, T>,
         rs2: &FheUint<A, T>,
-        loaded: &FheUint<A, T>,
+        loaded: &FheUint<B, T>,
         offset: &FheUintPrepared<D, u32, BE>,
         keys: &H,
+        sk: &S,
         scratch: &mut Scratch<BE>,
     ) where
         R: DataMut,
         A: DataRef,
-        K: DataRef,
         D: DataRef,
-        H: RAMKeysHelper<K, BE>,
+        B: DataRef,
+        H: GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         M: ModuleLogN
             + GLWEBlinSelection<u32, BE>
             + GLWERotate<BE>
             + GLWETrace<BE>
             + GLWESub
             + GLWEAdd
-            + GLWECopy,
+            + GLWECopy + GLWEDecrypt<BE> + GLWEPacking<BE>,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>;
 }
 
 impl Store<u32> for RAM_UPDATE {
-    fn eval_enc<R, D, A, H, K, M, BE: Backend>(
+    fn eval_enc<R, D, A, B, S, H, K, M, BE: Backend>(
         &self,
+        _threads: usize,
         module: &M,
         res: &mut FheUint<R, u32>,
         rs2: &FheUint<A, u32>,
-        loaded: &FheUint<A, u32>,
+        loaded: &FheUint<B, u32>,
         offset: &FheUintPrepared<D, u32, BE>,
         keys: &H,
+        sk: &S,
         scratch: &mut Scratch<BE>,
     ) where
         R: DataMut,
         A: DataRef,
-        K: DataRef,
         D: DataRef,
-        H: RAMKeysHelper<K, BE>,
+        B: DataRef,
+        H: GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         M: ModuleLogN
             + GLWEBlinSelection<u32, BE>
             + GLWERotate<BE>
             + GLWETrace<BE>
             + GLWESub
             + GLWEAdd
-            + GLWECopy,
+            + GLWECopy + GLWEDecrypt<BE> + GLWEPacking<BE>,
+        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
         match self {
@@ -80,10 +90,14 @@ impl Store<u32> for RAM_UPDATE {
                 }
 
                 let mut cts_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+                
                 for (key, object) in cts.iter_mut() {
+                    println!("key: {key}, value: {}", object.decrypt(module, sk, scratch));
                     cts_ref.insert(*key, object);
                 }
-                module.glwe_blind_selection(res, cts_ref, offset, 0, 4, scratch);
+
+                module.glwe_blind_selection(res, cts_ref, offset, 0, 2, scratch);
+                println!("offset: {} selected {}", offset.decrypt(module, sk, keys, scratch), res.decrypt(module, sk, scratch));
             }
 
             Self::SH => {
@@ -97,7 +111,7 @@ impl Store<u32> for RAM_UPDATE {
                 for (key, object) in cts.iter_mut() {
                     cts_ref.insert(*key, object);
                 }
-                module.glwe_blind_selection(res, cts_ref, offset, 0, 4, scratch);
+                module.glwe_blind_selection(res, cts_ref, offset, 0, 2, scratch);
             }
         }
     }

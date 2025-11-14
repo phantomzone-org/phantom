@@ -1,6 +1,11 @@
 use std::marker::PhantomData;
 
-use poulpy_core::{layouts::GGSWPrepared, GLWECopy, GLWEPacking, ScratchTakeCore};
+use poulpy_core::{
+    layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPrepared, GLWEAutomorphismKeyHelper, GetGaloisElement,
+    },
+    GLWECopy, GLWEPacking, ScratchTakeCore,
+};
 use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
@@ -9,11 +14,11 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 
-use crate::keys::RAMKeysHelper;
 #[cfg(test)]
 use crate::PC_UPDATE;
 
 pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
+    threads: usize,
     module: &M,
     res: &mut FheUint<R, u32>,
     rs1: &FheUintPrepared<RS1, u32, BE>,
@@ -25,14 +30,14 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     scratch: &mut Scratch<BE>,
 ) where
     R: DataMut,
-    K: DataRef,
     OPID: DataRef,
     PC: DataRef,
     RS1: DataRef,
     RS2: DataRef,
     IMM: DataRef,
-    H: RAMKeysHelper<K, BE>,
-    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<u32, BE>,
+    H: GLWEAutomorphismKeyHelper<K, BE>,
+    K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {
     let inputs: Vec<&dyn GetGGSWBit<BE>> = [
@@ -51,7 +56,8 @@ pub(crate) fn update_pc<R, OPID, PC, RS1, RS2, IMM, H, K, M, BE: Backend>(
     let (mut out_bits, scratch_1) = scratch.take_glwe_slice(u32::BITS as usize, res);
 
     // Evaluates out[i] = circuit[i](a, b)
-    module.execute_bdd_circuit(
+    module.execute_bdd_circuit_multi_thread(
+        threads,
         &mut out_bits,
         &helper,
         &crate::codegen::codegen_pc_update::OUTPUT_CIRCUITS,
@@ -193,6 +199,7 @@ impl PCU {
 
     pub(crate) fn expected_update(&self) -> u32 {
         use crate::sext;
-        self.op_type.eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
+        self.op_type
+            .eval_plain(sext(self.imm, 19), self.rs1, self.rs2, self.pc)
     }
 }

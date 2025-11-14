@@ -64,7 +64,7 @@ impl InterpreterDebug {
         assert_eq!(self.imm_rom.len(), instructions.instructions.len());
         for i in 0..instructions.instructions.len() {
             self.imm_rom[i] = instructions.get_raw(i).get_imm() as u32;
-            let (rs1, rs2, rd) = instructions.get_raw(i).get_registers();
+            let (rs2, rs1, rd) = instructions.get_raw(i).get_registers();
             self.rs1_rom[i] = rs1 as u32;
             self.rs2_rom[i] = rs2 as u32;
             self.rd_rom[i] = rd as u32;
@@ -97,7 +97,7 @@ impl InterpreterDebug {
     }
 
     pub fn read_ram(&mut self) {
-        self.ram_addr = self.imm.wrapping_add(self.rs2_val).wrapping_sub(1 << 18);
+        self.ram_addr = self.imm.wrapping_add(self.rs1_val).wrapping_sub(1 << 18);
         self.ram_val = self.ram[(self.ram_addr >> 2) as usize % self.ram_size as usize];
     }
 

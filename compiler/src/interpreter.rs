@@ -7,10 +7,10 @@ use elf::{
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters, DECOMP_N},
+    parameters::{CryptographicParameters},
     Interpreter,
 };
-use poulpy_backend::FFT64Ref as BackendImpl;
+use poulpy_backend::FFT64Avx as BackendImpl;
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
 use poulpy_hal::{
@@ -97,7 +97,6 @@ pub struct EncryptedVM {
     params: CryptographicParameters<BackendImpl>,
     sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl>,
     key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl>,
-    scratch: ScratchOwned<BackendImpl>,
     interpreter: Interpreter<BackendImpl>,
     output_info: OutputInfo,
     ram_offset: usize,
@@ -106,29 +105,44 @@ pub struct EncryptedVM {
 }
 
 impl EncryptedVM {
-    pub fn execute(&mut self) {
+    pub fn execute(&mut self, threads: usize) {
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc((1 << 24) * threads);
+
         let mut curr_cycles = 0;
         while curr_cycles < self.max_cycles {
             // let time = std::time::Instant::now();
-            if self.debug{
-                self.interpreter.cycle_debug(self.params.module(), &self.key_prepared, &self.sk_prepared, self.scratch.borrow());
-            }else{
-                self.interpreter.cycle(self.params.module(), &self.key_prepared, self.scratch.borrow());
+            if self.debug {
+                self.interpreter.cycle_debug(
+                    threads,
+                    self.params.module(),
+                    &self.key_prepared,
+                    &self.sk_prepared,
+                    scratch.borrow(),
+                );
+            } else {
+                self.interpreter.cycle(
+                    threads,
+                    self.params.module(),
+                    &self.key_prepared,
+                    scratch.borrow(),
+                );
             }
-            
+
             // println!("Time: {:?}", time.elapsed());
             curr_cycles += 1;
         }
     }
 
     pub fn output_tape(&mut self) -> Vec<u8> {
-        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE>>2];
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
+
+        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE >> 2];
         // let mem_bytes: Vec<u8> =
         self.interpreter.ram_decrypt(
             self.params.module(),
             &mut data_decrypted,
             &self.sk_prepared,
-            self.scratch.borrow(),
+            scratch.borrow(),
         );
         let mut mem_bytes = Vec::with_capacity(data_decrypted.len() * 4);
         for word in &data_decrypted {
@@ -280,7 +294,11 @@ impl Phantom {
         &self.output_info
     }
 
-    pub fn encrypted_vm<const DEBUG: bool>(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
+    pub fn encrypted_vm<const DEBUG: bool>(
+        &self,
+        input_tape: &[u8],
+        max_cycles: usize,
+    ) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
@@ -332,19 +350,17 @@ impl Phantom {
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
         sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
-        let mut interpreter: Interpreter<BackendImpl> = if DEBUG{
+        let mut interpreter: Interpreter<BackendImpl> = if DEBUG {
             Interpreter::new_with_debug(
                 &params,
-                self.boot_rom.size>>2,
-                self.boot_ram.size>>2,
-                DECOMP_N.into(),
+                self.boot_rom.size >> 2,
+                self.boot_ram.size >> 2,
             )
-        }else{
+        } else {
             Interpreter::new(
                 &params,
-                self.boot_rom.size>>2,
-                self.boot_ram.size>>2,
-                DECOMP_N.into(),
+                self.boot_rom.size >> 2,
+                self.boot_ram.size >> 2,
             )
         };
 
@@ -384,7 +400,6 @@ impl Phantom {
             params,
             sk_prepared,
             key_prepared,
-            scratch,
             interpreter,
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,

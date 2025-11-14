@@ -19,7 +19,7 @@ mod tests {
 
     #[test]
     fn imm_encoding() {
-        (12..32).for_each(|i| {
+        (0..20).for_each(|i| {
             let immediate: u32 = 1 << i;
             let mut instruction: u32 = 0;
             instruction = set_immediate(Instruction(instruction), immediate).0;
@@ -50,7 +50,7 @@ use crate::{
 };
 #[allow(dead_code)]
 fn test_instruction(op_code: u32, op_id: (RD_UPDATE, RAM_UPDATE, PC_UPDATE)) {
-    let imm: u32 = 0xABCD_E000;
+    let imm: u32 = 0xABCD_E;
     let rs2: u32 = 0;
     let rs1: u32 = 0;
     let rd: u32 = 0b01011;

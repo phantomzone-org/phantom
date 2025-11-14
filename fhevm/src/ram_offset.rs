@@ -1,6 +1,11 @@
 use std::marker::PhantomData;
 
-use poulpy_core::{layouts::GGSWPrepared, GLWECopy, GLWEPacking, ScratchTakeCore};
+use poulpy_core::{
+    layouts::{
+        GGLWEInfos, GGLWEPreparedToRef, GGSWPrepared, GLWEAutomorphismKeyHelper, GetGaloisElement,
+    },
+    GLWECopy, GLWEPacking, ScratchTakeCore,
+};
 use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
@@ -9,9 +14,8 @@ use poulpy_schemes::tfhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 
-use crate::keys::RAMKeysHelper;
-
 pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
+    threads: usize,
     module: &M,
     res: &mut FheUint<R, u32>,
     rs1: &FheUintPrepared<RS1, u32, BE>,
@@ -20,11 +24,11 @@ pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
     scratch: &mut Scratch<BE>,
 ) where
     R: DataMut,
-    K: DataRef,
     RS1: DataRef,
     IMM: DataRef,
-    H: RAMKeysHelper<K, BE>,
-    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<u32, BE>,
+    H: GLWEAutomorphismKeyHelper<K, BE>,
+    K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+    M: ModuleLogN + GLWEPacking<BE> + GLWECopy + ExecuteBDDCircuit<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
 {
     let inputs: Vec<&dyn GetGGSWBit<BE>> =
@@ -37,7 +41,8 @@ pub(crate) fn ram_offset<R, RS1, IMM, H, K, M, BE: Backend>(
     let (mut out_bits, scratch_1) = scratch.take_glwe_slice(u32::BITS as usize, res);
 
     // Evaluates out[i] = circuit[i](a, b)
-    module.execute_bdd_circuit(
+    module.execute_bdd_circuit_multi_thread(
+        threads,
         &mut out_bits,
         &helper,
         &crate::codegen::codegen_ram_offset::OUTPUT_CIRCUITS,

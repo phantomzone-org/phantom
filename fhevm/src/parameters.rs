@@ -11,17 +11,18 @@ use poulpy_schemes::tfhe::{
     circuit_bootstrapping::CircuitBootstrappingKeyLayout,
 };
 
-const N_GLWE: u32 = 512;
+const LOGN_GLWE: u32 = 9;
+const N_GLWE: u32 = 1 << LOGN_GLWE;
 const N_LWE: u32 = 77;
 const LWE_BLOCK_SIZE: u32 = 7;
-const BASE2K: u32 = 14;
+const BASE2K: u32 = 17;
 const RANK: u32 = 1;
 const K_GLWE_PT: u32 = 2;
 const K_GLWE_CT: u32 = BASE2K * 3;
 const K_EVK_GLWE: u32 = BASE2K * 4;
+const K_EVK_RAM_READ: u32 = BASE2K * 4;
 const K_GGSW: u32 = BASE2K * 4;
 const K_EVK_GGSW: u32 = BASE2K * 5;
-pub const DECOMP_N: [u8; 2] = [5, 5];
 
 pub struct CryptographicParameters<B: Backend> {
     module: Module<B>, // FFT/NTT tables.
