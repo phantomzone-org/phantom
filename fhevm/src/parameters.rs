@@ -20,7 +20,7 @@ const RANK: u32 = 2;
 const K_GLWE_PT: u32 = 2;
 const K_GLWE_CT: u32 = BASE2K * 3;
 const K_EVK_GLWE: u32 = BASE2K * 4;
-const K_EVK_RAM_READ: u32 = BASE2K * 4;
+// const K_EVK_RAM_READ: u32 = BASE2K * 4;
 const K_GGSW: u32 = BASE2K * 4;
 const K_EVK_GGSW: u32 = BASE2K * 5;
 

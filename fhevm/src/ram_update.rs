@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use poulpy_core::{
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GLWEInfos, GLWEPlaintext, GLWESecretPreparedToRef, GetGaloisElement}
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore, layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GLWEInfos, GLWESecretPreparedToRef, GetGaloisElement}
 };
 use poulpy_hal::{
     api::ModuleLogN,

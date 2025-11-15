@@ -7,6 +7,9 @@ Executing quote generation on encrypted intents mitigates front-running risks th
 The implemented quote generation algorithm works over f32 values and is a simplified model that an OTC desk may use.
 
 ## Project structure
+For details about the structure of the project, please refer to the [template](../template/README.md) example.
+
+<!-- ## Project structure
 
 The main program is implemented in the `main.rs` file of the guest crate. The guest crate is part of the workspace of its parent crate (`otc` in this case). The parent crate is then responsible for compiling the guest crate and, subsequently, encrypting the compiled program.
 
@@ -96,4 +99,4 @@ One last thing remaining is the `loop {}` declaration at the end of the program.
 To run the program, use the following command in this directory:
 ```bash
 cargo run --release
-```
+``` -->

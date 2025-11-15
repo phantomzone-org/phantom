@@ -206,7 +206,7 @@ impl Phantom {
             elf_bytes[txthdr.p_offset as usize..(txthdr.p_offset + txthdr.p_memsz) as usize]
                 .to_vec(),
         );
-        macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
+        // macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
 
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
@@ -234,7 +234,7 @@ impl Phantom {
             });
         }
         let boot_ram = BootMemory::new(ram_offset, RAM_SIZE, boot_ram_data);
-        println!("RAM OFFSET: {}", ram_offset);
+        // println!("RAM OFFSET: {}", ram_offset);
 
         // gather input information
         let inpdata_sec = elf

@@ -12,7 +12,7 @@ It enables black-box execution of any RISC-V program, allowing developers to wri
 
 Developers write their programs in Rust, which are then compiled into RISC-V binaries. These binaries are transformed into a polynomial representation, optimized for execution within the plaintext space of RLWE-based FHE. These polynomials are then encrypted, producing the encrypted program, which can then be executed by the Phantom VM on arbitrary encrypted and/or plaintext inputs.
 
-To use, we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [otc](./compiler-tests/otc/) example.
+To use, we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [template](./compiler-tests/otc/) example to start programming in Phantom, and [otc](./compiler-tests/otc/) for a more advanced example.
 
 ## Architecture
 

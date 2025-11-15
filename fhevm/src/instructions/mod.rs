@@ -520,8 +520,8 @@ impl InstructionsParser {
                 | (mem_w as i64) << 5
                 | (pc_w as i64),
         );
-        let imm: u32 = instruction.get_imm();
-        let rdu: u32 = rd_w.id();
+        // let imm: u32 = instruction.get_imm();
+        // let rdu: u32 = rd_w.id();
         //println!("rs1: {rs1:08x} imm: {imm:08x} rd: {rd:08x} rdu: {rdu:08x}");
         self.instructions_raw.push(instruction);
     }

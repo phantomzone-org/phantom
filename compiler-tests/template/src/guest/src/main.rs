@@ -1,17 +1,17 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 use core::{ops::Div, panic::PanicInfo};
 use macros::entry;
+extern crate alloc;
+extern crate runtime;
+
+///////////////////////////////////////////////// 
+///////////////////////////////////////////////// 
+// TODO: Define input and output structs here.
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
-
-extern crate alloc;
-extern crate runtime;
-
-///////////////////////////////////////////////// 
-// TODO: Define input and output structs here.
 
 #[repr(C)]
 struct Output {
@@ -26,6 +26,8 @@ struct Input {
 
 // End of input and output structs.
 /////////////////////////////////////////////////
+/////////////////////////////////////////////////
+
 
 // Loading the input data on the tape. No need to change this.
 #[no_mangle]
@@ -40,20 +42,22 @@ static mut OUTPUT: [u8; core::mem::size_of::<Output>()] = [0u8; core::mem::size_
 
 #[entry]
 fn main() {
-    // READ INPUT
+    // READ INPUT. No need to change this.
     let mut input: Input =
         unsafe { core::ptr::read_volatile(((&INPUT) as *const u8) as *const Input) };
 
+    // TODO: Read inputs into local variables.
     let radius = input.radius;
     let height = input.height;
 
-    // Write you code here
-    // As an exmaple, we calculate the volume of a cylinder here.
-
+    // TODO: Write your code here.
+    // As an example, we calculate the volume of a cylinder here.
     let volume = core::f64::consts::PI as f32 * radius * radius * height;
 
-    // WRITE OUTPUT
+    // TODO: Write output to Output struct.
     let output_str = Output { volume };
+    
+    // write output to tape. No need to change this.
     unsafe {
         core::ptr::copy_nonoverlapping(
             (&output_str as *const Output) as *const u8,
