@@ -1,17 +1,15 @@
 use poulpy_hal::{
     api::{ModuleN, ScratchTakeBasic},
-    layouts::{Backend, Data, DataMut, Module, Scratch, ZnxViewMut, ZnxZero},
+    layouts::{Backend, Data, DataMut, Scratch, ZnxViewMut, ZnxZero},
     source::Source,
 };
 
 use poulpy_core::{
     layouts::{
-        GGSWInfos, GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPreparedToRef, LWEInfos, GGSW, GLWE,
+        GGSWInfos, GLWEInfos, GLWESecretPreparedToRef, LWEInfos, GGSW, GLWE,
     },
     GGSWEncryptSk, GLWEExternalProduct, GetDistribution, ScratchTakeCore,
 };
-
-use crate::parameters::CryptographicParameters;
 
 /// Coordinate stores Vec<GGSW(X^a_i)> such that prod X^{a_i} = X^a.
 /// This provides a second decomposition over the one in base N to
@@ -61,14 +59,13 @@ impl Coordinate<Vec<u8>> {
     }
     #[allow(dead_code)]
     /// Scratch space required to evaluate GGSW(X^{i}) * GLWE(m).
-    pub(crate) fn product_scratch_space<B: Backend>(params: &CryptographicParameters<B>) -> usize
+    pub(crate) fn product_scratch_space<A, B, M, BE: Backend>(module: &M, ram_infos: &A, addr_infos: &B) -> usize
     where
-        Module<B>: GLWEExternalProduct<B>,
+        A: GLWEInfos,
+        B: GGSWInfos,
+        M: GLWEExternalProduct<BE>,
     {
-        let module: &Module<B> = params.module();
-        let glwe_infos: &GLWELayout = &params.glwe_ct_infos();
-        let ggsw_infos: &GGSWLayout = &params.ggsw_infos();
-        GLWE::external_product_tmp_bytes(module, glwe_infos, glwe_infos, ggsw_infos)
+        GLWE::external_product_tmp_bytes(module, ram_infos, ram_infos, addr_infos)
     }
 }
 impl<D: DataMut> Coordinate<D> {

@@ -73,7 +73,7 @@ where
     let mut source_xa: Source = Source::new([0u8; 32]);
     let mut source_xe: Source = Source::new([0u8; 32]);
 
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
@@ -220,7 +220,7 @@ where
 
     let module: &Module<BE> = params.module();
 
-    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 22);
+    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc((1 << 22)*threads);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
@@ -230,7 +230,7 @@ where
     let mut source_xa: Source = Source::new([0u8; 32]);
     let mut source_xe: Source = Source::new([0u8; 32]);
 
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
@@ -303,7 +303,7 @@ where
         scratch.borrow(),
     );
 
-    let mut res = FheUint::alloc_from_infos(&params.glwe_ct_infos());
+    let mut res = FheUint::alloc_from_infos(&params.fhe_uint_infos());
 
     for op in RD_UPDATE_RV32I_OP_LIST {
         op.eval_enc(
@@ -380,7 +380,7 @@ where
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
     // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
@@ -547,7 +547,7 @@ where
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
     // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);

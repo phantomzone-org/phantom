@@ -72,7 +72,7 @@ where
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
     // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc_from_infos(&params.glwe_ct_infos());
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
     sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
     let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
     sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
@@ -81,20 +81,21 @@ where
         GLWESecretPrepared::alloc(module, sk_glwe.rank());
     sk_glwe_prepared.prepare(module, &sk_glwe);
 
-    let ggsw_infos: &poulpy_core::layouts::GGSWLayout = &params.ggsw_infos();
-    let glwe_infos: &poulpy_core::layouts::GLWELayout = &params.glwe_ct_infos();
+    let fhe_uint_prepared_infos: &poulpy_core::layouts::GGSWLayout =
+        &params.fhe_uint_prepared_infos();
+    let fhe_uint_infos: &poulpy_core::layouts::GLWELayout = &params.fhe_uint_infos();
 
     let mut rs1_prep: FheUintPrepared<Vec<u8>, u32, BE> =
-        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
     let mut rs2_prep: FheUintPrepared<Vec<u8>, u32, BE> =
-        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
     let mut imm_prep: FheUintPrepared<Vec<u8>, u32, BE> =
-        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
     let mut pc_prep: FheUintPrepared<Vec<u8>, u32, BE> =
-        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
     let mut pc_id: FheUintPrepared<Vec<u8>, u32, BE> =
-        FheUintPrepared::alloc_from_infos(module, ggsw_infos);
-    let mut pc: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(glwe_infos);
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut pc: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(fhe_uint_infos);
 
     let keys: VMKeys<Vec<u8>, BRA> =
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);

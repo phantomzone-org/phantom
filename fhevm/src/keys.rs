@@ -18,10 +18,9 @@ use std::collections::HashMap;
 
 use poulpy_core::{
     layouts::{
-        GGLWELayout, GGLWEToGGSWKey, GGLWEToGGSWKeyPrepared, GGLWEToGGSWKeyPreparedFactory,
-        GLWEAutomorphismKey, GLWEAutomorphismKeyHelper, GLWEAutomorphismKeyPrepared,
-        GLWEAutomorphismKeyPreparedFactory, GLWEInfos, GLWESecretToRef, GLWEToLWEKeyLayout,
-        GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef, GLWE,
+        GGLWELayout, GGLWEToGGSWKeyPreparedFactory, GLWEAutomorphismKey, GLWEAutomorphismKeyHelper,
+        GLWEAutomorphismKeyPrepared, GLWEAutomorphismKeyPreparedFactory, GLWEInfos,
+        GLWESecretToRef, GLWEToLWEKeyLayout, GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef, GLWE,
     },
     GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution,
     ScratchTakeCore,
@@ -31,18 +30,12 @@ use crate::parameters::CryptographicParameters;
 
 /// Struct storing the FHE evaluation keys for the read/write on FHE-RAM.
 pub struct VMKeys<D: Data, BRA: BlindRotationAlgo> {
-    atk_glwe: HashMap<i64, GLWEAutomorphismKey<D>>,
-    atk_ggsw_inv: GLWEAutomorphismKey<D>,
-    gglwe_to_ggsw_key: GGLWEToGGSWKey<D>,
-
+    evk_ram: HashMap<i64, GLWEAutomorphismKey<D>>,
     bdd_key: BDDKey<D, BRA>,
 }
 
 pub struct VMKeysPrepared<D: Data, BRA: BlindRotationAlgo, B: Backend> {
     pub(crate) atk_glwe: HashMap<i64, GLWEAutomorphismKeyPrepared<D, B>>,
-    pub(crate) atk_ggsw_inv: GLWEAutomorphismKeyPrepared<D, B>,
-    pub(crate) tsk_ggsw_inv: GGLWEToGGSWKeyPrepared<D, B>,
-
     pub(crate) bdd_key: BDDKeyPrepared<D, BRA, B>,
 }
 
@@ -78,8 +71,7 @@ impl<BRA: BlindRotationAlgo, B: Backend> VMKeysPrepared<Vec<u8>, BRA, B> {
     {
         let module: &Module<B> = params.module();
         let gal_els: Vec<i64> = GLWE::trace_galois_elements(module);
-        let evk_glwe_infos: &GGLWELayout = &params.evk_glwe_infos();
-        let evk_ggsw_infos: &GGLWELayout = &params.evk_ggsw_infos();
+        let evk_ram_infos: &GGLWELayout = &params.evk_ram_infos();
 
         // let cbt_infos: &CircuitBootstrappingKeyLayout = &params.cbt_key_layout();
         // let glwe_to_lwe_infos: &GLWEToLWEKeyLayout = &params.glwe_to_lwe_key_layout();
@@ -89,12 +81,9 @@ impl<BRA: BlindRotationAlgo, B: Backend> VMKeysPrepared<Vec<u8>, BRA, B> {
             atk_glwe: HashMap::from_iter(gal_els.iter().map(|gal_el| {
                 (
                     *gal_el,
-                    GLWEAutomorphismKeyPrepared::alloc_from_infos(module, evk_glwe_infos),
+                    GLWEAutomorphismKeyPrepared::alloc_from_infos(module, evk_ram_infos),
                 )
             })),
-            atk_ggsw_inv: GLWEAutomorphismKeyPrepared::alloc_from_infos(module, evk_ggsw_infos),
-            tsk_ggsw_inv: GGLWEToGGSWKeyPrepared::alloc_from_infos(module, evk_ggsw_infos),
-
             bdd_key: BDDKeyPrepared::alloc_from_infos(module, bdd_infos),
         }
     }
@@ -110,14 +99,9 @@ impl<D: DataMut, BRA: BlindRotationAlgo, B: Backend> VMKeysPrepared<D, BRA, B> {
         Scratch<B>: ScratchTakeCore<B>,
     {
         for (k, key) in self.atk_glwe.iter_mut() {
-            let other: &GLWEAutomorphismKey<O> = other.atk_glwe.get(k).unwrap();
+            let other: &GLWEAutomorphismKey<O> = other.evk_ram.get(k).unwrap();
             key.prepare(module, other, scratch);
         }
-        self.atk_ggsw_inv
-            .prepare(module, &other.atk_ggsw_inv, scratch);
-        self.tsk_ggsw_inv
-            .prepare(module, &other.gglwe_to_ggsw_key, scratch);
-
         self.bdd_key.prepare(module, &other.bdd_key, scratch);
     }
 }
@@ -125,64 +109,25 @@ impl<D: DataMut, BRA: BlindRotationAlgo, B: Backend> VMKeysPrepared<D, BRA, B> {
 impl<BRA: BlindRotationAlgo> VMKeys<Vec<u8>, BRA> {
     /// Constructor for EvaluationKeys
     pub fn new(
-        atk_glwe: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>>,
-        atk_ggsw_inv: GLWEAutomorphismKey<Vec<u8>>,
-        gglwe_to_ggsw_key: GGLWEToGGSWKey<Vec<u8>>,
-
+        evk_ram: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>>,
         bdd_key: BDDKey<Vec<u8>, BRA>,
     ) -> Self {
-        Self {
-            atk_glwe,
-            atk_ggsw_inv,
-            gglwe_to_ggsw_key,
-
-            bdd_key,
-        }
+        Self { evk_ram, bdd_key }
     }
 
     /// Getter for auto_keys at glwe level
-    pub fn atk_glwe(&self) -> &HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> {
-        &self.atk_glwe
+    pub fn evk_ram(&self) -> &HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> {
+        &self.evk_ram
     }
 
     /// Mutable getter for auto_keys at glwe level
-    pub fn atk_glwe_mut(&mut self) -> &mut HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> {
-        &mut self.atk_glwe
+    pub fn evk_ram_mut(&mut self) -> &mut HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> {
+        &mut self.evk_ram
     }
 
     /// Setter for auto_keys at glwe level
-    pub fn set_atk_glwe(&mut self, atk_glwe: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>>) {
-        self.atk_glwe = atk_glwe;
-    }
-
-    /// Getter for tensor_key at ggsw level
-    pub fn tsk_ggsw_inv(&self) -> &GGLWEToGGSWKey<Vec<u8>> {
-        &self.gglwe_to_ggsw_key
-    }
-
-    /// Mutable getter for tensor_key at ggsw level
-    pub fn tsk_ggsw_inv_mut(&mut self) -> &mut GGLWEToGGSWKey<Vec<u8>> {
-        &mut self.gglwe_to_ggsw_key
-    }
-
-    /// Setter for tensor_key at ggsw level
-    pub fn set_tsk_ggsw_inv(&mut self, key: GGLWEToGGSWKey<Vec<u8>>) {
-        self.gglwe_to_ggsw_key = key;
-    }
-
-    /// Getter for auto_key(-1) at ggsw level
-    pub fn atk_ggsw_inv(&self) -> &GLWEAutomorphismKey<Vec<u8>> {
-        &self.atk_ggsw_inv
-    }
-
-    /// Mutable getter for auto_key(-1) at ggsw level
-    pub fn atk_ggsw_inv_mut(&mut self) -> &mut GLWEAutomorphismKey<Vec<u8>> {
-        &mut self.atk_ggsw_inv
-    }
-
-    /// Setter for auto_key(-1) at ggsw level
-    pub fn set_atk_ggsw_inv(&mut self, atk_ggsw_inv: GLWEAutomorphismKey<Vec<u8>>) {
-        self.atk_ggsw_inv = atk_ggsw_inv;
+    pub fn set_evk_ram(&mut self, evk_ram: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>>) {
+        self.evk_ram = evk_ram;
     }
 }
 
@@ -207,20 +152,17 @@ impl<BRA: BlindRotationAlgo> VMKeys<Vec<u8>, BRA> {
     {
         let module: &Module<BE> = params.module();
 
-        let evk_glwe_infos: GGLWELayout = params.evk_glwe_infos();
-        let evk_ggsw_infos: GGLWELayout = params.evk_ggsw_infos();
+        let evk_ram_infos: GGLWELayout = params.evk_ram_infos();
 
         let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(
-            GLWEAutomorphismKey::encrypt_sk_tmp_bytes(module, &evk_glwe_infos)
-                | GLWEAutomorphismKey::encrypt_sk_tmp_bytes(module, &evk_ggsw_infos)
-                | GGLWEToGGSWKey::encrypt_sk_tmp_bytes(module, &evk_ggsw_infos),
+            GLWEAutomorphismKey::encrypt_sk_tmp_bytes(module, &evk_ram_infos).max(module.bdd_key_encrypt_sk_tmp_bytes(&params.bdd_key_layout())),
         );
 
         let gal_els: Vec<i64> = GLWE::trace_galois_elements(module);
-        let atk_glwe: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> =
+        let evk_ram: HashMap<i64, GLWEAutomorphismKey<Vec<u8>>> =
             HashMap::from_iter(gal_els.iter().map(|gal_el| {
                 let mut key: GLWEAutomorphismKey<Vec<u8>> =
-                    GLWEAutomorphismKey::alloc_from_infos(&evk_glwe_infos);
+                    GLWEAutomorphismKey::alloc_from_infos(&evk_ram_infos);
                 key.encrypt_sk(
                     module,
                     *gal_el,
@@ -232,15 +174,7 @@ impl<BRA: BlindRotationAlgo> VMKeys<Vec<u8>, BRA> {
                 (*gal_el, key)
             }));
 
-        let mut gglwe_to_ggsw_key: GGLWEToGGSWKey<Vec<u8>> =
-            GGLWEToGGSWKey::alloc_from_infos(&evk_ggsw_infos);
-        gglwe_to_ggsw_key.encrypt_sk(module, sk_glwe, source_xa, source_xe, scratch.borrow());
-
-        let mut atk_ggsw_inv: GLWEAutomorphismKey<Vec<u8>> =
-            GLWEAutomorphismKey::alloc_from_infos(&evk_ggsw_infos);
-        atk_ggsw_inv.encrypt_sk(module, -1, sk_glwe, source_xa, source_xe, scratch.borrow());
-
-        let mut bdd_key = BDDKey::alloc_from_infos(&params.bdd_key_layout());
+        let mut bdd_key: BDDKey<Vec<u8>, BRA> = BDDKey::alloc_from_infos(&params.bdd_key_layout());
         bdd_key.encrypt_sk(
             module,
             sk_lwe,
@@ -250,12 +184,7 @@ impl<BRA: BlindRotationAlgo> VMKeys<Vec<u8>, BRA> {
             scratch.borrow(),
         );
 
-        VMKeys {
-            atk_glwe,
-            atk_ggsw_inv,
-            gglwe_to_ggsw_key,
-            bdd_key,
-        }
+        VMKeys { evk_ram, bdd_key }
     }
 }
 
