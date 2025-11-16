@@ -43,6 +43,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) vm_debug: Option<InterpreterDebug>,
     
     pub(crate) verbose_timings: bool,
+    pub(crate) threads: usize,
     pub(crate) measurements: Measurements,
 
     pub(crate) instruction_set: InstructionSet,
@@ -130,10 +131,6 @@ impl<BE: Backend> Interpreter<BE> {
         Module<BE>: FheUintPreparedFactory<u32, BE>,
     {
 
-        let verbose_timings = std::env::var("VERBOSE_TIMINGS")
-            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-
         let rom_infos: &GLWELayout = &params.rom_infos();
         let ram_infos: &GLWELayout = &params.ram_infos();
 
@@ -161,7 +158,8 @@ impl<BE: Backend> Interpreter<BE> {
 
         Self {
             vm_debug,
-            verbose_timings,
+            verbose_timings: false,
+            threads: 1,
             instruction_set: InstructionSet::RV32I,
             measurements: Measurements::new(),
             address_rom_infos: params.address_rom_infos(),
@@ -226,6 +224,18 @@ impl<BE: Backend> Interpreter<BE> {
                 fhe_uint_prepared_infos,
             ),
         }
+    }
+
+    pub fn set_verbose_timings(&mut self, verbose_timings: bool) {
+        self.verbose_timings = verbose_timings;
+    }
+
+    pub fn set_threads(&mut self, threads: usize) {
+        self.threads = threads;
+    }
+
+    pub fn threads(&self) -> usize {
+        self.threads
     }
 
     pub fn instructions_encrypt_sk<M, S>(
@@ -391,7 +401,6 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn cycle<M, DK, H, K, BRA>(
         &mut self,
-        threads: usize,
         module: &M,
         keys: &H,
         scratch: &mut Scratch<BE>,
@@ -418,7 +427,6 @@ impl<BE: Backend> Interpreter<BE> {
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
         self.cycle_internal(
-            threads,
             module,
             keys,
             None::<&GLWESecretPrepared<Vec<u8>, BE>>,
@@ -428,7 +436,6 @@ impl<BE: Backend> Interpreter<BE> {
 
     pub fn cycle_debug<M, DK, H, BRA, K, S>(
         &mut self,
-        threads: usize,
         module: &M,
         keys: &H,
         sk: &S,
@@ -456,12 +463,11 @@ impl<BE: Backend> Interpreter<BE> {
         H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
-        self.cycle_internal(threads, module, keys, Some(sk), scratch);
+        self.cycle_internal(module, keys, Some(sk), scratch);
     }
 
     fn cycle_internal<M, DK, H, BRA, K, S>(
         &mut self,
-        threads: usize,
         module: &M,
         keys: &H,
         sk: Option<&S>,
@@ -489,6 +495,7 @@ impl<BE: Backend> Interpreter<BE> {
         H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
     {
+        let threads = self.threads;
         let mut this_cycle_measurement = PerCycleMeasurements::new();
 
         let start_cycle_time = Instant::now();
@@ -496,8 +503,10 @@ impl<BE: Backend> Interpreter<BE> {
         // - addresses=[rs1, rs2, rd]
         // - imm
         // - opids=[rdu, mu, pcu]
-        println!();
-        println!(">>>>>>>>> CYCLE[{:03}] <<<<<<<<<<<", self.cycle);
+        if self.verbose_timings {
+            println!();
+            println!(">>>>>>>>> CYCLE[{:03}] <<<<<<<<<<<", self.cycle);
+        }
         self.read_instruction_components(
             threads,
             module,
@@ -554,71 +563,12 @@ impl<BE: Backend> Interpreter<BE> {
         let total_cycle_time = end_cycle_time.duration_since(start_cycle_time);
         this_cycle_measurement.total_cycle_time = total_cycle_time;
 
-        if self.verbose_timings {
-            self.measurements
-            .cycle_measurements
-            .push(this_cycle_measurement);
-            println!();
-            println!("Average cycle measurements:");
-            println!(
-                "- Total cycle: {:?}",
-                self.measurements.average_cycle_time()
-            );
-            println!(
-                "1. Read instruction components: {:?}",
-                self.measurements
-                    .average_cycle_time_read_instruction_components()
-            );
-            println!(
-                "2. Read registers: {:?}",
-                self.measurements.average_cycle_time_read_registers()
-            );
-            println!(
-                "3. Prepare imm rs1 rs2 values: {:?}",
-                self.measurements
-                    .average_cycle_time_prepare_imm_rs1_rs2_values()
-            );
-            println!(
-                "4. Read ram: {:?}",
-                self.measurements.average_cycle_time_read_ram()
-            );
-            println!(
-                "5. Update registers: {:?}",
-                self.measurements.average_cycle_time_update_registers()
-            );
-            println!(
-                "   - Evaluate rd ops: {:?}",
-                self.measurements.average_cycle_time_evaluate_rd_ops()
-            );
-            println!(
-                "   - Blind selection: {:?}",
-                self.measurements.average_cycle_time_blind_selection()
-            );
-            println!(
-                "   - Compute rd address: {:?}",
-                self.measurements.average_cycle_time_compute_rd_address()
-            );
-            println!(
-                "   - Write rd: {:?}",
-                self.measurements.average_cycle_time_write_rd()
-            );
-            println!(
-                "6. Update ram: {:?}",
-                self.measurements.average_cycle_time_update_ram()
-            );
-            println!(
-                "7. Update pc: {:?}",
-                self.measurements.average_cycle_time_update_pc()
-            );
-            println!(
-                "   - PCU prepare: {:?}",
-                self.measurements.average_cycle_time_pcu_prepare()
-            );
-            println!(
-                "   - PC update BDD: {:?}",
-                self.measurements.average_cycle_time_pc_update_bdd()
-            );
-        }
+        self.measurements
+        .cycle_measurements
+        .push(this_cycle_measurement);
+
+        self.print_timings();
+
     }
 
     pub(crate) fn read_instruction_components<M, D, BRA, H, K, S>(
@@ -1485,5 +1435,43 @@ impl<BE: Backend> Interpreter<BE> {
             );
             assert_eq!(pc_have, pc_want);
         }
+    }
+
+
+    pub fn print_timings(&self) {
+        if self.verbose_timings {
+            println!(
+                "
+Average Cycle Time: {:?}
+  1. Read instruction components: {:?}
+  2. Read registers: {:?}
+  3. Prepare imm rs1 rs2 values: {:?}
+  4. Read ram: {:?}
+  5. Update registers: {:?}
+     - Evaluate rd ops: {:?}
+     - Blind selection: {:?}
+     - Compute rd address: {:?}
+     - Write rd: {:?}
+  6. Update ram: {:?}
+  7. Update pc: {:?}
+     - PCU prepare: {:?}
+     - PC update BDD: {:?}
+",
+                self.measurements.average_cycle_time(),
+                self.measurements.average_cycle_time_read_instruction_components(),
+                self.measurements.average_cycle_time_read_registers(),
+                self.measurements.average_cycle_time_prepare_imm_rs1_rs2_values(),
+                self.measurements.average_cycle_time_read_ram(),
+                self.measurements.average_cycle_time_update_registers(),
+                self.measurements.average_cycle_time_evaluate_rd_ops(),
+                self.measurements.average_cycle_time_blind_selection(),
+                self.measurements.average_cycle_time_compute_rd_address(),
+                self.measurements.average_cycle_time_write_rd(),
+                self.measurements.average_cycle_time_update_ram(),
+                self.measurements.average_cycle_time_update_pc(),
+                self.measurements.average_cycle_time_pcu_prepare(),
+                self.measurements.average_cycle_time_pc_update_bdd()
+            );
+        }        
     }
 }

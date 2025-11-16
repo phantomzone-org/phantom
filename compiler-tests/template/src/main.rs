@@ -26,8 +26,6 @@ struct Input {
 /////////////////////////////////////////////////
 
 fn main() {
-    let threads = 16;
-
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
     let pz = Phantom::from_elf(elf_bytes);
@@ -44,8 +42,14 @@ fn main() {
     };
 
     // Running the encrypted VM
+    println!("Initializing Phantom...");
     let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
-    enc_vm.execute(threads);
+    println!("Phantom initialized!");
+
+    println!("Executing Encrypted Cycles...");
+    enc_vm.execute();
+    println!("Finished Executing Encrypted Cycles!");
+    
     let encrypted_vm_output_tape = enc_vm.output_tape();
 
     // Running the cleartext VM for comparison and testing purposes
@@ -54,7 +58,7 @@ fn main() {
     vm.execute();
     let output_tape = vm.output_tape();
 
-    // assert_eq!(output_tape, encrypted_vm_output_tape);
+    assert_eq!(output_tape, encrypted_vm_output_tape);
     println!("Encrypted Tape and Test VM Tape are equal");
     println!("output_tape={:?}", output_tape);
 

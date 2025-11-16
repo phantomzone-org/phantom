@@ -598,9 +598,12 @@ where
 
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
+    
+    interpreter.set_verbose_timings(false);
+    interpreter.set_threads(1);
 
     println!("Cycle");
-    interpreter.cycle(1, module, &key_prepared, scratch.borrow());
+    interpreter.cycle(module, &key_prepared, scratch.borrow());
     println!("Cycle done");
 
     let pc = interpreter

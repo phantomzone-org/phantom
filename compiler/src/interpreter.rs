@@ -1,3 +1,4 @@
+use tqdm::tqdm;
 use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
     segment::ProgramHeader,
@@ -110,15 +111,13 @@ pub struct EncryptedVM {
 }
 
 impl EncryptedVM {
-    pub fn execute(&mut self, threads: usize) {
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc((1 << 24) * threads);
+    pub fn execute(&mut self) {
+        
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
 
-        let mut curr_cycles = 0;
-        while curr_cycles < self.max_cycles {
-            // let time = std::time::Instant::now();
+        for _current_cycle in tqdm(0..self.max_cycles) {
             if self.debug {
                 self.interpreter.cycle_debug(
-                    threads,
                     self.params.module(),
                     &self.key_prepared,
                     &self.sk_prepared,
@@ -126,15 +125,11 @@ impl EncryptedVM {
                 );
             } else {
                 self.interpreter.cycle(
-                    threads,
                     self.params.module(),
                     &self.key_prepared,
                     scratch.borrow(),
                 );
             }
-
-            // println!("Time: {:?}", time.elapsed());
-            curr_cycles += 1;
         }
     }
 
@@ -397,9 +392,16 @@ impl Phantom {
             scratch.borrow(),
         );
 
-        // let time = std::time::Instant::now();
-        // interpreter.cycle(params.module(), &key_prepared, scratch.borrow());
-        // println!("Time: {:?}", time.elapsed());
+
+        let verbose_timings = std::env::var("PHANTOM_VERBOSE_TIMINGS")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let threads = std::env::var("PHANTOM_THREADS")
+            .map(|val| val.parse::<usize>().unwrap_or(1))
+            .unwrap_or(1);
+
+        interpreter.set_verbose_timings(verbose_timings);
+        interpreter.set_threads(threads);
 
         EncryptedVM {
             params,

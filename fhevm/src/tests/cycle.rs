@@ -130,9 +130,11 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    interpreter.set_verbose_timings(false);
+    interpreter.set_threads(16);
+
     for _ in 0..rom.len() {
         interpreter.cycle_debug(
-            16,
             module,
             &key_prepared,
             &sk_glwe_prepared,
@@ -173,8 +175,6 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-
-    std::env::set_var("VERBOSE_TIMINGS", "0");
 
     let num_instructions = 100;
     let instruction = Instruction::new(0b00000000_00000000_00000000_1110011);
@@ -235,9 +235,11 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
+    interpreter.set_verbose_timings(false);
+    interpreter.set_threads(16);
+
     for _ in 0..rom.len() {
         interpreter.cycle_debug(
-            16,
             module,
             &key_prepared,
             &sk_glwe_prepared,
@@ -267,6 +269,7 @@ where
         ];
 
         if series.iter().any(|(_, data)| !data.is_empty()) {
+            
             let plot_dir = std::path::PathBuf::from("artifacts");
             if let Err(err) = std::fs::create_dir_all(&plot_dir) {
                 println!(
@@ -274,13 +277,13 @@ where
                     plot_dir.display()
                 );
             }
-            let plot_path = plot_dir.join("noise_progression.svg");
+            let plot_path = plot_dir.join(format!("noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.svg", params.n_glwe(), params.n_lwe(), params.rank(), params.base2k()));
             match plot_noise_progression(&params, &plot_path, &series) {
-                Ok(()) => println!("RAM noise plot written to {}", plot_path.display()),
-                Err(err) => println!("Failed to render RAM noise plot: {err}"),
+                Ok(()) => println!("Noise progression plot written to {}", plot_path.display()),
+                Err(err) => println!("Failed to render noise progression plot: {err}"),
             }
         }
-    }
+    }   
 }
 
 fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(

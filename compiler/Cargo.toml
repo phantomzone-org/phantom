@@ -11,6 +11,7 @@ poulpy-backend = {path = "../../poulpy/poulpy-backend"}
 poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
 fhevm = { path = "../fhevm"}
 itertools = "0.14.0"
+tqdm = "0.8.0"
 
 [features]
 verbose=[]
