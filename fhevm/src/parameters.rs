@@ -16,16 +16,16 @@ const N_GLWE: u32 = 1 << LOGN_GLWE;
 const N_LWE: u32 = 574;
 const LWE_BLOCK_SIZE: u32 = 7;
 const BASE2K: u32 = 14;
-const RANK: u32 = 3;
+const RANK: u32 = 2;
 const K_GLWE_PT: u32 = 2;
 
-const K_ROM: u32 = BASE2K * 3;
-const K_RAM: u32 = BASE2K * 3;
-const K_FHE_UINT: u32 = BASE2K * 3;
+const K_ROM: u32 = BASE2K * 2;
+const K_RAM: u32 = BASE2K * 2;
+const K_FHE_UINT: u32 = BASE2K * 2;
 
-const K_EVK_RAM_READ: u32 = BASE2K * 4;
-const K_FHE_UINT_PREPARED: u32 = BASE2K * 5;
-const K_PBS: u32 = BASE2K * 6;
+const K_EVK_RAM_READ: u32 = BASE2K * 3;
+const K_FHE_UINT_PREPARED: u32 = BASE2K * 3;
+const K_PBS: u32 = BASE2K * 4;
 
 pub struct CryptographicParameters<B: Backend> {
     module: Module<B>,

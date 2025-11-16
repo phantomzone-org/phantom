@@ -2,12 +2,12 @@ use std::thread;
 
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos, GGSWPreparedFactory,
-        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWEPlaintext, GLWESecretPreparedToRef,
+        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos,
+        GLWEAutomorphismKeyHelper, GLWEInfos, GLWELayout, GLWESecretPreparedToRef,
         GLWEToMut, GetGaloisElement, TorusPrecision, GLWE,
     },
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENormalize,
-    GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWENormalize,
+    GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN, ScratchAvailable, TakeSlice},

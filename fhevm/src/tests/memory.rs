@@ -66,7 +66,6 @@ fn test_fhe_ram() {
     // Word-size
     let word_size: usize = 32;
     let size: usize = 1024;
-    let offset = 2;
 
     let mask: u32 = ((1u64 << word_size) - 1) as u32;
 

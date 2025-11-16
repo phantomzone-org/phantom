@@ -23,9 +23,7 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint,
-        FheUintPrepare, FheUintPrepared, FheUintPreparedEncryptSk, FheUintPreparedFactory,
-        GGSWBlindRotation, GLWEBlinSelection, GLWEBlindRetrieval,
+        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit1WTo1W, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared, FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection, GLWEBlindRetrieval, Identity
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -68,6 +66,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) ram_addr_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) ram_val_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) ram_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) ram_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // PC
     pub(crate) pc_fhe_uint: FheUint<Vec<u8>, u32>,
@@ -93,6 +92,7 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) rd_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
     pub(crate) rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // OP ID GLWE
     pub(crate) rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,
@@ -233,6 +233,14 @@ impl<BE: Backend> Interpreter<BE> {
                 fhe_uint_prepared_infos,
             ),
             pc_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
+            ram_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
+            rd_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
             ),
@@ -409,7 +417,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit2WTo1W<BE> + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
@@ -448,7 +456,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit2WTo1W<BE> + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
@@ -482,7 +490,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit2WTo1W<BE> + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
@@ -1059,7 +1067,7 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>
-            + GLWEBlindRetrieval<BE>,
+            + GLWEBlindRetrieval<BE> + ExecuteBDDCircuit1WTo1W<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
@@ -1154,7 +1162,7 @@ impl<BE: Backend> Interpreter<BE> {
         this_cycle_measurement: &mut PerCycleMeasurements,
     ) where
         M: Sync
-            + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit2WTo1W<BE> + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + ModuleLogN
             + GLWERotate<BE>
@@ -1258,6 +1266,9 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
+        self.rd_val_fhe_uint_prepared.prepare_custom_multi_thread(threads, module, &self.rd_val_fhe_uint, 0, 32, keys,scratch);
+        self.rd_val_fhe_uint.identity_multi_thread(threads, module, &self.rd_val_fhe_uint_prepared, keys, scratch);
+
         self.registers.write(
             threads,
             module,
@@ -1328,7 +1339,7 @@ impl<BE: Backend> Interpreter<BE> {
             + ModuleN
             + GGSWBlindRotation<u32, BE>
             + GGSWPreparedFactory<BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit2WTo1W<BE> + ExecuteBDDCircuit1WTo1W<BE>
             + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>
@@ -1387,6 +1398,9 @@ impl<BE: Backend> Interpreter<BE> {
             ops_bit_size,
             scratch,
         );
+
+        self.ram_val_fhe_uint_prepared.prepare_custom_multi_thread(threads, module, &self.ram_val_fhe_uint, 0, 32, keys,scratch);
+        self.ram_val_fhe_uint.identity_multi_thread(threads, module, &self.ram_val_fhe_uint_prepared, keys, scratch);
 
         self.ram.read_statefull_rev(
             threads,

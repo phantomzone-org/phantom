@@ -111,8 +111,8 @@ fn test_main_guest() {
     // let max_cycles = 10; // For testing purposes
 
     // Encrypted VM is too slow, at the moment, to run a program with 25.9M cycles in reasonable time
-    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&random_input), max_cycles);
-    enc_vm.execute();
+    let mut enc_vm = pz.encrypted_vm::<true>(to_u8_slice(&random_input), max_cycles);
+    enc_vm.execute(16);
 
     let mut vm = pz.test_vm(max_cycles);
     // Load inputs to the VM
