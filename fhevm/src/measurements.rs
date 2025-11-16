@@ -101,15 +101,6 @@ impl Measurements {
         total_cycle_time / self.cycle_measurements.len() as u32
     }
 
-    pub fn average_cycle_time_compute_rd_address(&self) -> Duration {
-        let total_cycle_time = self
-            .cycle_measurements
-            .iter()
-            .map(|measurement| measurement.cycle_time_compute_rd_address)
-            .sum::<Duration>();
-        total_cycle_time / self.cycle_measurements.len() as u32
-    }
-
     pub fn average_cycle_time_write_rd(&self) -> Duration {
         let total_cycle_time = self
             .cycle_measurements
@@ -194,7 +185,6 @@ pub struct PerCycleMeasurements {
     // Layer two - update_registers
     pub cycle_time_evaluate_rd_ops: Duration,
     pub cycle_time_blind_selection: Duration,
-    pub cycle_time_compute_rd_address: Duration,
     pub cycle_time_write_rd: Duration,
 
     // Layer two - update_pc
@@ -226,7 +216,6 @@ impl PerCycleMeasurements {
             // Layer two - update_registers
             cycle_time_evaluate_rd_ops: Duration::from_secs(0),
             cycle_time_blind_selection: Duration::from_secs(0),
-            cycle_time_compute_rd_address: Duration::from_secs(0),
             cycle_time_write_rd: Duration::from_secs(0),
 
             // Layer two - update_pc

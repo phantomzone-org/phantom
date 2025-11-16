@@ -51,8 +51,6 @@ struct Input {
 const DEBUG: bool = true;
 
 fn main() {
-    let threads = 16;
-
     let compiler = CompileOpts::new("guest");
     let elf_bytes = compiler.build();
     let pz = Phantom::from_elf(elf_bytes);
@@ -78,7 +76,7 @@ fn main() {
     // let max_cycles = 10; // For testing purposes
 
     let mut enc_vm = pz.encrypted_vm::<DEBUG>(to_u8_slice(&input), max_cycles);
-    enc_vm.execute(threads);
+    enc_vm.execute();
 
     // Init -> read input tape -> run -> read output tape
     let mut vm = pz.test_vm(max_cycles);

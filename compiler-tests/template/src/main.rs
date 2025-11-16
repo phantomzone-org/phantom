@@ -57,7 +57,7 @@ fn main() {
     vm.execute();
     let output_tape = vm.output_tape();
 
-    // assert_eq!(output_tape, encrypted_vm_output_tape);
+    assert_eq!(output_tape, encrypted_vm_output_tape);
     println!("Encrypted Tape and Test VM Tape are equal");
     println!("output_tape={:?}", output_tape);
 

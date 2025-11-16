@@ -1542,7 +1542,6 @@ Average Cycle Time: {:?}
   5. Update registers: {:?}
      - Evaluate rd ops: {:?}
      - Blind selection: {:?}
-     - Compute rd address: {:?}
      - Write rd: {:?}
   6. Update ram: {:?}
   7. Update pc: {:?}
@@ -1557,7 +1556,6 @@ Average Cycle Time: {:?}
                 self.measurements.average_cycle_time_update_registers(),
                 self.measurements.average_cycle_time_evaluate_rd_ops(),
                 self.measurements.average_cycle_time_blind_selection(),
-                self.measurements.average_cycle_time_compute_rd_address(),
                 self.measurements.average_cycle_time_write_rd(),
                 self.measurements.average_cycle_time_update_ram(),
                 self.measurements.average_cycle_time_update_pc(),
