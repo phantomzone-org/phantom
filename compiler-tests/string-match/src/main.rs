@@ -14,9 +14,37 @@ struct Output {
     is_match: bool,
 }
 
+const MAX_LENGTH: usize = 20;
+#[repr(C)]
+struct UpperBoundedString {
+    characters: [u8; MAX_LENGTH],
+}
+
+impl UpperBoundedString {
+    fn new(input_string: &str) -> Self {
+        if input_string.len() > MAX_LENGTH {
+            panic!("String is too long");
+        }
+        let mut characters = [0u8; MAX_LENGTH];
+        for (i, &byte) in input_string.as_bytes().iter().enumerate() {
+            characters[i] = byte;
+        }
+        Self { characters }
+    }
+
+    fn eq(&self, other: &Self) -> bool {
+        for i in 0..MAX_LENGTH {
+            if self.characters[i] != other.characters[i] {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 #[repr(C)]
 struct Input {
-    input_string: String,
+    input_string: UpperBoundedString,
 }
 
 fn main() {
@@ -24,26 +52,22 @@ fn main() {
     let elf_bytes = compiler.build();
     let pz = Phantom::from_elf(elf_bytes);
 
-    // TODO: Set the number of cycles you want to run
-    // Allow enough cycles for the guest program to reach the point where it
-    // writes the output buffer before hitting the busy loop at the end.
-    let max_cycles = 700;
+    let max_cycles = 100;
 
-    // TODO: Provide sample Inputs
     let input = Input {
-        input_string: "not-mississippi".to_string(),
+        input_string: UpperBoundedString::new("not-mississippi"),
     };
 
-    // // Running the encrypted VM
-    // println!("Initializing Phantom...");
-    // let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
-    // println!("Phantom initialized!");
+    // Running the encrypted VM
+    println!("Initializing Phantom...");
+    let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
+    println!("Phantom initialized!");
 
-    // println!("Executing Encrypted Cycles...");
-    // enc_vm.execute();
-    // println!("Finished Executing Encrypted Cycles!");
+    println!("Executing Encrypted Cycles...");
+    enc_vm.execute();
+    println!("Finished Executing Encrypted Cycles!");
     
-    // let encrypted_vm_output_tape = enc_vm.output_tape();
+    let encrypted_vm_output_tape = enc_vm.output_tape();
 
     // Running the cleartext VM for comparison and testing purposes
     let mut vm = pz.test_vm(max_cycles);
@@ -51,16 +75,14 @@ fn main() {
     vm.execute();
     let output_tape = vm.output_tape();
 
-    // assert_eq!(output_tape, encrypted_vm_output_tape);
+    assert_eq!(output_tape, encrypted_vm_output_tape);
     println!("Encrypted Tape and Test VM Tape are equal");
     println!("output_tape={:?}", output_tape);
 
-    // Below is for testing purposes only
-    // Comparing Phantom's output with the expected behaviour
 
     fn expected_output(input: Input) -> Output {
-        let hidden_string = "mississippi";
-        let is_match = input.input_string == hidden_string;
+        let hidden_string = UpperBoundedString::new("mississippi");
+        let is_match = input.input_string.eq(&hidden_string);
         Output { is_match: is_match }
     }
 
@@ -71,4 +93,5 @@ fn main() {
     let want_is_match = want_output.is_match;
 
     assert_eq!(have_is_match, want_is_match);
+    println!("is_match={}", have_is_match);
 }

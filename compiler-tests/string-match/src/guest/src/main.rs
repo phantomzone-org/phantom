@@ -17,9 +17,37 @@ struct Output {
     is_match: bool,
 }
 
+const MAX_LENGTH: usize = 20;
+#[repr(C)]
+struct UpperBoundedString {
+    characters: [u8; MAX_LENGTH],
+}
+
+impl UpperBoundedString {
+    fn new(string: &str) -> Self {
+        if string.len() > MAX_LENGTH {
+            panic!("String is too long");
+        }
+        let mut characters = [0u8; MAX_LENGTH];
+        for (i, &byte) in string.as_bytes().iter().enumerate() {
+            characters[i] = byte;
+        }
+        Self { characters }
+    }
+
+    fn eq(&self, other: &Self) -> bool {
+        for i in 0..MAX_LENGTH {
+            if self.characters[i] != other.characters[i] {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 #[repr(C)]
 struct Input {
-    input_string: String,
+    input_string: UpperBoundedString,
 }
 
 // Loading the input data on the tape. No need to change this.
@@ -41,9 +69,9 @@ fn main() {
 
     let input_string = input.input_string;
 
-    let hidden_string = "mississippi";
+    let hidden_string = UpperBoundedString::new("mississippi");
 
-    let is_match = (input_string == hidden_string);
+    let is_match = hidden_string.eq(&input_string);
 
     let output_str = Output { is_match };
     
