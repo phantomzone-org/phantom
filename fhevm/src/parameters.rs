@@ -1,5 +1,6 @@
 use poulpy_core::layouts::{
-    Base2K, Degree, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout, GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision
+    Base2K, Degree, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout,
+    GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
 };
 use poulpy_hal::{
     api::ModuleNew,
@@ -24,8 +25,6 @@ const K_FHE_UINT: u32 = BASE2K * 3;
 
 const K_EVK_RAM_READ: u32 = BASE2K * 4;
 const K_FHE_UINT_PREPARED: u32 = BASE2K * 5;
-const K_ADDRESS: u32 = BASE2K * 5;
-
 const K_PBS: u32 = BASE2K * 6;
 
 pub struct CryptographicParameters<B: Backend> {
@@ -42,8 +41,6 @@ pub struct CryptographicParameters<B: Backend> {
     k_rom: TorusPrecision,
     k_ram: TorusPrecision,
     k_evk_ram: TorusPrecision,
-
-    k_address: TorusPrecision,
 
     k_pbs: TorusPrecision,
 }
@@ -65,7 +62,6 @@ where
             k_rom: K_ROM.into(),
             k_ram: K_RAM.into(),
             k_evk_ram: K_EVK_RAM_READ.into(),
-            k_address: K_ADDRESS.into(),
             k_pbs: K_PBS.into(),
         }
     }
@@ -96,29 +92,7 @@ impl<B: Backend> CryptographicParameters<B> {
             k: self.k_fhe_uint_prepared(),
             base2k: self.base2k(),
             rank: self.rank(),
-            dnum: self.k_address().div_ceil(self.base2k).into(),
-            dsize: Dsize(1),
-        }
-    }
-
-    pub fn address_rom_infos(&self) -> GGSWLayout {
-        GGSWLayout {
-            n: self.module.n().into(),
-            k: self.k_address(),
-            base2k: self.base2k(),
-            rank: self.rank(),
-            dnum: self.k_rom().div_ceil(self.base2k).into(),
-            dsize: Dsize(1),
-        }
-    }
-
-    pub fn address_ram_infos(&self) -> GGSWLayout {
-        GGSWLayout {
-            n: self.module.n().into(),
-            k: self.k_address(),
-            base2k: self.base2k(),
-            rank: self.rank(),
-            dnum: self.k_ram().div_ceil(self.base2k).into(),
+            dnum: self.k_fhe_uint().div_ceil(self.base2k).into(),
             dsize: Dsize(1),
         }
     }
@@ -197,11 +171,7 @@ impl<B: Backend> CryptographicParameters<B> {
         self.k_evk_ram
     }
 
-    pub fn k_address(&self) -> TorusPrecision {
-        self.k_address
-    }
-
-    pub fn k_pbs(&self) -> TorusPrecision{
+    pub fn k_pbs(&self) -> TorusPrecision {
         self.k_pbs
     }
 

@@ -155,7 +155,8 @@ impl<BRA: BlindRotationAlgo> VMKeys<Vec<u8>, BRA> {
         let evk_ram_infos: GGLWELayout = params.evk_ram_infos();
 
         let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(
-            GLWEAutomorphismKey::encrypt_sk_tmp_bytes(module, &evk_ram_infos).max(module.bdd_key_encrypt_sk_tmp_bytes(&params.bdd_key_layout())),
+            GLWEAutomorphismKey::encrypt_sk_tmp_bytes(module, &evk_ram_infos)
+                .max(module.bdd_key_encrypt_sk_tmp_bytes(&params.bdd_key_layout())),
         );
 
         let gal_els: Vec<i64> = GLWE::trace_galois_elements(module);

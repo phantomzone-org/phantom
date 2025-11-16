@@ -21,7 +21,7 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation,
+        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
@@ -220,7 +220,7 @@ where
 
     let module: &Module<BE> = params.module();
 
-    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc((1 << 22)*threads);
+    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc((1 << 22) * threads);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
@@ -530,7 +530,8 @@ where
         + GLWEAutomorphismKeyPreparedFactory<BE>
         + GGLWEToGGSWKeyPreparedFactory<BE>
         + BDDKeyPreparedFactory<BRA, BE>
-        + GGSWAutomorphism<BE>,
+        + GGSWAutomorphism<BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,

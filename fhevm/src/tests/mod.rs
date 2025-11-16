@@ -1,6 +1,5 @@
-mod address_conversion;
 mod cycle;
 mod interpreters;
+mod memory;
 mod pc_update;
-mod ram;
 mod ram_offset;

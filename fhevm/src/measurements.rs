@@ -101,15 +101,6 @@ impl Measurements {
         total_cycle_time / self.cycle_measurements.len() as u32
     }
 
-    pub fn average_cycle_time_compute_rd_address(&self) -> Duration {
-        let total_cycle_time = self
-            .cycle_measurements
-            .iter()
-            .map(|measurement| measurement.cycle_time_compute_rd_address)
-            .sum::<Duration>();
-        total_cycle_time / self.cycle_measurements.len() as u32
-    }
-
     pub fn average_cycle_time_write_rd(&self) -> Duration {
         let total_cycle_time = self
             .cycle_measurements

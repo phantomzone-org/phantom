@@ -21,7 +21,7 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation,
+        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
@@ -53,7 +53,8 @@ where
         + GLWEDecrypt<BE>
         + GLWEAutomorphismKeyPreparedFactory<BE>
         + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
@@ -168,12 +169,12 @@ where
         + GLWEDecrypt<BE>
         + GLWEAutomorphismKeyPreparedFactory<BE>
         + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-
     std::env::set_var("VERBOSE_TIMINGS", "0");
 
     let num_instructions = 100;
@@ -321,7 +322,12 @@ fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
     let drawing_area = SVGBackend::new(output_path.as_ref(), (1280, 720)).into_drawing_area();
     drawing_area.fill(&WHITE)?;
 
-    let caption = format!("Noise Progression (N_GLWE: {}, N_LWE: {}, RANK: {})", params.n_glwe(), params.n_lwe(), params.rank());
+    let caption = format!(
+        "Noise Progression (N_GLWE: {}, N_LWE: {}, RANK: {})",
+        params.n_glwe(),
+        params.n_lwe(),
+        params.rank()
+    );
     let mut chart = ChartBuilder::on(&drawing_area)
         .caption(caption, ("sans-serif", 30))
         .margin(20)
