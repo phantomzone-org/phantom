@@ -3,7 +3,6 @@ use crate::{
     parameters::CryptographicParameters,
     Instruction, InstructionsParser, Interpreter, RV32I,
 };
-use plotters::prelude::*;
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
@@ -270,14 +269,14 @@ where
 
         if series.iter().any(|(_, data)| !data.is_empty()) {
             
-            let plot_dir = std::path::PathBuf::from("artifacts");
+            let plot_dir = std::path::PathBuf::from("../doc");
             if let Err(err) = std::fs::create_dir_all(&plot_dir) {
                 println!(
                     "Failed to create plot directory {}: {err}",
                     plot_dir.display()
                 );
             }
-            let plot_path = plot_dir.join(format!("noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.svg", params.n_glwe(), params.n_lwe(), params.rank(), params.base2k()));
+            let plot_path = plot_dir.join(format!("noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.png", params.n_glwe(), params.n_lwe(), params.rank(), params.base2k()));
             match plot_noise_progression(&params, &plot_path, &series) {
                 Ok(()) => println!("Noise progression plot written to {}", plot_path.display()),
                 Err(err) => println!("Failed to render noise progression plot: {err}"),
@@ -291,6 +290,8 @@ fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
     output_path: P,
     series: &[(String, Vec<f64>)],
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use plotters::prelude::*; // Ensure PNGBackend is in scope
+
     if series.is_empty() {
         return Ok(());
     }
@@ -321,10 +322,16 @@ fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
         y_max += 1.0;
     }
 
-    let drawing_area = SVGBackend::new(output_path.as_ref(), (1280, 720)).into_drawing_area();
+    // Use PNGBackend instead of SVGBackend
+    let drawing_area = BitMapBackend::new(output_path.as_ref(), (1280, 720)).into_drawing_area();
     drawing_area.fill(&WHITE)?;
 
-    let caption = format!("Noise Progression (N_GLWE: {}, N_LWE: {}, RANK: {})", params.n_glwe(), params.n_lwe(), params.rank());
+    let caption = format!(
+        "Noise Progression (N_GLWE: {}, N_LWE: {}, RANK: {})",
+        params.n_glwe(),
+        params.n_lwe(),
+        params.rank()
+    );
     let mut chart = ChartBuilder::on(&drawing_area)
         .caption(caption, ("sans-serif", 30))
         .margin(20)

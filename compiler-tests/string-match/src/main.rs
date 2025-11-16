@@ -9,21 +9,15 @@ fn from_u8_slice<T>(v: &[u8]) -> T {
     unsafe { ptr::read(v.as_ptr() as *const T) }.into()
 }
 
-/////////////////////////////////////////////////
-/////////////////////////////////////////////////
-// TODO: Repeat the input and output structs here.
 #[repr(C)]
 struct Output {
-    evaluation: u32,
+    is_match: bool,
 }
 
 #[repr(C)]
 struct Input {
-    point: u32,
+    input_string: String,
 }
-
-/////////////////////////////////////////////////
-/////////////////////////////////////////////////
 
 fn main() {
     let compiler = CompileOpts::new("guest");
@@ -37,19 +31,19 @@ fn main() {
 
     // TODO: Provide sample Inputs
     let input = Input {
-        point: 123,
+        input_string: "not-mississippi".to_string(),
     };
 
-    // Running the encrypted VM
-    println!("Initializing Phantom...");
-    let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
-    println!("Phantom initialized!");
+    // // Running the encrypted VM
+    // println!("Initializing Phantom...");
+    // let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
+    // println!("Phantom initialized!");
 
-    println!("Executing Encrypted Cycles...");
-    enc_vm.execute();
-    println!("Finished Executing Encrypted Cycles!");
+    // println!("Executing Encrypted Cycles...");
+    // enc_vm.execute();
+    // println!("Finished Executing Encrypted Cycles!");
     
-    let encrypted_vm_output_tape = enc_vm.output_tape();
+    // let encrypted_vm_output_tape = enc_vm.output_tape();
 
     // Running the cleartext VM for comparison and testing purposes
     let mut vm = pz.test_vm(max_cycles);
@@ -65,23 +59,16 @@ fn main() {
     // Comparing Phantom's output with the expected behaviour
 
     fn expected_output(input: Input) -> Output {
-        let coefficients = vec![123, 456, 789, 12, 3456, 7, 89];
-        let mut evaluation = 0;
-        let mut pow_point = 1;
-        for coeff in coefficients.iter() {
-            evaluation += coeff * pow_point;
-            pow_point *= input.point;
-        }
-        Output {
-            evaluation: evaluation,
-        }
+        let hidden_string = "mississippi";
+        let is_match = input.input_string == hidden_string;
+        Output { is_match: is_match }
     }
 
     let have_output = from_u8_slice::<Output>(&output_tape);
-    let have_evaluation = have_output.evaluation;
+    let have_is_match = have_output.is_match;
 
     let want_output = expected_output(input);
-    let want_evaluation = want_output.evaluation;
+    let want_is_match = want_output.is_match;
 
-    assert_eq!(have_evaluation, want_evaluation);
+    assert_eq!(have_is_match, want_is_match);
 }

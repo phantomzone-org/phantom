@@ -1,12 +1,11 @@
 #![cfg_attr(target_arch = "riscv32", no_std, no_main)]
 use core::panic::PanicInfo;
 use macros::entry;
+
 extern crate alloc;
 extern crate runtime;
 
-///////////////////////////////////////////////// 
-///////////////////////////////////////////////// 
-// TODO: Define input and output structs here.
+use alloc::string::String;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -15,18 +14,13 @@ fn panic(_info: &PanicInfo) -> ! {
 
 #[repr(C)]
 struct Output {
-    evaluation: u32,
+    is_match: bool,
 }
 
 #[repr(C)]
 struct Input {
-    point: u32,
+    input_string: String,
 }
-
-// End of input and output structs.
-/////////////////////////////////////////////////
-/////////////////////////////////////////////////
-
 
 // Loading the input data on the tape. No need to change this.
 #[no_mangle]
@@ -45,24 +39,13 @@ fn main() {
     let mut input: Input =
         unsafe { core::ptr::read_volatile(((&INPUT) as *const u8) as *const Input) };
 
-    // TODO: Read inputs into local variables.
-    let point = input.point;
+    let input_string = input.input_string;
 
-    // TODO: Write your code here.
-    // As an example, we evaluate a polynomial
+    let hidden_string = "mississippi";
 
-    // TODO: Define coefficients for the polynomial.
-    let coefficients: [u32; 7] = [123, 456, 789, 12, 3456, 7, 89];
+    let is_match = (input_string == hidden_string);
 
-    let mut evaluation = 0;
-    let mut pow_point = 1;
-    for coeff in coefficients.iter() {
-        evaluation += coeff * pow_point;
-        pow_point *= input.point;
-    }
-
-    // TODO: Write output to Output struct.
-    let output_str = Output { evaluation };
+    let output_str = Output { is_match };
     
     // write output to tape. No need to change this.
     unsafe {
