@@ -592,7 +592,7 @@ where
         scratch.borrow(),
     );
 
-    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
+    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 28);
 
     let key: VMKeys<Vec<u8>, BRA> =
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
@@ -600,8 +600,8 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
     
-    interpreter.set_verbose_timings(false);
-    interpreter.set_threads(1);
+    interpreter.set_verbose_timings(true);
+    interpreter.set_threads(16);
 
     println!("Cycle");
     interpreter.cycle(module, &key_prepared, scratch.borrow());

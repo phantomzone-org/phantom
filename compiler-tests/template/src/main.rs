@@ -42,10 +42,6 @@ fn main() {
 
     // Running the encrypted VM
     let input_tape = to_u8_slice(&input);
-    println!("Input tape={:?}", input_tape);
-    println!("Input tape length={}", input_tape.len());
-    println!("Input tape size={}", core::mem::size_of::<Input>());
-    println!("Input tape Info size={}", pz.input_info().size());    
     println!("Initializing Phantom...");    
     let mut enc_vm = pz.encrypted_vm::<false>(input_tape, max_cycles);
     println!("Phantom initialized!");

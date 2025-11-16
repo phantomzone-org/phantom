@@ -75,12 +75,7 @@ fn main() {
     let max_cycles = 300;
     // let max_cycles = 10; // For testing purposes
 
-
     let input_tape = to_u8_slice(&input);
-    println!("Input tape={:?}", input_tape);
-    println!("Input tape length={}", input_tape.len());
-    println!("Input tape size={}", core::mem::size_of::<Input>());
-    println!("Input tape Info size={}", pz.input_info().size());
     let mut enc_vm = pz.encrypted_vm::<DEBUG>(input_tape, max_cycles);
     enc_vm.execute();
 
