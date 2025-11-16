@@ -21,7 +21,7 @@ impl CompileOpts {
         }
     }
 
-    pub fn build(&self) -> Vec<u8> {
+    pub fn build(&self, destination_name: &str) -> Vec<u8> {
         // set compilation target to riscv32i
         let target = "riscv32i-unknown-none-elf";
         let profile = "release";
@@ -42,7 +42,7 @@ impl CompileOpts {
         let envs = vec![("CARGO_ENCODED_RUSTFLAGS", rust_flags.join("\x1f"))];
 
         // Destination for outputs
-        let destination = "/tmp/vm-experiments";
+        let destination = format!("/tmp/vm-experiments/{}", destination_name);
 
         let cargo_bin = std::env::var("CARGO").unwrap();
         let mut cmd = Command::new(cargo_bin);
@@ -58,7 +58,7 @@ impl CompileOpts {
             "--bin",
             self.program.as_str(),
             "--target-dir",
-            destination,
+            destination.as_str(),
             // "--verbose",
         ]);
         let out = cmd.output().unwrap();
@@ -72,7 +72,7 @@ impl CompileOpts {
         // Read the ELF file from destination: /tmp/vm-experiments
         let elf_path = format!(
             "{}/{}/{}/{}",
-            destination,
+            destination.as_str(),
             target,
             profile,
             self.program.as_str()

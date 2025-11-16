@@ -49,7 +49,7 @@ struct Input {
 
 fn main() {
     let compiler = CompileOpts::new("guest");
-    let elf_bytes = compiler.build();
+    let elf_bytes = compiler.build("string-match");
     let pz = Phantom::from_elf(elf_bytes);
 
     let max_cycles = 100;

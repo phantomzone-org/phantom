@@ -52,7 +52,7 @@ const DEBUG: bool = true;
 
 fn main() {
     let compiler = CompileOpts::new("guest");
-    let elf_bytes = compiler.build();
+    let elf_bytes = compiler.build("uniswap");
     let pz = Phantom::from_elf(elf_bytes);
 
     let mut rng = StdRng::from_seed([0; 32]);
@@ -75,12 +75,18 @@ fn main() {
     let max_cycles = 300;
     // let max_cycles = 10; // For testing purposes
 
-    let mut enc_vm = pz.encrypted_vm::<DEBUG>(to_u8_slice(&input), max_cycles);
+
+    let input_tape = to_u8_slice(&input);
+    println!("Input tape={:?}", input_tape);
+    println!("Input tape length={}", input_tape.len());
+    println!("Input tape size={}", core::mem::size_of::<Input>());
+    println!("Input tape Info size={}", pz.input_info().size());
+    let mut enc_vm = pz.encrypted_vm::<DEBUG>(input_tape, max_cycles);
     enc_vm.execute();
 
     // Init -> read input tape -> run -> read output tape
     let mut vm = pz.test_vm(max_cycles);
-    vm.read_input_tape(to_u8_slice(&input));
+    vm.read_input_tape(input_tape);
     vm.execute();
     let output_tape = vm.output_tape();
     println!("Output tape={:?}", output_tape);

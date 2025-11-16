@@ -27,7 +27,7 @@ struct Input {
 
 fn main() {
     let compiler = CompileOpts::new("guest");
-    let elf_bytes = compiler.build();
+    let elf_bytes = compiler.build("template");
     let pz = Phantom::from_elf(elf_bytes);
 
     // TODO: Set the number of cycles you want to run
@@ -41,8 +41,13 @@ fn main() {
     };
 
     // Running the encrypted VM
-    println!("Initializing Phantom...");
-    let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
+    let input_tape = to_u8_slice(&input);
+    println!("Input tape={:?}", input_tape);
+    println!("Input tape length={}", input_tape.len());
+    println!("Input tape size={}", core::mem::size_of::<Input>());
+    println!("Input tape Info size={}", pz.input_info().size());    
+    println!("Initializing Phantom...");    
+    let mut enc_vm = pz.encrypted_vm::<false>(input_tape, max_cycles);
     println!("Phantom initialized!");
 
     println!("Executing Encrypted Cycles...");
@@ -53,7 +58,8 @@ fn main() {
 
     // Running the cleartext VM for comparison and testing purposes
     let mut vm = pz.test_vm(max_cycles);
-    vm.read_input_tape(to_u8_slice(&input));
+
+    vm.read_input_tape(input_tape);
     vm.execute();
     let output_tape = vm.output_tape();
 

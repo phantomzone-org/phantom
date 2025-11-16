@@ -25,7 +25,7 @@ struct Output {
 
 fn main() {
     let compiler = CompileOpts::new("guest");
-    let elf_bytes = compiler.build();
+    let elf_bytes = compiler.build("otc");
     let pz = Phantom::from_elf(elf_bytes);
 
     let client = ClientProfile::new(ClientType::PRIME);
