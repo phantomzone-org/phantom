@@ -20,7 +20,7 @@ use poulpy_hal::{
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation,
+        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
     },
     blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
@@ -52,7 +52,8 @@ where
         + GLWEDecrypt<BE>
         + GLWEAutomorphismKeyPreparedFactory<BE>
         + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
@@ -169,7 +170,8 @@ where
         + GLWEDecrypt<BE>
         + GLWEAutomorphismKeyPreparedFactory<BE>
         + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,

@@ -1,10 +1,9 @@
 use std::{collections::HashMap, time::Instant};
 
 use crate::{
-    address_read::AddressRead, address_write::AddressWrite, debug::InterpreterDebug,
-    measure_duration, parameters::CryptographicParameters, ram::ram::Ram, ram_offset::ram_offset,
-    ram_update::Store, rd_update::Evaluate, update_pc, Measurements, PerCycleMeasurements,
-    RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST,
+    debug::InterpreterDebug, measure_duration, memory::Memory, parameters::CryptographicParameters,
+    ram_offset::ram_offset, ram_update::Store, rd_update::Evaluate, update_pc, Measurements,
+    PerCycleMeasurements, RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST,
 };
 
 use poulpy_hal::{
@@ -24,9 +23,10 @@ use poulpy_core::{
 };
 use poulpy_schemes::tfhe::{
     bdd_arithmetic::{
-        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit2WTo1W, FheUint,
-        FheUintPrepare, FheUintPrepared, FheUintPreparedEncryptSk, FheUintPreparedFactory,
-        GGSWBlindRotation, GLWEBlinSelection,
+        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit1WTo1W,
+        ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared,
+        FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
+        GLWEBlindRetrieval, Identity,
     },
     blind_rotation::BlindRotationAlgo,
 };
@@ -41,36 +41,36 @@ pub enum InstructionSet {
 pub struct Interpreter<BE: Backend> {
     pub(crate) cycle: u32,
     pub(crate) vm_debug: Option<InterpreterDebug>,
-    
+
     pub(crate) verbose_timings: bool,
     pub(crate) threads: usize,
     pub(crate) measurements: Measurements,
 
     pub(crate) instruction_set: InstructionSet,
-    pub(crate) address_rom_infos: GGSWLayout,
-    pub(crate) address_ram_infos: GGSWLayout,
 
     // ROM
     pub(crate) rom_bits_size: usize,
-    pub(crate) imm_rom: Ram,
-    pub(crate) rs1_rom: Ram,
-    pub(crate) rs2_rom: Ram,
-    pub(crate) rd_rom: Ram,
-    pub(crate) rdu_rom: Ram,
-    pub(crate) mu_rom: Ram,
-    pub(crate) pcu_rom: Ram,
+    pub(crate) rom_size: usize,
+    pub(crate) imm_rom: Memory,
+    pub(crate) rs1_rom: Memory,
+    pub(crate) rs2_rom: Memory,
+    pub(crate) rd_rom: Memory,
+    pub(crate) rdu_rom: Memory,
+    pub(crate) mu_rom: Memory,
+    pub(crate) pcu_rom: Memory,
 
     // Registers
-    pub(crate) reg_bits_size: usize,
-    pub(crate) registers: Ram,
+    pub(crate) reg_bit_size: usize,
+    pub(crate) registers: Memory,
 
     // RAM
     pub(crate) ram_bit_size: usize, // log2(#items)
     pub(crate) ram_size: usize,
-    pub(crate) ram: Ram,
+    pub(crate) ram: Memory,
     pub(crate) ram_addr_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) ram_val_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) ram_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
+    pub(crate) ram_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // PC
     pub(crate) pc_fhe_uint: FheUint<Vec<u8>, u32>,
@@ -78,11 +78,13 @@ pub struct Interpreter<BE: Backend> {
 
     // RS1
     pub(crate) rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs1_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
     pub(crate) rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) rs1_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RS2
     pub(crate) rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs2_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
     pub(crate) rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,
     pub(crate) rs2_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
@@ -92,7 +94,9 @@ pub struct Interpreter<BE: Backend> {
 
     // RD
     pub(crate) rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
     pub(crate) rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // OP ID GLWE
     pub(crate) rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,
@@ -134,16 +138,16 @@ impl<BE: Backend> Interpreter<BE> {
         let rom_infos: &GLWELayout = &params.rom_infos();
         let ram_infos: &GLWELayout = &params.ram_infos();
 
-        let imm_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let rs1_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let rs2_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let rd_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let rdu_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let mu_rom: Ram = Ram::new(rom_infos, 32, rom_size);
-        let pcu_rom: Ram = Ram::new(rom_infos, 32, rom_size);
+        let imm_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let rs1_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let rs2_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let rd_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let rdu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let mu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let pcu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
 
-        let registers: Ram = Ram::new(ram_infos, 32, 32);
-        let ram: Ram = Ram::new(ram_infos, 32, ram_size);
+        let registers: Memory = Memory::alloc(ram_infos, 32, 32);
+        let ram: Memory = Memory::alloc(ram_infos, 32, ram_size);
 
         let fhe_uint_infos: &GLWELayout = &params.fhe_uint_infos();
         let fhe_uint_prepared_infos: &GGSWLayout = &params.fhe_uint_prepared_infos();
@@ -162,8 +166,6 @@ impl<BE: Backend> Interpreter<BE> {
             threads: 1,
             instruction_set: InstructionSet::RV32I,
             measurements: Measurements::new(),
-            address_rom_infos: params.address_rom_infos(),
-            address_ram_infos: params.address_ram_infos(),
             imm_rom,
             rs1_rom,
             rs2_rom,
@@ -174,10 +176,11 @@ impl<BE: Backend> Interpreter<BE> {
             registers,
             ram,
             ram_size,
+            rom_size,
             cycle: 0,
             ram_bit_size: (usize::BITS - (ram_size - 1).leading_zeros()) as usize,
             rom_bits_size: (usize::BITS - (rom_size - 1).leading_zeros()) as usize,
-            reg_bits_size: 5,
+            reg_bit_size: 5,
             ram_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
@@ -199,7 +202,19 @@ impl<BE: Backend> Interpreter<BE> {
             pc_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
             rs1_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
             rs2_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            rs1_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
+            rs2_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
             rd_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            rd_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
             rdu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
             mu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
             pcu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
@@ -220,6 +235,14 @@ impl<BE: Backend> Interpreter<BE> {
                 fhe_uint_prepared_infos,
             ),
             pc_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
+            ram_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
+                module,
+                fhe_uint_prepared_infos,
+            ),
+            rd_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
             ),
@@ -255,21 +278,15 @@ impl<BE: Backend> Interpreter<BE> {
             vm_debug.set_instructions(instructions)
         }
 
-        let max_addr_imm: usize = self.imm_rom.max_addr();
-        let max_addr_rs1: usize = self.rs1_rom.max_addr();
-        let max_addr_rs2: usize = self.rs2_rom.max_addr();
-        let max_addr_rd: usize = self.rd_rom.max_addr();
-        let max_addr_rdu: usize = self.rdu_rom.max_addr();
-        let max_addr_mu: usize = self.mu_rom.max_addr();
-        let max_addr_pcu: usize = self.pcu_rom.max_addr();
+        let rom_size = self.rom_size;
 
-        let mut data_ram_rs1: Vec<u32> = vec![0u32; max_addr_rs1];
-        let mut data_ram_rs2: Vec<u32> = vec![0u32; max_addr_rs2];
-        let mut data_ram_rd: Vec<u32> = vec![0u32; max_addr_rd];
-        let mut data_ram_imm: Vec<u32> = vec![0u32; max_addr_imm];
-        let mut data_ram_rdu: Vec<u32> = vec![0u32; max_addr_rdu];
-        let mut data_ram_mu: Vec<u32> = vec![0u32; max_addr_mu];
-        let mut data_ram_pcu: Vec<u32> = vec![0u32; max_addr_pcu];
+        let mut data_ram_rs1: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_rs2: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_rd: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_imm: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_rdu: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_mu: Vec<u32> = vec![0u32; rom_size];
+        let mut data_ram_pcu: Vec<u32> = vec![0u32; rom_size];
 
         for i in 0..instructions.instructions.len() {
             data_ram_imm[i] = instructions.get_raw(i).get_imm() as u32;
@@ -372,7 +389,7 @@ impl<BE: Backend> Interpreter<BE> {
         M: ModuleN + GLWEEncryptSk<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        assert!(data.len() <= self.ram.max_addr());
+        assert!(data.len() <= self.ram.size());
 
         if let Some(vm_debug) = &mut self.vm_debug {
             vm_debug.set_ram(data);
@@ -393,7 +410,7 @@ impl<BE: Backend> Interpreter<BE> {
         M: ModuleN + GLWEDecrypt<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        assert_eq!(data_decrypted.len(), self.ram.max_addr());
+        assert_eq!(data_decrypted.len(), self.ram.size());
 
         self.ram
             .decrypt(module, data_decrypted, sk_prepared, scratch);
@@ -414,12 +431,14 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
             + GGSWEncryptSk<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>,
+            + FheUintPreparedEncryptSk<u32, BE>
+            + GLWEBlindRetrieval<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
@@ -450,12 +469,14 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
             + GGSWEncryptSk<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>,
+            + FheUintPreparedEncryptSk<u32, BE>
+            + GLWEBlindRetrieval<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
@@ -482,12 +503,14 @@ impl<BE: Backend> Interpreter<BE> {
             + FheUintPreparedFactory<u32, BE>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWENoise<BE>
             + GGSWEncryptSk<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>,
+            + FheUintPreparedEncryptSk<u32, BE>
+            + GLWEBlindRetrieval<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
         DK: DataRef,
@@ -517,10 +540,23 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         // Reads Register[rs1] and Register[rs2]
-        self.read_registers(threads, module, keys, sk, scratch, &mut this_cycle_measurement);
+        self.read_registers(
+            threads,
+            module,
+            keys,
+            sk,
+            scratch,
+            &mut this_cycle_measurement,
+        );
 
         // Prepares FheUint imm, rs1, rs2 to FheUintPrepared
-        self.prepare_imm_rs1_rs2_values(threads, module, keys, scratch, &mut this_cycle_measurement);
+        self.prepare_imm_rs1_rs2_values(
+            threads,
+            module,
+            keys,
+            scratch,
+            &mut this_cycle_measurement,
+        );
 
         self.read_ram(
             threads,
@@ -546,7 +582,14 @@ impl<BE: Backend> Interpreter<BE> {
         };
 
         // Stores value in Ram[rs2 + imm + offset]
-        self.update_ram(threads, module, keys, sk, scratch, &mut this_cycle_measurement);
+        self.update_ram(
+            threads,
+            module,
+            keys,
+            sk,
+            scratch,
+            &mut this_cycle_measurement,
+        );
 
         // Updates PC
         self.update_pc(
@@ -602,7 +645,11 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         self.pc_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
@@ -614,78 +661,77 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        let mut address = AddressRead::alloc_from_infos(
-            module,
-            &self.address_rom_infos,
-            (1 << self.rom_bits_size) - 1,
-        );
-
-        // Skip the first 2 bits because our rom is word alined instead of byte alined.
-        address.set_from_fhe_uint_prepared(module, &self.pc_fhe_uint_prepared, 2, scratch);
-
-        self.imm_rom.read(
+        self.imm_rom.read_stateless(
             threads,
             module,
             &mut self.imm_val_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
-        self.rdu_rom.read(
+        self.rdu_rom.read_stateless(
             threads,
             module,
             &mut self.rdu_val_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
-        self.mu_rom.read(
+        self.mu_rom.read_stateless(
             threads,
             module,
             &mut self.mu_val_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
-        self.pcu_rom.read(
+        self.pcu_rom.read_stateless(
             threads,
             module,
             &mut self.pcu_val_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
-        self.rs1_rom.read(
+        self.rs1_rom.read_stateless(
             threads,
             module,
             &mut self.rs1_addr_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
-        self.rs2_rom.read(
+        self.rs2_rom.read_stateless(
             threads,
             module,
             &mut self.rs2_addr_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
-        self.rd_rom.read(
+        self.rd_rom.read_stateless(
             threads,
             module,
             &mut self.rd_addr_fhe_uint,
-            &address,
+            &self.pc_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_read_instruction_components = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_read_instruction_components =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
@@ -832,51 +878,54 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
-        let mut address: AddressRead<Vec<u8>, BE> =
-            AddressRead::alloc_from_infos(module, &self.address_ram_infos, 31);
-
-        address.set_from_fhe_uint(
+        self.rs1_addr_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
             &self.rs1_addr_fhe_uint,
             0,
-            self.reg_bits_size,
+            self.reg_bit_size,
             keys,
             scratch,
         );
-
-        self.registers.read(
-            threads,
-            module,
-            &mut self.rs1_val_fhe_uint,
-            &address,
-            keys,
-            scratch,
-        );
-
-        address.set_from_fhe_uint(
+        self.rs2_addr_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
             &self.rs2_addr_fhe_uint,
             0,
-            self.reg_bits_size,
+            self.reg_bit_size,
             keys,
             scratch,
         );
 
-        self.registers.read(
+        self.registers.read_stateless(
+            threads,
+            module,
+            &mut self.rs1_val_fhe_uint,
+            &self.rs1_addr_fhe_uint_prepared,
+            0,
+            keys,
+            scratch,
+        );
+
+        self.registers.read_stateless(
             threads,
             module,
             &mut self.rs2_val_fhe_uint,
-            &address,
+            &self.rs2_addr_fhe_uint_prepared,
+            0,
             keys,
             scratch,
         );
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_read_registers = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_read_registers =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
@@ -919,7 +968,11 @@ impl<BE: Backend> Interpreter<BE> {
         M: FheUintPrepare<BRA, BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
@@ -948,7 +1001,8 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_prepare_imm_rs1_rs2_values = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_prepare_imm_rs1_rs2_values =
+                Instant::now().duration_since(start_time.unwrap());
         }
     }
 
@@ -973,7 +1027,9 @@ impl<BE: Backend> Interpreter<BE> {
             + ExecuteBDDCircuit2WTo1W<BE>
             + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
-            + GLWENoise<BE>,
+            + GLWENoise<BE>
+            + GLWEBlindRetrieval<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
@@ -981,7 +1037,11 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         D: DataRef,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         // Derives ram address = [rs2 + imm + 2^18]
         ram_offset(
             threads,
@@ -1003,25 +1063,19 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        // Derives address for read
-        let mut address: AddressRead<Vec<u8>, BE> = AddressRead::alloc_from_infos(
-            module,
-            &self.address_ram_infos,
-            (1 << self.ram_bit_size) - 1,
-        );
-        address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
-
         // Read ram_val_fhe_uint from Ram[rs2 + imm]
-        self.ram.read_prepare_write(
+        self.ram.read_statefull(
             threads,
             module,
             &mut self.ram_val_fhe_uint,
-            &address,
+            &self.ram_addr_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_read_ram = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_read_ram =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
@@ -1071,6 +1125,7 @@ impl<BE: Backend> Interpreter<BE> {
     ) where
         M: Sync
             + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>
             + GLWEBlinSelection<u32, BE>
             + ModuleLogN
             + GLWERotate<BE>
@@ -1086,7 +1141,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWENormalize<BE>
             + GLWEExternalProduct<BE>
             + GLWENoise<BE>
-            + GLWEPackerOps<BE>,
+            + GLWEPackerOps<BE>
+            + GLWEBlindRetrieval<BE>,
         BRA: BlindRotationAlgo,
         H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
@@ -1094,7 +1150,11 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         let rs1: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs1_val_fhe_uint_prepared;
         let rs2: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs2_val_fhe_uint_prepared;
         let imm: &FheUintPrepared<Vec<u8>, u32, BE> = &self.imm_val_fhe_uint_prepared;
@@ -1116,8 +1176,12 @@ impl<BE: Backend> Interpreter<BE> {
         });
 
         // Blind selection of the correct rd value using rdu_val_fhe_uint_prepared
-        let start_time_blind_selection = if self.verbose_timings { Some(Instant::now()) } else { None };
-        
+        let start_time_blind_selection = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
         for (key, object) in rd_map.iter_mut() {
             ops_ref.insert(*key as usize, object);
@@ -1142,58 +1206,52 @@ impl<BE: Backend> Interpreter<BE> {
             ops_bit_size,
             scratch,
         );
-        
+
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_blind_selection = Instant::now().duration_since(start_time_blind_selection.unwrap());
+            this_cycle_measurement.cycle_time_blind_selection =
+                Instant::now().duration_since(start_time_blind_selection.unwrap());
         }
-
-        let mut address_read: AddressRead<Vec<u8>, BE> =
-            AddressRead::alloc_from_infos(module, &self.address_ram_infos, 31);
-        let mut address_write: AddressWrite<Vec<u8>, BE> =
-            AddressWrite::alloc_from_infos(module, &self.address_ram_infos, 31);
-
-        // Computes rd address
-        let start_time_compute_rd_address = if self.verbose_timings { Some(Instant::now()) } else { None };
-        address_read.set_from_fhe_uint(
-            threads,
-            module,
-            &self.rd_addr_fhe_uint,
-            0,
-            self.reg_bits_size,
-            keys,
-            scratch,
-        );
-
-        address_write.set_from_fhe_uint(
-            threads,
-            module,
-            &self.rd_addr_fhe_uint,
-            0,
-            self.reg_bits_size,
-            keys,
-            scratch,
-        );
-        if self.verbose_timings {
-            this_cycle_measurement.cycle_time_compute_rd_address = Instant::now().duration_since(start_time_compute_rd_address.unwrap());
-        }
-
-        let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(&self.rd_addr_fhe_uint);
 
         // Stores rd value in register
-        let start_time_write_rd = if self.verbose_timings { Some(Instant::now()) } else { None };
-        self.registers.read_prepare_write(
+        let start_time_write_rd = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
+        self.rd_addr_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
-            &mut tmp,
-            &address_read,
+            &self.rd_addr_fhe_uint,
+            0,
+            self.reg_bit_size,
             keys,
             scratch,
         );
+
+        self.rd_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rd_val_fhe_uint,
+            0,
+            32,
+            keys,
+            scratch,
+        );
+        self.rd_val_fhe_uint.identity_multi_thread(
+            threads,
+            module,
+            &self.rd_val_fhe_uint_prepared,
+            keys,
+            scratch,
+        );
+
         self.registers.write(
             threads,
             module,
             &self.rd_val_fhe_uint,
-            &address_write,
+            &self.rd_addr_fhe_uint_prepared,
+            0,
             keys,
             scratch,
         );
@@ -1201,11 +1259,13 @@ impl<BE: Backend> Interpreter<BE> {
         self.registers.zero(threads, module, 0, keys, scratch);
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_write_rd = Instant::now().duration_since(start_time_write_rd.unwrap());
+            this_cycle_measurement.cycle_time_write_rd =
+                Instant::now().duration_since(start_time_write_rd.unwrap());
         }
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_update_registers = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_update_registers =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
@@ -1257,10 +1317,12 @@ impl<BE: Backend> Interpreter<BE> {
             + GGSWBlindRotation<u32, BE>
             + GGSWPreparedFactory<BE>
             + ExecuteBDDCircuit2WTo1W<BE>
+            + ExecuteBDDCircuit1WTo1W<BE>
             + FheUintPrepare<BRA, BE>
             + GLWEBlinSelection<u32, BE>
             + GLWENoise<BE>
-            + GGSWEncryptSk<BE>,
+            + GGSWEncryptSk<BE>
+            + GLWEBlindRetrieval<BE>,
         Scratch<BE>: ScratchTakeCore<BE>,
         H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
@@ -1268,7 +1330,11 @@ impl<BE: Backend> Interpreter<BE> {
         S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
         D: DataRef,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         // Constructs diffferent possible values that are stored back
         let mut res_tmp: HashMap<u32, FheUint<Vec<u8>, u32>> = HashMap::new();
         for op in RAM_UPDATE_OP_LIST {
@@ -1311,25 +1377,36 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
-        // Derives address for write
-        let mut address: AddressWrite<Vec<u8>, BE> = AddressWrite::alloc_from_infos(
-            module,
-            &self.address_ram_infos,
-            (1 << self.ram_bit_size) - 1,
-        );
-        address.set_from_fhe_uint_prepared(module, &self.ram_addr_fhe_uint_prepared, 2, scratch);
-
-        self.ram.write(
+        self.ram_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
             &self.ram_val_fhe_uint,
-            &address,
+            0,
+            32,
+            keys,
+            scratch,
+        );
+        self.ram_val_fhe_uint.identity_multi_thread(
+            threads,
+            module,
+            &self.ram_val_fhe_uint_prepared,
+            keys,
+            scratch,
+        );
+
+        self.ram.read_statefull_rev(
+            threads,
+            module,
+            &self.ram_val_fhe_uint,
+            &self.ram_addr_fhe_uint_prepared,
+            2,
             keys,
             scratch,
         );
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_update_ram = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_update_ram =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {
@@ -1384,9 +1461,17 @@ impl<BE: Backend> Interpreter<BE> {
         D: DataRef,
         Scratch<BE>: ScratchTakeCore<BE>,
     {
-        let start_time = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
-        let start_time_pcu_prepare = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time_pcu_prepare = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
@@ -1397,10 +1482,15 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_pcu_prepare = Instant::now().duration_since(start_time_pcu_prepare.unwrap());
+            this_cycle_measurement.cycle_time_pcu_prepare =
+                Instant::now().duration_since(start_time_pcu_prepare.unwrap());
         }
 
-        let start_time_pc_update_bdd = if self.verbose_timings { Some(Instant::now()) } else { None };
+        let start_time_pc_update_bdd = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
         update_pc(
             threads,
             module,
@@ -1414,11 +1504,13 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_pc_update_bdd = Instant::now().duration_since(start_time_pc_update_bdd.unwrap());
+            this_cycle_measurement.cycle_time_pc_update_bdd =
+                Instant::now().duration_since(start_time_pc_update_bdd.unwrap());
         }
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_update_pc = Instant::now().duration_since(start_time.unwrap());
+            this_cycle_measurement.cycle_time_update_pc =
+                Instant::now().duration_since(start_time.unwrap());
         }
 
         if let (Some(sk), Some(vm_debug)) = (sk, &mut self.vm_debug) {

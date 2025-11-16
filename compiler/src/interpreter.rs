@@ -8,7 +8,7 @@ use elf::{
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
     keys::{VMKeys, VMKeysPrepared},
-    parameters::{CryptographicParameters},
+    parameters::CryptographicParameters,
     Interpreter,
 };
 
@@ -343,25 +343,16 @@ impl Phantom {
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
 
         // Generates a new secret-key along with the public evaluation keys.
-        let mut sk_glwe: GLWESecret<Vec<u8>> =
-            GLWESecret::alloc(params.n_glwe(), params.rank());
+        let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
         sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
 
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
         sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
         let mut interpreter: Interpreter<BackendImpl> = if DEBUG {
-            Interpreter::new_with_debug(
-                &params,
-                self.boot_rom.size >> 2,
-                self.boot_ram.size >> 2,
-            )
+            Interpreter::new_with_debug(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
         } else {
-            Interpreter::new(
-                &params,
-                self.boot_rom.size >> 2,
-                self.boot_ram.size >> 2,
-            )
+            Interpreter::new(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
         };
 
         let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
