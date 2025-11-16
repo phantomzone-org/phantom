@@ -41,8 +41,13 @@ fn main() {
     let max_cycles = 9_000;
     // let max_cycles = 10; // For testing purposes
     
+    println!("Initializing Phantom...");
     let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), max_cycles);
+    println!("Phantom initialized!");
+    
+    println!("Executing Encrypted Cycles...");
     enc_vm.execute();
+    println!("Finished Executing Encrypted Cycles!");
 
     let mut testvm = pz.test_vm(max_cycles);
     let testvm_input = to_u8_slice(&input);
