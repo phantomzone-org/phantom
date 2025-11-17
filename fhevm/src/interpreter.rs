@@ -549,15 +549,6 @@ impl<BE: Backend> Interpreter<BE> {
             &mut this_cycle_measurement,
         );
 
-        // Prepares FheUint imm, rs1, rs2 to FheUintPrepared
-        self.prepare_imm_rs1_rs2_values(
-            threads,
-            module,
-            keys,
-            scratch,
-            &mut this_cycle_measurement,
-        );
-
         self.read_ram(
             threads,
             module,
@@ -728,6 +719,16 @@ impl<BE: Backend> Interpreter<BE> {
             keys,
             scratch,
         );
+
+        self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.imm_val_fhe_uint,
+            0,
+            32,
+            keys,
+            scratch,
+        ); // TODO switch to 20 bits immediate & update circuits
 
         if self.verbose_timings {
             this_cycle_measurement.cycle_time_read_instruction_components =
@@ -923,6 +924,25 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
+        self.rs1_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rs1_val_fhe_uint,
+            0,
+            32,
+            keys,
+            scratch,
+        );
+        self.rs2_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rs2_val_fhe_uint,
+            0,
+            32,
+            keys,
+            scratch,
+        );
+
         if self.verbose_timings {
             this_cycle_measurement.cycle_time_read_registers =
                 Instant::now().duration_since(start_time.unwrap());
@@ -951,58 +971,6 @@ impl<BE: Backend> Interpreter<BE> {
                     .log2()
             );
             assert_eq!(rs2_have, rs2_want);
-        }
-    }
-
-    pub fn prepare_imm_rs1_rs2_values<D, M, BRA, K>(
-        &mut self,
-        threads: usize,
-        module: &M,
-        keys: &K,
-        scratch: &mut Scratch<BE>,
-        this_cycle_measurement: &mut PerCycleMeasurements,
-    ) where
-        K: BDDKeyHelper<D, BRA, BE> + BDDKeyInfos,
-        D: DataRef,
-        BRA: BlindRotationAlgo,
-        M: FheUintPrepare<BRA, BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-    {
-        let start_time = if self.verbose_timings {
-            Some(Instant::now())
-        } else {
-            None
-        };
-        self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.imm_val_fhe_uint,
-            0,
-            32,
-            keys,
-            scratch,
-        ); // TODO switch to 20 bits immediate & update circuits
-        self.rs1_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs1_val_fhe_uint,
-            0,
-            32,
-            keys,
-            scratch,
-        );
-        self.rs2_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs2_val_fhe_uint,
-            0,
-            32,
-            keys,
-            scratch,
-        );
-        if self.verbose_timings {
-            this_cycle_measurement.cycle_time_prepare_imm_rs1_rs2_values =
-                Instant::now().duration_since(start_time.unwrap());
         }
     }
 
@@ -1537,21 +1505,19 @@ impl<BE: Backend> Interpreter<BE> {
 Average Cycle Time: {:?}
   1. Read instruction components: {:?}
   2. Read registers: {:?}
-  3. Prepare imm rs1 rs2 values: {:?}
-  4. Read ram: {:?}
-  5. Update registers: {:?}
+  3. Read ram: {:?}
+  4. Update registers: {:?}
      - Evaluate rd ops: {:?}
      - Blind selection: {:?}
      - Write rd: {:?}
-  6. Update ram: {:?}
-  7. Update pc: {:?}
+  5. Update ram: {:?}
+  6. Update pc: {:?}
      - PCU prepare: {:?}
      - PC update BDD: {:?}
 ",
                 self.measurements.average_cycle_time(),
                 self.measurements.average_cycle_time_read_instruction_components(),
                 self.measurements.average_cycle_time_read_registers(),
-                self.measurements.average_cycle_time_prepare_imm_rs1_rs2_values(),
                 self.measurements.average_cycle_time_read_ram(),
                 self.measurements.average_cycle_time_update_registers(),
                 self.measurements.average_cycle_time_evaluate_rd_ops(),

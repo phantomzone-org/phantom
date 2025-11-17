@@ -11,7 +11,7 @@ fn from_u8_slice<T>(v: &[u8]) -> T {
 
 /////////////////////////////////////////////////
 /////////////////////////////////////////////////
-// TODO: Repeat the input and output structs here.
+// Repeat the input and output structs here.
 #[repr(C)]
 struct Output {
     evaluation: u32,
@@ -30,12 +30,12 @@ fn main() {
     let elf_bytes = compiler.build("template");
     let pz = Phantom::from_elf(elf_bytes);
 
-    // TODO: Set the number of cycles you want to run
+    // Set the number of cycles you want to run
     // Allow enough cycles for the guest program to reach the point where it
     // writes the output buffer before hitting the busy loop at the end.
     let max_cycles = 700;
 
-    // TODO: Provide sample Inputs
+    // Provide sample Inputs
     let input = Input {
         point: 123,
     };
@@ -43,7 +43,7 @@ fn main() {
     // Running the encrypted VM
     let input_tape = to_u8_slice(&input);
     println!("Initializing Phantom...");    
-    let mut enc_vm = pz.encrypted_vm::<false>(input_tape, max_cycles);
+    let mut enc_vm = pz.encrypted_vm(input_tape, max_cycles);
     println!("Phantom initialized!");
 
     println!("Executing Encrypted Cycles...");

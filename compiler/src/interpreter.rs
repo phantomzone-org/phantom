@@ -107,7 +107,7 @@ pub struct EncryptedVM {
     output_info: OutputInfo,
     ram_offset: usize,
     max_cycles: usize,
-    debug: bool,
+    phantom_debug: bool,
 }
 
 impl EncryptedVM {
@@ -116,7 +116,7 @@ impl EncryptedVM {
         let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
 
         for _current_cycle in tqdm(0..self.max_cycles) {
-            if self.debug {
+            if self.phantom_debug {
                 self.interpreter.cycle_debug(
                     self.params.module(),
                     &self.key_prepared,
@@ -294,7 +294,7 @@ impl Phantom {
         &self.output_info
     }
 
-    pub fn encrypted_vm<const DEBUG: bool>(
+    pub fn encrypted_vm(
         &self,
         input_tape: &[u8],
         max_cycles: usize,
@@ -335,6 +335,16 @@ impl Phantom {
             })
             .collect::<Vec<u32>>();
 
+        let verbose_timings = std::env::var("PHANTOM_VERBOSE_TIMINGS")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let threads = std::env::var("PHANTOM_THREADS")
+            .map(|val| val.parse::<usize>().unwrap_or(1))
+            .unwrap_or(1);            
+        let phantom_debug = std::env::var("PHANTOM_DEBUG")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+
         // Initializing cryptographic parameters
         let params = CryptographicParameters::<BackendImpl>::new();
         let mut source_xs: Source = Source::new([0u8; 32]);
@@ -349,7 +359,7 @@ impl Phantom {
         let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
         sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
-        let mut interpreter: Interpreter<BackendImpl> = if DEBUG {
+        let mut interpreter: Interpreter<BackendImpl> = if phantom_debug {
             Interpreter::new_with_debug(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
         } else {
             Interpreter::new(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
@@ -383,14 +393,6 @@ impl Phantom {
             scratch.borrow(),
         );
 
-
-        let verbose_timings = std::env::var("PHANTOM_VERBOSE_TIMINGS")
-            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        let threads = std::env::var("PHANTOM_THREADS")
-            .map(|val| val.parse::<usize>().unwrap_or(1))
-            .unwrap_or(1);
-
         interpreter.set_verbose_timings(verbose_timings);
         interpreter.set_threads(threads);
 
@@ -402,7 +404,7 @@ impl Phantom {
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,
             max_cycles,
-            debug: DEBUG,
+            phantom_debug,
         }
     }
 

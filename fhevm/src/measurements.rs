@@ -38,15 +38,6 @@ impl Measurements {
         total_cycle_time / self.cycle_measurements.len() as u32
     }
 
-    pub fn average_cycle_time_prepare_imm_rs1_rs2_values(&self) -> Duration {
-        let total_cycle_time = self
-            .cycle_measurements
-            .iter()
-            .map(|measurement| measurement.cycle_time_prepare_imm_rs1_rs2_values)
-            .sum::<Duration>();
-        total_cycle_time / self.cycle_measurements.len() as u32
-    }
-
     pub fn average_cycle_time_read_ram(&self) -> Duration {
         let total_cycle_time = self
             .cycle_measurements
@@ -176,7 +167,6 @@ pub struct PerCycleMeasurements {
     // Layer one
     pub cycle_time_read_instruction_components: Duration,
     pub cycle_time_read_registers: Duration,
-    pub cycle_time_prepare_imm_rs1_rs2_values: Duration,
     pub cycle_time_read_ram: Duration,
     pub cycle_time_update_registers: Duration,
     pub cycle_time_update_ram: Duration,
@@ -207,7 +197,6 @@ impl PerCycleMeasurements {
 
             cycle_time_read_instruction_components: Duration::from_secs(0),
             cycle_time_read_registers: Duration::from_secs(0),
-            cycle_time_prepare_imm_rs1_rs2_values: Duration::from_secs(0),
             cycle_time_read_ram: Duration::from_secs(0),
             cycle_time_update_registers: Duration::from_secs(0),
             cycle_time_update_ram: Duration::from_secs(0),

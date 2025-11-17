@@ -6,7 +6,7 @@ extern crate runtime;
 
 ///////////////////////////////////////////////// 
 ///////////////////////////////////////////////// 
-// TODO: Define input and output structs here.
+// Define input and output structs here.
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -45,13 +45,13 @@ fn main() {
     let mut input: Input =
         unsafe { core::ptr::read_volatile(((&INPUT) as *const u8) as *const Input) };
 
-    // TODO: Read inputs into local variables.
+    // Read inputs into local variables.
     let point = input.point;
 
-    // TODO: Write your code here.
+    // Write your code here.
     // As an example, we evaluate a polynomial
 
-    // TODO: Define coefficients for the polynomial.
+    // Define coefficients for the polynomial.
     let coefficients: [u32; 7] = [123, 456, 789, 12, 3456, 7, 89];
 
     let mut evaluation = 0;
@@ -61,7 +61,7 @@ fn main() {
         pow_point *= input.point;
     }
 
-    // TODO: Write output to Output struct.
+    // Write output to Output struct.
     let output_str = Output { evaluation };
     
     // write output to tape. No need to change this.

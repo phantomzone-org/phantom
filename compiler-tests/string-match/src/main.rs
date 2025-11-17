@@ -60,7 +60,7 @@ fn main() {
 
     // Running the encrypted VM
     println!("Initializing Phantom...");
-    let mut enc_vm = pz.encrypted_vm::<false>(to_u8_slice(&input), max_cycles);
+    let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), max_cycles);
     println!("Phantom initialized!");
 
     println!("Executing Encrypted Cycles...");
