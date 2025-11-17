@@ -26,10 +26,13 @@ Average Cycle Time: 1.55773912s
      - PC update BDD: 58.745625ms
 -->
 
-Below is the dependency of Phantom.
-A single cycle starts at top and ends at the bottom. Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
+Below is the dependency of one cycle in Phantom.
+It shows how each intermediate value in Phantom is computed and which other values it depends on.
+A single cycle starts at top and ends at the bottom.
+Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
 
 The runtimes are from running Phantom on a AWS m6a.8xlarge, parallelized with 32 threads.
+Runtimes are subject to improvement and may vary, depending on the hardware.
 
 
 ```mermaid
@@ -42,7 +45,8 @@ graph TD
         REGISTERS["REGISTERS"]
     end
 
-    subgraph read_inst ["Read Instruction Components (128 ms)"]
+    subgraph read_inst [" "]
+        READ_INST_LABEL["Read<br>Instruction<br>Components<br>(128 ms)"]
         IMM["IMM"]
         RS1_INDEX["RS1_INDEX"]
         RS2_INDEX["RS2_INDEX"]
@@ -52,28 +56,33 @@ graph TD
         MU["MU"]
     end
     
-    subgraph read_ram ["Read RAM (98 ms)"]
+    subgraph read_ram [" "]
+        READ_RAM_LABEL["Read RAM<br>(98 ms)"]
         RAM_ADDRESS["RAM_ADDRESS"]
         RAM_VAL["RAM_VAL"]
     end
 
-    subgraph read_reg ["Read Registers (141 ms)"]
+    subgraph read_reg [" "]
+        READ_REG_LABEL["Read Registers<br>(141 ms)"]
         RS1["RS1"]
         RS2["RS2"]
     end
 
-    subgraph update_reg ["Update Registers (549 ms)"]
+    subgraph update_reg [" "]
+        UPDATE_REG_LABEL["Update Registers<br>(549 ms)"]
         POSSIBLE_RD_VALS["POSSIBLE_RD_VALS"]
         RD["RD"]
     end
 
 
-    subgraph update_ram ["Update RAM (197 ms)"]
-        NEW_RAM_VALS["NEW_RAM_VALS"]
+    subgraph update_ram [" "]
+        UPDATE_RAM_LABEL["Update RAM<br>(197 ms)"]
+        POSSIBLE_RAM_VALS["POSSIBLE_RAM_VALS"]
         NEW_RAM_VAL["NEW_RAM_VAL"]
     end
 
-    subgraph update_pc ["Update PC (121 ms)"]
+    subgraph update_pc [" "]
+        UPDATE_PC_LABEL["Update PC<br>(121 ms)"]
         NEW_PC_VAL["NEW_PC_VAL"]
     end
 
@@ -118,14 +127,15 @@ graph TD
     RAM_VAL --> POSSIBLE_RD_VALS
 
     POSSIBLE_RD_VALS --> RD
+    RD_INDEX --> RD
     RDU --> RD
 
-    RS2 --> NEW_RAM_VALS
-    RAM_VAL --> NEW_RAM_VALS
-    RAM_ADDRESS --> NEW_RAM_VALS
-    RS2 --> NEW_RAM_VALS
+    RS2 --> POSSIBLE_RAM_VALS
+    RAM_VAL --> POSSIBLE_RAM_VALS
+    RAM_ADDRESS --> POSSIBLE_RAM_VALS
+    RS2 --> POSSIBLE_RAM_VALS
     
-    NEW_RAM_VALS --> NEW_RAM_VAL
+    POSSIBLE_RAM_VALS --> NEW_RAM_VAL
     MU --> NEW_RAM_VAL
 
 
@@ -139,11 +149,18 @@ graph TD
     RD --> REGISTERS_AFTER
     NEW_RAM_VAL --> RAM_AFTER
 
-    
+    classDef labelStyle stroke-dasharray: 5 5, font-weight: bold, font-size: 120%
+    class READ_INST_LABEL labelStyle
+    class READ_RAM_LABEL labelStyle
+    class READ_REG_LABEL labelStyle
+    class UPDATE_REG_LABEL labelStyle
+    class UPDATE_RAM_LABEL labelStyle
+    class UPDATE_PC_LABEL labelStyle
 ```
 
 
 ## Summary of runtime
+The runtimes are from running Phantom on a AWS m6a.8xlarge, parallelized with 32 threads.
 
 Average Cycle Time: 1.55773912s
   1. Read instruction components: 128.317183ms
