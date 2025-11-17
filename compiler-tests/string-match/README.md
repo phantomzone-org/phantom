@@ -21,7 +21,7 @@ To write a program for Phantom, inside the `guest` crate in `main.rs`:
 To run the program, in `main.rs` the current directory:
 - [ ] Redeclare the input and output struct(s) for your program.
 - [ ] Provide sample inputs for your program.
-- [ ] Run `PHANTOM_THREADS=[# of threads] PHANTOM_VERBOSE_TIMINGS=[true/false] cargo run --release` in this directory to run Phantom.
+- [ ] Run `PHANTOM_THREADS=[# of threads] PHANTOM_DEBUG=[true/false] PHANTOM_VERBOSE_TIMINGS=[true/false] cargo run --release` in this directory to run Phantom.
 - [ ] For testing, implement the expected functionality to compare with Phantom's output.
 
 ### Explaining the Components of the Phantom Program

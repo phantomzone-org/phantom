@@ -8,6 +8,10 @@ It enables black-box execution of any RISC-V program, allowing developers to wri
   <img src="doc/phantom.png" alt="Phantom Overview"/>
 </p>
 
+## Building Phantom
+
+We provide a setup script at [setup.sh](./setup.sh) to build Phantom and required dependencies from scratch on a fresh Debian/Ubuntu machine.
+
 ## How to use Phantom
 
 Developers write their programs in Rust, which are then compiled into RISC-V binaries. These binaries are transformed into a polynomial representation, optimized for execution within the plaintext space of RLWE-based FHE.
@@ -20,11 +24,32 @@ To use, we recommend to look at full end to end examples in `compiler-tests` dir
 Phantom VM is a collection of FHE circuits that collectively simulate a RISC-V virtual machine.
 The Phantom VM is implemented in the `./fhevm` directory.
 The architecture of the Phantom VM is described in [doc/spec.png](./doc/spec.png).
-The dependency graph of operations performed in a single cycle of Phantom is described in [doc/costs.md](./doc/costs.md), which shows how Phantom can be parallelized.
+It consists of 6 major components:
+- Reading the instruction components from the ROM
+- Reading the registers
+- Reading the RAM
+- Updating the registers
+- Updating the RAM
+- Updating the PC
+
+The dependency graph of the operations performed in these components is described in [doc/costs.md](./doc/costs.md), which shows how Phantom can be further parallelized.
 
 ## Benchmark
 
-TODO:
+We benchmark Phantom on a AWS r6i.metal, parallelized with 32 threads and measure the runtime of a single cycle, and all 6 components.
+
+Average Cycle Time: 971.058934ms
+  1. Read instruction components: 138.901955ms
+  2. Read registers: 237.512433ms
+  3. Read ram: 71.142182ms
+  4. Update registers: 317.313129ms
+  5. Update ram: 131.300826ms
+  6. Update pc: 74.838472ms
+
+To reproduce benchmarks for a single cycle, run:
+```
+cargo bench --package fhevm --bench cycle
+```
 
 ## Contribute
 
