@@ -3,7 +3,7 @@ use poulpy_hal::{
     layouts::{Backend, Data, DataMut, DataRef, Module, Scratch, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{
         BDDKey, BDDKeyEncryptSk, BDDKeyHelper, BDDKeyInfos, BDDKeyLayout, BDDKeyPrepared,
         BDDKeyPreparedFactory,
@@ -20,7 +20,8 @@ use poulpy_core::{
     layouts::{
         GGLWELayout, GGLWEToGGSWKeyPreparedFactory, GLWEAutomorphismKey, GLWEAutomorphismKeyHelper,
         GLWEAutomorphismKeyPrepared, GLWEAutomorphismKeyPreparedFactory, GLWEInfos,
-        GLWESecretToRef, GLWEToLWEKeyLayout, GLWEToLWEKeyPrepared, LWEInfos, LWESecretToRef, GLWE,
+        GLWESecretToRef, GLWESwitchingKeyPrepared, GLWEToLWEKeyLayout, GLWEToLWEKeyPrepared,
+        LWEInfos, LWESecretToRef, GLWE,
     },
     GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWETrace, GetDistribution,
     ScratchTakeCore,
@@ -44,8 +45,12 @@ impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> BDDKeyInfos for VMKeysPrep
         self.bdd_key.cbt_infos()
     }
 
-    fn ks_infos(&self) -> GLWEToLWEKeyLayout {
-        self.bdd_key.ks_infos()
+    fn ks_glwe_infos(&self) -> Option<poulpy_core::layouts::GLWESwitchingKeyLayout> {
+        self.bdd_key.ks_glwe_infos()
+    }
+
+    fn ks_lwe_infos(&self) -> GLWEToLWEKeyLayout {
+        self.bdd_key.ks_lwe_infos()
     }
 }
 
@@ -196,6 +201,7 @@ impl<D: DataRef, BRA: BlindRotationAlgo, BE: Backend> BDDKeyHelper<D, BRA, BE>
         &self,
     ) -> (
         &CircuitBootstrappingKeyPrepared<D, BRA, BE>,
+        Option<&GLWESwitchingKeyPrepared<D, BE>>,
         &GLWEToLWEKeyPrepared<D, BE>,
     ) {
         self.bdd_key.get_cbt_key()

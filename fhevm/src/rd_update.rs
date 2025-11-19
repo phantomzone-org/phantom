@@ -7,11 +7,11 @@ use poulpy_hal::{
     layouts::{Backend, DataMut, DataRef, Scratch},
 };
 use poulpy_schemes::{
-    define_bdd_2w_to_1w_trait, impl_bdd_2w_to_1w_trait,
-    tfhe::bdd_arithmetic::{
+    bin_fhe::bdd_arithmetic::{
         Add, And, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepared, Or, Sll, Slt, Sltu, Sra, Srl,
         Sub, UnsignedInteger, Xor,
     },
+    define_bdd_2w_to_1w_trait, impl_bdd_2w_to_1w_trait,
 };
 
 use crate::RD_UPDATE;

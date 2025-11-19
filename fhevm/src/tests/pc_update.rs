@@ -1,4 +1,3 @@
-use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -7,12 +6,13 @@ use poulpy_core::{
     GGLWEToGGSWKeyEncryptSk, GGSWAutomorphism, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt,
     GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
 };
+use poulpy_cpu_ref::FFT64Ref;
 use poulpy_hal::{
     api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
     layouts::{Backend, Module, Scratch, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPrepared,
         FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation,

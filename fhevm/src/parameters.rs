@@ -1,12 +1,13 @@
 use poulpy_core::layouts::{
-    Base2K, Degree, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout,
-    GLWEAutomorphismKeyLayout, GLWELayout, GLWEToLWEKeyLayout, Rank, TorusPrecision,
+    Base2K, Degree, Dnum, Dsize, GGLWELayout, GGLWEToGGSWKeyLayout, GGSWLayout,
+    GLWEAutomorphismKeyLayout, GLWELayout, GLWESwitchingKeyLayout, GLWEToLWEKeyLayout, Rank,
+    TorusPrecision,
 };
 use poulpy_hal::{
     api::ModuleNew,
     layouts::{Backend, Module},
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::BDDKeyLayout, blind_rotation::BlindRotationKeyLayout,
     circuit_bootstrapping::CircuitBootstrappingKeyLayout,
 };
@@ -14,26 +15,41 @@ use poulpy_schemes::tfhe::{
 const LOGN_GLWE: u32 = 10;
 const N_GLWE: u32 = 1 << LOGN_GLWE;
 const N_LWE: u32 = 574;
+const K_LWE: u32 = 16;
 const LWE_BLOCK_SIZE: u32 = 7;
-const BASE2K: u32 = 14;
+const BASE2K_FHE_UINT: u32 = 15;
+const BASE2K_CBT_BRK: u32 = 15;
+const BASE2K_CBT_ATK: u32 = 15;
+const BASE2K_CBT_TSK: u32 = 15;
+const BASE2K_GLWE_TO_GLWE_KSK: u32 = 13;
+const BASE2K_GLWE_TO_LWE_KSK: u32 = 4;
 const RANK: u32 = 2;
 const K_GLWE_PT: u32 = 2;
 
-const K_ROM: u32 = BASE2K * 2;
-const K_RAM: u32 = BASE2K * 2;
-const K_FHE_UINT: u32 = BASE2K * 2;
+const K_ROM: u32 = BASE2K_FHE_UINT * 2;
+const K_RAM: u32 = BASE2K_FHE_UINT * 2;
+const K_FHE_UINT: u32 = BASE2K_FHE_UINT * 2;
 
-const K_EVK_RAM_READ: u32 = BASE2K * 3;
-const K_FHE_UINT_PREPARED: u32 = BASE2K * 3;
-const K_PBS: u32 = BASE2K * 4;
+const K_EVK_RAM_READ: u32 = BASE2K_FHE_UINT * 3;
+const K_FHE_UINT_PREPARED: u32 = BASE2K_FHE_UINT * 3;
+const K_PBS: u32 = BASE2K_FHE_UINT * 4;
+
+const K_GLWE_TO_GLWE_KSK: usize = 27;
+const K_GLWE_TO_LWE_KSK: usize = 16;
 
 pub struct CryptographicParameters<B: Backend> {
     module: Module<B>,
     n_lwe: usize,
     lwe_block_size: usize,
-    base2k: Base2K,
+    base2k_fhe_uint: Base2K,
+    base2k_cbt_brk: Base2K,
+    base2k_cbt_atk: Base2K,
+    base2k_cbt_tsk: Base2K,
+    base2k_glwe_to_glwe_ksk: Base2K,
+    base2k_glwe_to_lwe_ksk: Base2K,
     rank: Rank,
     k_pt: TorusPrecision,
+    k_lwe: TorusPrecision,
 
     k_fhe_uint_prepared: TorusPrecision,
     k_fhe_uint: TorusPrecision,
@@ -41,6 +57,8 @@ pub struct CryptographicParameters<B: Backend> {
     k_rom: TorusPrecision,
     k_ram: TorusPrecision,
     k_evk_ram: TorusPrecision,
+    k_glwe_to_glwe_ksk: TorusPrecision,
+    k_glwe_to_lwe_ksk: TorusPrecision,
 
     k_pbs: TorusPrecision,
 }
@@ -54,7 +72,12 @@ where
             module: Module::<B>::new(N_GLWE as u64),
             n_lwe: N_LWE as usize,
             lwe_block_size: LWE_BLOCK_SIZE as usize,
-            base2k: BASE2K.into(),
+            base2k_cbt_atk: BASE2K_CBT_ATK.into(),
+            base2k_cbt_brk: BASE2K_CBT_BRK.into(),
+            base2k_cbt_tsk: BASE2K_CBT_TSK.into(),
+            base2k_fhe_uint: BASE2K_FHE_UINT.into(),
+            base2k_glwe_to_glwe_ksk: BASE2K_GLWE_TO_GLWE_KSK.into(),
+            base2k_glwe_to_lwe_ksk: BASE2K_GLWE_TO_LWE_KSK.into(),
             rank: RANK.into(),
             k_pt: K_GLWE_PT.into(),
             k_fhe_uint_prepared: K_FHE_UINT_PREPARED.into(),
@@ -63,6 +86,9 @@ where
             k_ram: K_RAM.into(),
             k_evk_ram: K_EVK_RAM_READ.into(),
             k_pbs: K_PBS.into(),
+            k_lwe: K_LWE.into(),
+            k_glwe_to_glwe_ksk: K_GLWE_TO_GLWE_KSK.into(),
+            k_glwe_to_lwe_ksk: K_GLWE_TO_LWE_KSK.into(),
         }
     }
 }
@@ -72,7 +98,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_pt(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             rank: self.rank(),
         }
     }
@@ -81,7 +107,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_fhe_uint(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             rank: self.rank(),
         }
     }
@@ -90,9 +116,9 @@ impl<B: Backend> CryptographicParameters<B> {
         GGSWLayout {
             n: self.module.n().into(),
             k: self.k_fhe_uint_prepared(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             rank: self.rank(),
-            dnum: self.k_fhe_uint().div_ceil(self.base2k).into(),
+            dnum: self.k_fhe_uint().div_ceil(self.base2k_fhe_uint()).into(),
             dsize: Dsize(1),
         }
     }
@@ -101,7 +127,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_rom(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             rank: self.rank(),
         }
     }
@@ -110,7 +136,7 @@ impl<B: Backend> CryptographicParameters<B> {
         GLWELayout {
             n: self.module.n().into(),
             k: self.k_ram(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             rank: self.rank(),
         }
     }
@@ -118,11 +144,11 @@ impl<B: Backend> CryptographicParameters<B> {
     pub fn evk_ram_infos(&self) -> GGLWELayout {
         GGLWELayout {
             n: self.module.n().into(),
-            base2k: self.base2k(),
+            base2k: self.base2k_fhe_uint(),
             k: self.k_evk_ram(),
             rank_in: self.rank(),
             rank_out: self.rank(),
-            dnum: self.k_ram().div_ceil(self.base2k).into(),
+            dnum: self.k_ram().div_ceil(self.base2k_fhe_uint()).into(),
             dsize: Dsize(1),
         }
     }
@@ -143,8 +169,28 @@ impl<B: Backend> CryptographicParameters<B> {
         self.lwe_block_size
     }
 
-    pub fn base2k(&self) -> Base2K {
-        self.base2k
+    pub fn base2k_cbt_brk(&self) -> Base2K {
+        self.base2k_cbt_brk
+    }
+
+    pub fn base2k_cbt_atk(&self) -> Base2K{
+        self.base2k_cbt_atk
+    }
+
+    pub fn base2k_cbt_tsk(&self) -> Base2K{
+        self.base2k_cbt_tsk
+    }
+
+    pub fn base2k_fhe_uint(&self) -> Base2K{
+        self.base2k_fhe_uint
+    }
+
+    pub fn base2k_glwe_to_glwe_ksk(&self) -> Base2K{
+        self.base2k_glwe_to_glwe_ksk
+    }
+
+    pub fn base2k_glwe_to_lwe_ksk(&self) -> Base2K{
+        self.base2k_glwe_to_lwe_ksk
     }
 
     pub fn k_pt(&self) -> TorusPrecision {
@@ -175,6 +221,18 @@ impl<B: Backend> CryptographicParameters<B> {
         self.k_pbs
     }
 
+    pub fn k_lwe(&self) -> TorusPrecision {
+        self.k_lwe
+    }
+
+    pub fn k_glwe_to_glwe_ksk(&self) -> TorusPrecision{
+        self.k_glwe_to_glwe_ksk
+    }
+
+    pub fn k_glwe_to_lwe_ksk(&self) -> TorusPrecision{
+        self.k_glwe_to_lwe_ksk
+    }
+
     pub fn rank(&self) -> Rank {
         self.rank
     }
@@ -186,44 +244,57 @@ impl<B: Backend> CryptographicParameters<B> {
             layout_brk: BlindRotationKeyLayout {
                 n_glwe: self.module.n().into(),
                 n_lwe: self.n_lwe.into(),
-                base2k: self.base2k,
+                base2k: self.base2k_cbt_brk(),
                 k: self.k_pbs(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_brk()).into(),
                 rank: self.rank(),
             },
             layout_atk: GLWEAutomorphismKeyLayout {
                 n: self.module.n().into(),
-                base2k: self.base2k,
+                base2k: self.base2k_cbt_atk(),
                 k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_atk()).into(),
                 dsize: Dsize(1),
             },
             layout_tsk: GGLWEToGGSWKeyLayout {
                 n: self.module.n().into(),
-                base2k: self.base2k,
+                base2k: self.base2k_cbt_tsk(),
                 k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k()).into(),
+                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_tsk()).into(),
                 dsize: Dsize(1),
             },
+        }
+    }
+
+    pub fn glwe_to_glwe_key_layout(&self) -> GLWESwitchingKeyLayout {
+        GLWESwitchingKeyLayout {
+            n: self.module.n().into(),
+            base2k: self.base2k_glwe_to_glwe_ksk(),
+            k: self.k_glwe_to_glwe_ksk(),
+            rank_in: self.rank(),
+            rank_out: Rank(1),
+            dnum: Dnum(2),
+            dsize: Dsize(1),
         }
     }
 
     pub fn glwe_to_lwe_key_layout(&self) -> GLWEToLWEKeyLayout {
         GLWEToLWEKeyLayout {
             n: self.module.n().into(),
-            base2k: self.base2k,
-            k: self.k_fhe_uint(),
-            rank_in: self.rank(),
-            dnum: self.k_fhe_uint().div_ceil(self.base2k()).into(),
+            base2k: self.base2k_glwe_to_lwe_ksk(),
+            k: self.k_glwe_to_lwe_ksk(),
+            rank_in: Rank(1),
+            dnum: Dnum(4),
         }
     }
 
     pub fn bdd_key_layout(&self) -> BDDKeyLayout {
         BDDKeyLayout {
             cbt: self.cbt_key_layout(),
-            ks: self.glwe_to_lwe_key_layout(),
+            ks_glwe: Some(self.glwe_to_glwe_key_layout()),
+            ks_lwe: self.glwe_to_lwe_key_layout(),
         }
     }
 }
