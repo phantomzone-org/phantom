@@ -1,4 +1,4 @@
-use std::thread;
+use std::{f64, thread};
 
 use poulpy_core::{
     layouts::{
@@ -6,15 +6,15 @@ use poulpy_core::{
         GLWEInfos, GLWELayout, GLWESecretPreparedToRef, GLWEToMut, GetGaloisElement,
         TorusPrecision, GLWE,
     },
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWENormalize, GLWEPacking, GLWERotate, GLWESub,
-    GLWETrace, ScratchTakeCore,
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWENoise, GLWENormalize, GLWEPacking,
+    GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
 };
 use poulpy_hal::{
     api::{ModuleLogN, ModuleN, ScratchAvailable, TakeSlice},
     layouts::{Backend, DataMut, DataRef, Scratch},
     source::Source,
 };
-use poulpy_schemes::tfhe::bdd_arithmetic::{
+use poulpy_schemes::bin_fhe::bdd_arithmetic::{
     Cmux, FheUint, FheUintPrepared, FromBits, GLWEBlindRetrieval, GLWEBlindRetriever,
     GLWEBlindRotation, GetGGSWBit, ToBits,
 };
@@ -76,7 +76,7 @@ impl Memory {
 
     #[allow(dead_code)]
     pub(crate) fn decrypt<M, S, BE: Backend>(
-        &mut self,
+        &self,
         module: &M,
         data: &mut [u32],
         sk: &S,
@@ -105,6 +105,36 @@ impl Memory {
                 }
             }
         }
+    }
+
+    pub(crate) fn noise<M, S, BE: Backend>(
+        &self,
+        module: &M,
+        data: &[u32],
+        sk: &S,
+        scratch: &mut Scratch<BE>,
+    ) -> Vec<f64>
+    where
+        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        u32: FromBits,
+    {
+        let max_addr: usize = self.size;
+        let ram_chunks: usize = self.bits.len();
+
+        assert!(data.len() / ram_chunks <= max_addr);
+
+        let mut bits: Vec<u8> = vec![0u8; max_addr];
+        let mut noise: Vec<f64> = vec![0f64; self.bits.len()];
+        for i in 0..ram_chunks {
+            for (x, y) in bits.iter_mut().zip(data.iter()) {
+                *x = y.bit(i)
+            }
+            noise[i] = self.bits[i].noise(module, bits.as_slice(), sk, scratch);
+        }
+
+        noise
     }
 
     pub(crate) fn zero<M, BE: Backend, K, H>(
@@ -454,9 +484,9 @@ impl BitArray {
 
     #[allow(dead_code)]
     fn decrypt<M, BE: Backend, S>(
-        &mut self,
+        &self,
         module: &M,
-        data_decrypted: &mut [u8],
+        data: &mut [u8],
         sk_prepared: &S,
         scratch: &mut Scratch<BE>,
     ) where
@@ -467,13 +497,46 @@ impl BitArray {
         let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
         let (mut data_i64, scratch_2) = scratch_1.take_slice(module.n());
 
-        for (chunk, ct) in data_decrypted.chunks_mut(module.n()).zip(self.data.iter()) {
+        for (chunk, ct) in data.chunks_mut(module.n()).zip(self.data.iter()) {
             ct.decrypt(module, &mut pt, sk_prepared, scratch_2);
             pt.decode_vec_i64(&mut data_i64, TorusPrecision(2));
             for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
                 *x = *y as u8;
             }
         }
+    }
+
+    #[allow(dead_code)]
+    fn noise<M, BE: Backend, S>(
+        &self,
+        module: &M,
+        data: &[u8],
+        sk_prepared: &S,
+        scratch: &mut Scratch<BE>,
+    ) -> f64
+    where
+        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
+        let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
+
+        let mut max_noise: f64 = f64::MIN;
+
+        for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter()) {
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter()) {
+                *y = *x as i64;
+            }
+            pt.encode_vec_i64(&data_i64, TorusPrecision(2));
+            max_noise = max_noise.max(
+                ct.noise(module, &mut pt, sk_prepared, scratch_2)
+                    .max()
+                    .log2(),
+            );
+        }
+
+        max_noise
     }
 
     fn retrieve_stateless_tmp_bytes<M, R, A, BE: Backend>(module: &M, res: &R, addr: &A) -> usize

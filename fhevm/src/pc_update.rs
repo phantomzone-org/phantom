@@ -10,7 +10,7 @@ use poulpy_hal::{
     api::ModuleLogN,
     layouts::{Backend, DataMut, DataRef, Scratch},
 };
-use poulpy_schemes::tfhe::bdd_arithmetic::{
+use poulpy_schemes::bin_fhe::bdd_arithmetic::{
     BitSize, ExecuteBDDCircuit, FheUint, FheUintPrepared, GetGGSWBit, UnsignedInteger,
 };
 

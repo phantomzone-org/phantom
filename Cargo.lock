@@ -195,8 +195,9 @@ dependencies = [
  "elf",
  "fhevm",
  "itertools 0.14.0",
- "poulpy-backend",
  "poulpy-core",
+ "poulpy-cpu-avx",
+ "poulpy-cpu-ref",
  "poulpy-hal",
  "poulpy-schemes",
  "tqdm",
@@ -265,32 +266,6 @@ dependencies = [
 
 [[package]]
 name = "criterion"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2b12d017a929603d80db1831cd3a24082f8137ce19c69e6447f54f5fc8d692f"
-dependencies = [
- "anes",
- "cast",
- "ciborium",
- "clap",
- "criterion-plot 0.5.0",
- "is-terminal",
- "itertools 0.10.5",
- "num-traits",
- "once_cell",
- "oorandom",
- "plotters",
- "rayon",
- "regex",
- "serde",
- "serde_derive",
- "serde_json",
- "tinytemplate",
- "walkdir",
-]
-
-[[package]]
-name = "criterion"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e1c047a62b0cc3e145fa84415a3191f628e980b194c2755aa12300a4e6cbd928"
@@ -299,7 +274,7 @@ dependencies = [
  "cast",
  "ciborium",
  "clap",
- "criterion-plot 0.6.0",
+ "criterion-plot",
  "itertools 0.13.0",
  "num-traits",
  "oorandom",
@@ -310,16 +285,6 @@ dependencies = [
  "serde_json",
  "tinytemplate",
  "walkdir",
-]
-
-[[package]]
-name = "criterion-plot"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b50826342786a51a89e2da3a28f1c32b06e387201bc2d19791f622c673706b1"
-dependencies = [
- "cast",
- "itertools 0.10.5",
 ]
 
 [[package]]
@@ -438,9 +403,9 @@ checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
 
 [[package]]
 name = "elf"
-version = "0.7.4"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4445909572dbd556c457c849c4ca58623d84b27c8fff1e74b0b4227d8b90d17b"
+checksum = "55dd888a213fc57e957abf2aa305ee3e8a28dbe05687a251f33b637cd46b0070"
 
 [[package]]
 name = "fdeflate"
@@ -455,12 +420,13 @@ dependencies = [
 name = "fhevm"
 version = "0.1.0"
 dependencies = [
- "criterion 0.5.1",
+ "criterion",
  "itertools 0.14.0",
  "paste",
  "plotters",
- "poulpy-backend",
  "poulpy-core",
+ "poulpy-cpu-avx",
+ "poulpy-cpu-ref",
  "poulpy-hal",
  "poulpy-schemes",
  "rand_core",
@@ -614,12 +580,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
-name = "hermit-abi"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc0fef456e4baa96da950455cd02c081ca953b141298e41db3fc7e36b1da849c"
-
-[[package]]
 name = "iana-time-zone"
 version = "0.1.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -655,26 +615,6 @@ dependencies = [
  "jpeg-decoder",
  "num-traits",
  "png",
-]
-
-[[package]]
-name = "is-terminal"
-version = "0.4.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
-dependencies = [
- "hermit-abi",
- "libc",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "itertools"
-version = "0.10.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
-dependencies = [
- "either",
 ]
 
 [[package]]
@@ -940,12 +880,51 @@ dependencies = [
 ]
 
 [[package]]
-name = "poulpy-backend"
-version = "0.3.2"
+name = "poulpy-core"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92939708ce0721e120e7ab9e317816a06b9d7bcb95e065b1452e0c78de95fad2"
+dependencies = [
+ "bytemuck",
+ "byteorder",
+ "criterion",
+ "itertools 0.14.0",
+ "once_cell",
+ "paste",
+ "poulpy-cpu-avx",
+ "poulpy-cpu-ref",
+ "poulpy-hal",
+ "rug",
+]
+
+[[package]]
+name = "poulpy-cpu-avx"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6667a0638819c538aedd34eb72308e8e91584cf4ac0e71455e3451538a9d870"
 dependencies = [
  "byteorder",
- "cmake",
- "criterion 0.7.0",
+ "criterion",
+ "itertools 0.14.0",
+ "once_cell",
+ "paste",
+ "poulpy-cpu-ref",
+ "poulpy-hal",
+ "rand",
+ "rand_chacha",
+ "rand_core",
+ "rand_distr",
+ "rug",
+]
+
+[[package]]
+name = "poulpy-cpu-ref"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b1b12ffd9b15d10c160c12c2bfb4e652183404a8a8165ff0b7aba7317f133fe"
+dependencies = [
+ "byteorder",
+ "criterion",
  "itertools 0.14.0",
  "once_cell",
  "poulpy-hal",
@@ -957,29 +936,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "poulpy-core"
-version = "0.3.2"
-dependencies = [
- "bytemuck",
- "byteorder",
- "criterion 0.7.0",
- "itertools 0.14.0",
- "once_cell",
- "poulpy-backend",
- "poulpy-hal",
- "rug",
-]
-
-[[package]]
 name = "poulpy-hal"
-version = "0.3.2"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ddd49193e501a7350db9582be6d0c43758b1f103ba81f40dcd0a6e2edacacd5"
 dependencies = [
  "bytemuck",
  "byteorder",
  "cmake",
- "criterion 0.7.0",
+ "criterion",
  "itertools 0.14.0",
  "once_cell",
+ "paste",
  "rand",
  "rand_chacha",
  "rand_core",
@@ -989,14 +957,17 @@ dependencies = [
 
 [[package]]
 name = "poulpy-schemes"
-version = "0.3.3"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "242712a12d396d2049c064cb27c39c28d15d56e47970715cd73e2a841f712714"
 dependencies = [
  "byteorder",
- "criterion 0.7.0",
+ "criterion",
  "itertools 0.14.0",
  "paste",
- "poulpy-backend",
  "poulpy-core",
+ "poulpy-cpu-avx",
+ "poulpy-cpu-ref",
  "poulpy-hal",
  "rand",
 ]

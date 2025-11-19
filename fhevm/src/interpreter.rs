@@ -22,7 +22,7 @@ use poulpy_core::{
     GLWENormalize, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, GetDistribution,
     ScratchTakeCore,
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{
         BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit1WTo1W,
         ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared,
@@ -135,7 +135,6 @@ impl<BE: Backend> Interpreter<BE> {
     where
         Module<BE>: FheUintPreparedFactory<u32, BE>,
     {
-
         let rom_infos: &GLWELayout = &params.rom_infos();
         let ram_infos: &GLWELayout = &params.ram_infos();
 
@@ -417,12 +416,8 @@ impl<BE: Backend> Interpreter<BE> {
             .decrypt(module, data_decrypted, sk_prepared, scratch);
     }
 
-    pub fn cycle<M, DK, H, K, BRA>(
-        &mut self,
-        module: &M,
-        keys: &H,
-        scratch: &mut Scratch<BE>,
-    ) where
+    pub fn cycle<M, DK, H, K, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
+    where
         M: Sync
             + GGSWPreparedFactory<BE>
             + GLWEExternalProduct<BE>
@@ -602,11 +597,10 @@ impl<BE: Backend> Interpreter<BE> {
         this_cycle_measurement.total_cycle_time = total_cycle_time;
 
         self.measurements
-        .cycle_measurements
-        .push(this_cycle_measurement);
+            .cycle_measurements
+            .push(this_cycle_measurement);
 
         self.print_timings();
-
     }
 
     pub(crate) fn read_and_prepare_instruction_components<M, D, BRA, H, K, S>(
@@ -1368,6 +1362,11 @@ impl<BE: Backend> Interpreter<BE> {
             //   println!("RAM[{:02}]: {:08x} - {:08x}", i, ram_have[i], ram_want[i]);
             //}
             println!("reg: {:?}", registers_have);
+            println!(
+                "reg_noise: {:#?}",
+                self.registers
+                    .noise(module, registers_want.as_slice(), sk, scratch)
+            );
             assert_eq!(registers_have, registers_want);
         }
     }
@@ -1490,6 +1489,19 @@ impl<BE: Backend> Interpreter<BE> {
             let mut ram_have: Vec<u32> = vec![0u32; self.ram_size];
             self.ram.decrypt(module, &mut ram_have, sk, scratch);
             let ram_want: &Vec<u32> = &vm_debug.ram;
+            //for i in 0..self.ram_size {
+            //    println!(
+            //        "RAM[{:02}]: {:08x} - {:08x} : {}",
+            //        i,
+            //        ram_have[i],
+            //        ram_want[i],
+            //        ram_have[i] - ram_want[i]
+            //    );
+            //}
+            println!(
+                "ram_noise: {:#?}",
+                self.ram.noise(module, ram_want.as_slice(), sk, scratch)
+            );
             assert_eq!(&ram_have, ram_want);
         }
     }
@@ -1585,7 +1597,6 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-
     pub fn print_timings(&self) {
         if self.verbose_timings {
             println!(
@@ -1624,6 +1635,6 @@ Average Cycle Time: {:?}
                 self.measurements.average_cycle_time_pc_update_bdd(),
                 self.measurements.average_cycle_time_pc_prepare(),
             );
-        }        
+        }
     }
 }

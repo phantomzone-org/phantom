@@ -1,9 +1,9 @@
 use std::time::Instant;
 
-use poulpy_backend::FFT64Ref;
 use poulpy_core::layouts::{
     prepared::GLWESecretPrepared, GLWEInfos, GLWELayout, GLWESecret, LWESecret,
 };
+use poulpy_cpu_ref::FFT64Ref;
 use poulpy_hal::{
     api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
     layouts::ScratchOwned,
@@ -16,7 +16,7 @@ use crate::{
     parameters::CryptographicParameters,
 };
 
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{FheUint, FheUintPrepared},
     blind_rotation::CGGI,
 };
