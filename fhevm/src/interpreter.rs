@@ -4,6 +4,7 @@ use crate::{
     debug::InterpreterDebug, measure_duration, memory::Memory, parameters::CryptographicParameters,
     ram_offset::ram_offset, ram_update::Store, rd_update::Evaluate, update_pc, Measurements,
     PerCycleMeasurements, RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST,
+    prepare::PrepareMultiple,
 };
 
 use poulpy_hal::{
@@ -429,6 +430,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
+            + PrepareMultiple<BE, BRA>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
             + ExecuteBDDCircuit1WTo1W<BE>
@@ -467,6 +469,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
+            + PrepareMultiple<BE, BRA>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
             + ExecuteBDDCircuit1WTo1W<BE>
@@ -501,6 +504,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWETrace<BE>
             + GLWEPacking<BE>
             + FheUintPreparedFactory<u32, BE>
+            + PrepareMultiple<BE, BRA>
             + FheUintPrepare<BRA, BE>
             + ExecuteBDDCircuit2WTo1W<BE>
             + ExecuteBDDCircuit1WTo1W<BE>
@@ -628,7 +632,8 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWENoise<BE>
             + GGSWEncryptSk<BE>
             + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>,
+            + FheUintPreparedEncryptSk<u32, BE>
+            + PrepareMultiple<BE, BRA>,
         H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
         K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
@@ -734,67 +739,100 @@ impl<BE: Backend> Interpreter<BE> {
             None
         };
 
-        // Prepare variables
-        self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        // // Prepare variables
+        // self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rdu_val_fhe_uint,
+        //     0,
+        //     rd_ops_bit_size,
+        //     keys,
+        //     scratch,
+        // );
+        // self.mu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.mu_val_fhe_uint,
+        //     0,
+        //     ram_ops_bit_size,
+        //     keys,
+        //     scratch,
+        // );
+        // self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.pcu_val_fhe_uint,
+        //     0,
+        //     4,
+        //     keys,
+        //     scratch,
+        // );
+        // self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.imm_val_fhe_uint,
+        //     0,
+        //     32,
+        //     keys,
+        //     scratch,
+        // ); // TODO switch to 20 bits immediate & update circuits
+        // self.rs1_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rs1_addr_fhe_uint,
+        //     0,
+        //     self.reg_bit_size,
+        //     keys,
+        //     scratch,
+        // );
+        // self.rs2_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rs2_addr_fhe_uint,
+        //     0,
+        //     self.reg_bit_size,
+        //     keys,
+        //     scratch,
+        // );
+        // self.rd_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rd_addr_fhe_uint,
+        //     0,
+        //     self.reg_bit_size,
+        //     keys,
+        //     scratch,
+        // );
+
+        module.prepare_multiple_fheuint(
             threads,
-            module,
-            &self.rdu_val_fhe_uint,
-            0,
-            rd_ops_bit_size,
-            keys,
-            scratch,
-        );
-        self.mu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.mu_val_fhe_uint,
-            0,
-            ram_ops_bit_size,
-            keys,
-            scratch,
-        );
-        self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.pcu_val_fhe_uint,
-            0,
-            4,
-            keys,
-            scratch,
-        );
-        self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.imm_val_fhe_uint,
-            0,
-            32,
-            keys,
-            scratch,
-        ); // TODO switch to 20 bits immediate & update circuits
-        self.rs1_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs1_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
-            keys,
-            scratch,
-        );
-        self.rs2_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs2_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
-            keys,
-            scratch,
-        );
-        self.rd_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rd_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
+            &mut vec![
+                &mut self.rdu_val_fhe_uint_prepared,
+                &mut self.mu_val_fhe_uint_prepared,
+                &mut self.pcu_val_fhe_uint_prepared,
+                &mut self.imm_val_fhe_uint_prepared,
+                &mut self.rs1_addr_fhe_uint_prepared,
+                &mut self.rs2_addr_fhe_uint_prepared,
+                &mut self.rd_addr_fhe_uint_prepared,
+            ],
+            vec![
+                &self.rdu_val_fhe_uint,
+                &self.mu_val_fhe_uint,
+                &self.pcu_val_fhe_uint,
+                &self.imm_val_fhe_uint,
+                &self.rs1_addr_fhe_uint,
+                &self.rs2_addr_fhe_uint,
+                &self.rd_addr_fhe_uint,
+            ],
+            vec![
+                rd_ops_bit_size,
+                ram_ops_bit_size,
+                4,
+                32,
+                self.reg_bit_size,
+                self.reg_bit_size,
+                self.reg_bit_size,
+            ],
             keys,
             scratch,
         );
@@ -944,6 +982,7 @@ impl<BE: Backend> Interpreter<BE> {
             + GLWEPacking<BE>
             + ModuleN
             + FheUintPreparedFactory<u32, BE>
+            + PrepareMultiple<BE, BRA>
             + FheUintPrepare<BRA, BE>
             + GGSWBlindRotation<u32, BE>
             + GLWEDecrypt<BE>
@@ -996,21 +1035,30 @@ impl<BE: Backend> Interpreter<BE> {
             None
         };
 
-        self.rs1_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        // self.rs1_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rs1_val_fhe_uint,
+        //     0,
+        //     32,
+        //     keys,
+        //     scratch,
+        // );
+        // self.rs2_val_fhe_uint_prepared.prepare_custom_multi_thread(
+        //     threads,
+        //     module,
+        //     &self.rs2_val_fhe_uint,
+        //     0,
+        //     32,
+        //     keys,
+        //     scratch,
+        // );
+
+        module.prepare_multiple_fheuint(
             threads,
-            module,
-            &self.rs1_val_fhe_uint,
-            0,
-            32,
-            keys,
-            scratch,
-        );
-        self.rs2_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs2_val_fhe_uint,
-            0,
-            32,
+            &mut vec![&mut self.rs1_val_fhe_uint_prepared, &mut self.rs2_val_fhe_uint_prepared],
+            vec![&self.rs1_val_fhe_uint, &self.rs2_val_fhe_uint],
+            vec![32, 32],
             keys,
             scratch,
         );

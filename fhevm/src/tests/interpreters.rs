@@ -1,8 +1,6 @@
 use crate::{
-    keys::{VMKeys, VMKeysPrepared},
-    parameters::CryptographicParameters,
-    rd_update::Evaluate,
-    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
+    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST, keys::{VMKeys, VMKeysPrepared}, parameters::CryptographicParameters, rd_update::Evaluate,
+    prepare::PrepareMultiple,
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
@@ -37,6 +35,7 @@ where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>
@@ -192,6 +191,7 @@ where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>
@@ -346,6 +346,7 @@ where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>
@@ -515,6 +516,7 @@ where
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + GLWEAutomorphismKeyEncryptSk<BE>
         + GGLWEToGGSWKeyEncryptSk<BE>
         + GLWETrace<BE>

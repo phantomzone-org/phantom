@@ -1,7 +1,6 @@
 use crate::{
-    keys::{VMKeys, VMKeysPrepared},
-    parameters::CryptographicParameters,
-    Instruction, InstructionsParser, Interpreter, RV32I,
+    Instruction, InstructionsParser, Interpreter, RV32I, keys::{VMKeys, VMKeysPrepared}, parameters::CryptographicParameters,
+    prepare::PrepareMultiple,
 };
 use poulpy_backend::FFT64Ref;
 use poulpy_core::{
@@ -35,6 +34,7 @@ where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>
@@ -130,10 +130,11 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    interpreter.set_verbose_timings(false);
-    interpreter.set_threads(16);
+    interpreter.set_verbose_timings(true);
 
-    for _ in 0..rom.len() {
+    for i in 0..5 {
+        interpreter.set_threads(1 << i);
+        println!("Running with {} threads", 1 << i);
         interpreter.cycle_debug(
             module,
             &key_prepared,
@@ -153,6 +154,7 @@ where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
         + FheUintPreparedFactory<u32, BE>
+        + PrepareMultiple<BE, BRA>
         + ModuleN
         + GLWEEncryptSk<BE>
         + FheUintPreparedEncryptSk<u32, BE>

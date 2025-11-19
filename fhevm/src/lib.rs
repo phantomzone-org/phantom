@@ -10,6 +10,7 @@ pub(crate) mod pc_update;
 pub(crate) mod ram_offset;
 pub(crate) mod ram_update;
 pub(crate) mod rd_update;
+pub mod prepare;
 
 // Re-export the main functionality
 pub(crate) use instructions::*;
