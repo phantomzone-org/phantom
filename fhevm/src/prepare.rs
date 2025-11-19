@@ -1,31 +1,22 @@
-use std::marker::PhantomData;
 use std::thread;
 
 use poulpy_core::layouts::{
-    Base2K, Dnum, Dsize, GGSWInfos, GGSWPreparedFactory, GLWEInfos, LWEInfos, Rank, TorusPrecision, prepared::GGSWPrepared,
+    GGSWInfos, GGSWPreparedFactory, GGSWLayout,
 };
-use poulpy_core::layouts::{
-    GGLWEInfos, GGLWEPreparedToRef, GGSW, GGSWLayout, GGSWPreparedToMut, GGSWPreparedToRef, GLWEAutomorphismKeyHelper,
-    GetGaloisElement, LWE,
-};
-use poulpy_core::{GLWECopy, GLWEDecrypt, GLWEPacking, LWEFromGLWE};
-
-use poulpy_core::{GGSWEncryptSk, ScratchTakeCore, layouts::GLWESecretPreparedToRef};
-use poulpy_hal::api::{ModuleLogN, ScratchAvailable, ScratchFromBytes};
+use poulpy_core::{LWEFromGLWE, ScratchTakeCore};
+use poulpy_hal::api::{ScratchAvailable, ScratchFromBytes};
 use poulpy_hal::layouts::{Backend, Data, DataRef, Module};
 
 use poulpy_hal::{
-    api::ModuleN,
     layouts::{DataMut, Scratch},
-    source::Source,
 };
 
-use poulpy_schemes::tfhe::bdd_arithmetic::{
-    BDDKey, BDDKeyHelper, BDDKeyInfos, BDDKeyPrepared, BDDKeyPreparedFactory, BitSize, FheUint, FheUintPrepare, FheUintPrepared, GetGGSWBitMut, ToBits
+use poulpy_schemes::bin_fhe::bdd_arithmetic::{
+    BDDKey, BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared, GetGGSWBitMut, ToBits
 };
-use poulpy_schemes::tfhe::bdd_arithmetic::{Cmux, FromBits, ScratchTakeBDD, UnsignedInteger};
-use poulpy_schemes::tfhe::blind_rotation::BlindRotationAlgo;
-use poulpy_schemes::tfhe::circuit_bootstrapping::{CircuitBootstrappingKeyInfos, CirtuitBootstrappingExecute};
+use poulpy_schemes::bin_fhe::bdd_arithmetic::UnsignedInteger;
+use poulpy_schemes::bin_fhe::blind_rotation::BlindRotationAlgo;
+use poulpy_schemes::bin_fhe::circuit_bootstrapping::{CircuitBootstrappingKeyInfos, CirtuitBootstrappingExecute};
 
 
 pub trait PrepareMultiple<BE: Backend, BRA: BlindRotationAlgo> {
@@ -50,6 +41,7 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
 {
 
+    // Assumes all FHEUints start from bit 0
     fn prepare_multiple_fheuint<DM, DB, DK, K, T: UnsignedInteger>(
         &self,
         threads: usize,
@@ -64,7 +56,7 @@ where
         DK: DataRef,
         K: BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos,
     {
-        let (cbt, ks) = key.get_cbt_key();
+        let (cbt, ks_glwe, ks_lwe) = key.get_cbt_key();
 
         let scratch_thread_size = self.fhe_uint_prepare_tmp_bytes(cbt.block_size(), 1, res[0], bits[0], key);
 
@@ -74,7 +66,6 @@ where
             scratch.available()
         );
 
-        // let combined_res: Vec<&mut GGSWPrepared<DM, BE>> = res.iter().enumerate().map(|(i, r)| r.bits[..bit_counts[i]]).flatten().collect();
         let mut combined_res: Vec<_> = res.iter_mut()
             .zip(bit_counts.iter())
             .flat_map(|(r, &count)| r.get_bits(0, count))
@@ -105,7 +96,6 @@ where
                     let (mut tmp_ggsw, scratch_1) = scratch_thread.take_ggsw(ggsw_infos);
                     let (mut tmp_lwe, scratch_2) = scratch_1.take_lwe(bits[0]);
                     for (local_bit, dst) in res_bits_chunk.iter_mut().enumerate() {
-                        // bits[0].get_bit_lwe(self, start + local_bit, &mut tmp_lwe, ks, scratch_2);
                         let mut start_cnt = 1;
                         let mut sum_til_now_prev = 0;
                         let mut sum_til_now = bit_counts[0];
@@ -114,7 +104,7 @@ where
                             sum_til_now += bit_counts[start_cnt];
                             start_cnt += 1;
                         }
-                        bits[start_cnt-1].get_bit_lwe(self, start + local_bit - sum_til_now_prev, &mut tmp_lwe, ks, scratch_2);
+                        bits[start_cnt-1].get_bit_lwe(self, start + local_bit - sum_til_now_prev, &mut tmp_lwe, ks_glwe, ks_lwe, scratch_2);
 
                         cbt.execute_to_constant(self, &mut tmp_ggsw, &tmp_lwe, 1, 1, scratch_2);
                         dst.prepare(self, &tmp_ggsw, scratch_2);
