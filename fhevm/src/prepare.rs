@@ -21,7 +21,7 @@ use poulpy_hal::{
 };
 
 use poulpy_schemes::tfhe::bdd_arithmetic::{
-    BDDKey, BDDKeyHelper, BDDKeyInfos, BDDKeyPrepared, BDDKeyPreparedFactory, BitSize, FheUint, FheUintPrepare, FheUintPrepared, ToBits
+    BDDKey, BDDKeyHelper, BDDKeyInfos, BDDKeyPrepared, BDDKeyPreparedFactory, BitSize, FheUint, FheUintPrepare, FheUintPrepared, GetGGSWBitMut, ToBits
 };
 use poulpy_schemes::tfhe::bdd_arithmetic::{Cmux, FromBits, ScratchTakeBDD, UnsignedInteger};
 use poulpy_schemes::tfhe::blind_rotation::BlindRotationAlgo;
@@ -77,7 +77,7 @@ where
         // let combined_res: Vec<&mut GGSWPrepared<DM, BE>> = res.iter().enumerate().map(|(i, r)| r.bits[..bit_counts[i]]).flatten().collect();
         let mut combined_res: Vec<_> = res.iter_mut()
             .zip(bit_counts.iter())
-            .flat_map(|(r, &count)| r.bits[..count].iter_mut())
+            .flat_map(|(r, &count)| r.get_bits(0, count))
             .collect();
 
         let total_bit_count = bit_counts.iter().sum::<usize>();
@@ -125,7 +125,7 @@ where
 
         for res_index in 0..res.len() {
             for i in bit_counts[res_index]..T::BITS as usize {
-                res[res_index].bits[i].zero(self);
+                res[res_index].get_bit(i).zero(self);
             }
         }
     }

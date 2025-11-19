@@ -2,6 +2,7 @@ use fhevm::{
     keys::{VMKeys, VMKeysPrepared},
     parameters::CryptographicParameters,
     instructions::Instruction, instructions::InstructionsParser, interpreter::Interpreter,
+    prepare::PrepareMultiple,
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
@@ -50,6 +51,7 @@ where
     + ModuleN
     + GLWEEncryptSk<BE>
     + FheUintPreparedEncryptSk<u32, BE>
+    + PrepareMultiple<BE, BRA>
     + GLWEAutomorphismKeyEncryptSk<BE>
     + GGLWEToGGSWKeyEncryptSk<BE>
     + GLWETrace<BE>
