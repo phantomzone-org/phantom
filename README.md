@@ -10,19 +10,19 @@ It enables black-box execution of any RISC-V program, allowing developers to wri
 
 ## Building Phantom
 
-We provide a setup script at [setup.sh](./setup.sh) to build Phantom and required dependencies from scratch on a fresh Debian/Ubuntu machine.
+We provide a setup script at [setup.sh](./scripts/setup.sh) to build Phantom and required dependencies from scratch on a fresh Debian/Ubuntu machine.
 
 ## How to use Phantom
 
 Developers write their programs in Rust, which are then compiled into RISC-V binaries. These binaries are transformed into a polynomial representation, optimized for execution within the plaintext space of RLWE-based FHE.
 These polynomials are then encrypted, producing the encrypted program, which can then be executed by the Phantom VM on arbitrary encrypted and/or plaintext inputs.
 
-To use, we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [template](./compiler-tests/otc/) example to start programming in Phantom, and [otc](./compiler-tests/otc/) for a more advanced example.
+To use, we recommend to look at full end to end examples in `compiler-tests` directory. In particular, the [template](./compiler-tests/template/) example to start programming in Phantom, and [otc](./compiler-tests/otc/) for a more advanced example.
 
 ## Architecture
 
 Phantom VM is a collection of FHE circuits that collectively simulate a RISC-V virtual machine.
-The Phantom VM is implemented in the `./fhevm` directory.
+The Phantom VM is implemented in the [fhevm](./fhevm) directory.
 The architecture of the Phantom VM is described in [doc/spec.png](./doc/spec.png).
 It consists of 6 major components:
 - Reading the instruction components from the ROM
@@ -36,7 +36,7 @@ The dependency graph of the operations performed in these components is describe
 
 ## Benchmark
 
-We benchmark Phantom on a AWS r6i.metal, parallelized with 32 threads and measure the runtime of a single cycle, and all 6 components.
+We benchmark Phantom on a AWS r6i.metal, parallelized across 32 cores, and measure the runtime of a single cycle, and all 6 components.
 
 Average Cycle Time: 655 ms
   1. Read and prepare instruction components: 128 ms
@@ -61,4 +61,3 @@ cargo bench --package fhevm --bench cycle
 ```
 
 ## Contribute
-

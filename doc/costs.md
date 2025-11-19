@@ -164,7 +164,7 @@ graph TD
 ```
 
 
-## Summary of runtime
+<!--## Summary of runtime
 The runtimes are from running Phantom on a AWS r6i.metal, parallelized with 32 threads.
 
 Average Cycle Time: 971.058934ms
@@ -174,7 +174,7 @@ Average Cycle Time: 971.058934ms
   4. Update registers: 317.313129ms
   5. Update ram: 131.300826ms
   6. Update pc: 74.838472ms
-
+-->
 
 <!-- 
 Dependency graph of operations in risc-v FHE-VM. A single cycle starts at top and ends at the bottom. Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
