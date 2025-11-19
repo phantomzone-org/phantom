@@ -1,8 +1,8 @@
-use tqdm::tqdm;
 use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
     segment::ProgramHeader,
 };
+use tqdm::tqdm;
 
 // use fhevm::parameters::Parameters;
 use fhevm::{
@@ -13,9 +13,9 @@ use fhevm::{
 };
 
 #[cfg(target_arch = "x86_64")]
-use poulpy_backend::FFT64Avx as BackendImpl;
+use poulpy_cpu_avx::FFT64Avx as BackendImpl;
 #[cfg(not(target_arch = "x86_64"))]
-use poulpy_backend::FFT64Ref as BackendImpl;
+use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
 
@@ -24,7 +24,7 @@ use poulpy_hal::{
     layouts::ScratchOwned,
     source::Source,
 };
-use poulpy_schemes::tfhe::blind_rotation::CGGI;
+use poulpy_schemes::bin_fhe::blind_rotation::CGGI;
 use testvm::TestVM;
 
 mod testvm;
@@ -112,8 +112,8 @@ pub struct EncryptedVM {
 
 impl EncryptedVM {
     pub fn execute(&mut self) {
-        
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
+        let mut scratch: ScratchOwned<BackendImpl> =
+            ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
 
         for _current_cycle in tqdm(0..self.max_cycles) {
             if self.phantom_debug {
@@ -124,11 +124,8 @@ impl EncryptedVM {
                     scratch.borrow(),
                 );
             } else {
-                self.interpreter.cycle(
-                    self.params.module(),
-                    &self.key_prepared,
-                    scratch.borrow(),
-                );
+                self.interpreter
+                    .cycle(self.params.module(), &self.key_prepared, scratch.borrow());
             }
         }
     }

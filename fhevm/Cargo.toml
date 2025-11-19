@@ -7,7 +7,8 @@ edition = "2021"
 itertools = "0.14.0"
 poulpy-hal = {path = "../../poulpy/poulpy-hal"}
 poulpy-core = {path = "../../poulpy/poulpy-core"}
-poulpy-backend = {path = "../../poulpy/poulpy-backend"}
+poulpy-cpu-ref = {path = "../../poulpy/poulpy-cpu-ref"}
+poulpy-cpu-avx = {path = "../../poulpy/poulpy-cpu-avx"}
 poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
 rand_core = "0.9.3"
 strum = "0.27.2"

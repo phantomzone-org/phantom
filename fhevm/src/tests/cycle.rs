@@ -3,7 +3,6 @@ use crate::{
     parameters::CryptographicParameters,
     Instruction, InstructionsParser, Interpreter, RV32I,
 };
-use poulpy_backend::FFT64Ref;
 use poulpy_core::{
     layouts::{
         GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
@@ -12,12 +11,13 @@ use poulpy_core::{
     GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt, GLWEEncryptSk,
     GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
 };
+use poulpy_cpu_ref::FFT64Ref;
 use poulpy_hal::{
     api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
     layouts::{Backend, Module, Scratch, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
         FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
@@ -134,12 +134,7 @@ where
     interpreter.set_threads(16);
 
     for _ in 0..rom.len() {
-        interpreter.cycle_debug(
-            module,
-            &key_prepared,
-            &sk_glwe_prepared,
-            scratch.borrow(),
-        );
+        interpreter.cycle_debug(module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
     }
 }
 
@@ -176,7 +171,6 @@ where
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-
     let num_instructions = 100;
     let instruction = Instruction::new(0b00000000_00000000_00000000_1110011);
     let rom: Vec<Instruction> = vec![instruction; num_instructions];
@@ -240,12 +234,7 @@ where
     interpreter.set_threads(16);
 
     for _ in 0..rom.len() {
-        interpreter.cycle_debug(
-            module,
-            &key_prepared,
-            &sk_glwe_prepared,
-            scratch.borrow(),
-        );
+        interpreter.cycle_debug(module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
         let series = vec![
             (
                 "PC value noise".to_string(),
@@ -270,7 +259,6 @@ where
         ];
 
         if series.iter().any(|(_, data)| !data.is_empty()) {
-            
             let plot_dir = std::path::PathBuf::from("../doc");
             if let Err(err) = std::fs::create_dir_all(&plot_dir) {
                 println!(
@@ -278,13 +266,19 @@ where
                     plot_dir.display()
                 );
             }
-            let plot_path = plot_dir.join(format!("noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.png", params.n_glwe(), params.n_lwe(), params.rank(), params.base2k()));
+            let plot_path = plot_dir.join(format!(
+                "noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.png",
+                params.n_glwe(),
+                params.n_lwe(),
+                params.rank(),
+                params.base2k_fhe_uint()
+            ));
             match plot_noise_progression(&params, &plot_path, &series) {
                 Ok(()) => println!("Noise progression plot written to {}", plot_path.display()),
                 Err(err) => println!("Failed to render noise progression plot: {err}"),
             }
         }
-    }   
+    }
 }
 
 fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
