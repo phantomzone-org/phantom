@@ -38,13 +38,22 @@ The dependency graph of the operations performed in these components is describe
 
 We benchmark Phantom on a AWS r6i.metal, parallelized with 32 threads and measure the runtime of a single cycle, and all 6 components.
 
-Average Cycle Time: 971.058934ms
-  1. Read instruction components: 138.901955ms
-  2. Read registers: 237.512433ms
-  3. Read ram: 71.142182ms
-  4. Update registers: 317.313129ms
-  5. Update ram: 131.300826ms
-  6. Update pc: 74.838472ms
+Average Cycle Time: 655 ms
+  1. Read and prepare instruction components: 128 ms
+     - Read instruction components: 28 ms
+     - Prepare instruction components: 100 ms
+  2. Read and prepare registers: 106 ms
+     - Read registers: 7 ms
+     - Prepare registers: 98 ms
+  3. Read ram: 71 ms
+  4. Update registers: 203 ms
+     - Evaluate rd ops: 133 ms
+     - Blind selection: 1 ms
+     - Write rd: 69 ms
+  5. Update ram: 72 ms
+  6. Update pc: 73 ms
+     - PC update BDD: 18 ms
+     - PC prepare: 54 ms
 
 To reproduce benchmarks for a single cycle, run:
 ```
