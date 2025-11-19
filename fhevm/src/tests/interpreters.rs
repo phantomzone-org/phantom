@@ -125,7 +125,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
-    interpreter.read_instruction_components(
+    interpreter.read_and_prepare_instruction_components(
         1,
         module,
         &key_prepared,
@@ -252,7 +252,7 @@ where
     key_prepared.prepare(module, &key, scratch.borrow());
 
     let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
-    interpreter.read_instruction_components(
+    interpreter.read_and_prepare_instruction_components(
         1,
         module,
         &key_prepared,
@@ -441,7 +441,7 @@ where
             scratch.borrow(),
         );
         let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
-        interpreter.read_instruction_components(
+        interpreter.read_and_prepare_instruction_components(
             1,
             module,
             &key_prepared,

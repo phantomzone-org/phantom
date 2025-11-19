@@ -20,11 +20,38 @@ impl Measurements {
         total_cycle_time / self.cycle_measurements.len() as u32
     }
 
+    pub fn average_cycle_time_read_and_prepare_instruction_components(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.cycle_time_read_and_prepare_instruction_components)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
     pub fn average_cycle_time_read_instruction_components(&self) -> Duration {
         let total_cycle_time = self
             .cycle_measurements
             .iter()
             .map(|measurement| measurement.cycle_time_read_instruction_components)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+    
+    pub fn average_cycle_time_prepare_instruction_components(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.cycle_time_prepare_instruction_components)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    pub fn average_cycle_time_read_and_prepare_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.cycle_time_read_and_prepare_registers)
             .sum::<Duration>();
         total_cycle_time / self.cycle_measurements.len() as u32
     }
@@ -34,6 +61,15 @@ impl Measurements {
             .cycle_measurements
             .iter()
             .map(|measurement| measurement.cycle_time_read_registers)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    pub fn average_cycle_time_prepare_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.cycle_time_prepare_registers)
             .sum::<Duration>();
         total_cycle_time / self.cycle_measurements.len() as u32
     }
@@ -101,20 +137,19 @@ impl Measurements {
         total_cycle_time / self.cycle_measurements.len() as u32
     }
 
-    pub fn average_cycle_time_pcu_prepare(&self) -> Duration {
-        let total_cycle_time = self
-            .cycle_measurements
-            .iter()
-            .map(|measurement| measurement.cycle_time_pcu_prepare)
-            .sum::<Duration>();
-        total_cycle_time / self.cycle_measurements.len() as u32
-    }
-
     pub fn average_cycle_time_pc_update_bdd(&self) -> Duration {
         let total_cycle_time = self
             .cycle_measurements
             .iter()
             .map(|measurement| measurement.cycle_time_pc_update_bdd)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+    pub fn average_cycle_time_pc_prepare(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.cycle_time_pc_prepare)
             .sum::<Duration>();
         total_cycle_time / self.cycle_measurements.len() as u32
     }
@@ -165,12 +200,20 @@ pub struct PerCycleMeasurements {
     pub total_cycle_time: Duration,
 
     // Layer one
-    pub cycle_time_read_instruction_components: Duration,
-    pub cycle_time_read_registers: Duration,
+    pub cycle_time_read_and_prepare_instruction_components: Duration,
+    pub cycle_time_read_and_prepare_registers: Duration,
     pub cycle_time_read_ram: Duration,
     pub cycle_time_update_registers: Duration,
     pub cycle_time_update_ram: Duration,
     pub cycle_time_update_pc: Duration,
+
+    // Layer two - read_and_prepare_instruction_components
+    pub cycle_time_read_instruction_components: Duration,
+    pub cycle_time_prepare_instruction_components: Duration,
+
+    // Layer three - read_registers
+    pub cycle_time_read_registers: Duration,
+    pub cycle_time_prepare_registers: Duration,
 
     // Layer two - update_registers
     pub cycle_time_evaluate_rd_ops: Duration,
@@ -178,8 +221,8 @@ pub struct PerCycleMeasurements {
     pub cycle_time_write_rd: Duration,
 
     // Layer two - update_pc
-    pub cycle_time_pcu_prepare: Duration,
     pub cycle_time_pc_update_bdd: Duration,
+    pub cycle_time_pc_prepare: Duration,
 
     pub pc_val_fhe_uint_noise: f64,
     pub imm_val_fhe_uint_noise: f64,
@@ -195,12 +238,20 @@ impl PerCycleMeasurements {
         Self {
             total_cycle_time: Duration::from_secs(0),
 
-            cycle_time_read_instruction_components: Duration::from_secs(0),
-            cycle_time_read_registers: Duration::from_secs(0),
+            cycle_time_read_and_prepare_instruction_components: Duration::from_secs(0),
+            cycle_time_read_and_prepare_registers: Duration::from_secs(0),
             cycle_time_read_ram: Duration::from_secs(0),
             cycle_time_update_registers: Duration::from_secs(0),
             cycle_time_update_ram: Duration::from_secs(0),
             cycle_time_update_pc: Duration::from_secs(0),
+
+            // Layer two - read_and_prepare_instruction_components
+            cycle_time_read_instruction_components: Duration::from_secs(0),
+            cycle_time_prepare_instruction_components: Duration::from_secs(0),
+
+            // Layer three - read_registers
+            cycle_time_read_registers: Duration::from_secs(0),
+            cycle_time_prepare_registers: Duration::from_secs(0),
 
             // Layer two - update_registers
             cycle_time_evaluate_rd_ops: Duration::from_secs(0),
@@ -208,8 +259,8 @@ impl PerCycleMeasurements {
             cycle_time_write_rd: Duration::from_secs(0),
 
             // Layer two - update_pc
-            cycle_time_pcu_prepare: Duration::from_secs(0),
             cycle_time_pc_update_bdd: Duration::from_secs(0),
+            cycle_time_pc_prepare: Duration::from_secs(0),
 
             pc_val_fhe_uint_noise: 0.0,
             imm_val_fhe_uint_noise: 0.0,

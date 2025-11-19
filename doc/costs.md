@@ -38,6 +38,7 @@ Runtimes are subject to improvement and may vary, depending on the hardware.
 graph TD
 
     subgraph start_block [" "]
+        style start_block fill:#FFDDC1,stroke:#FF9966
         PC["PC "]
         ROM["ROM"]
         RAM["RAM"]
@@ -45,6 +46,7 @@ graph TD
     end
 
     subgraph read_inst [" "]
+        style read_inst fill:#990000,stroke:#FFFFFF
         READ_INST_LABEL["Read<br>Instruction<br>Components<br>(138 ms)"]
         IMM["IMM"]
         RS1_INDEX["RS1_INDEX"]
@@ -56,6 +58,7 @@ graph TD
     end
     
     subgraph read_ram [" "]
+        style read_ram fill:#660066,stroke:#FFFFFF
         READ_RAM_LABEL["Read RAM<br>(71 ms)"]
         RAM_ADDRESS["RAM_ADDRESS"]
         RAM_VAL["RAM_VAL"]
@@ -68,23 +71,27 @@ graph TD
     end
 
     subgraph update_reg [" "]
+        style update_reg fill:#000099,stroke:#FFFFFF
         UPDATE_REG_LABEL["Update Registers<br>(317 ms)"]
         POSSIBLE_RD_VALS["POSSIBLE_RD_VALS"]
         RD["RD"]
     end
 
     subgraph update_ram [" "]
+        style update_ram fill:#CC00CC,stroke:#FFFFFF
         UPDATE_RAM_LABEL["Update RAM<br>(131 ms)"]
         POSSIBLE_RAM_VALS["POSSIBLE_RAM_VALS"]
         NEW_RAM_VAL["NEW_RAM_VAL"]
     end
 
     subgraph update_pc [" "]
+        style update_pc fill:#CCCC00,stroke:#FFFFFF
         UPDATE_PC_LABEL["Update PC<br>(74 ms)"]
         NEW_PC_VAL["NEW_PC_VAL"]
     end
 
     subgraph end_block [" "]
+        style end_block fill:#FFDDC1,stroke:#FF9966
         PC_AFTER["PC"]
         RAM_AFTER["RAM"]
         REGISTERS_AFTER["REGISTERS"]

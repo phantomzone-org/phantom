@@ -530,7 +530,7 @@ impl<BE: Backend> Interpreter<BE> {
             println!();
             println!(">>>>>>>>> CYCLE[{:03}] <<<<<<<<<<<", self.cycle);
         }
-        self.read_instruction_components(
+        self.read_and_prepare_instruction_components(
             threads,
             module,
             keys,
@@ -540,7 +540,7 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         // Reads Register[rs1] and Register[rs2]
-        self.read_registers(
+        self.read_and_prepare_registers(
             threads,
             module,
             keys,
@@ -605,7 +605,7 @@ impl<BE: Backend> Interpreter<BE> {
 
     }
 
-    pub(crate) fn read_instruction_components<M, D, BRA, H, K, S>(
+    pub(crate) fn read_and_prepare_instruction_components<M, D, BRA, H, K, S>(
         &mut self,
         threads: usize,
         module: &M,
@@ -642,15 +642,18 @@ impl<BE: Backend> Interpreter<BE> {
             None
         };
 
-        self.pc_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.pc_fhe_uint,
-            0,
-            self.rom_bits_size + 2, // PC is 4bytes aligned
-            keys,
-            scratch,
-        );
+        let rd_ops_bit_size: usize = match self.instruction_set {
+            InstructionSet::RV32M => unimplemented!(),
+            InstructionSet::RV32I => (usize::BITS - (RD_UPDATE_RV32I_OP_LIST.len() - 1).leading_zeros()) as usize,
+        };
+        let ram_ops_bit_size: usize =
+            (usize::BITS - (RAM_UPDATE_OP_LIST.len() - 1).leading_zeros()) as usize;
+
+        let start_time_read_instruction_components = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         self.imm_rom.read_stateless(
             threads,
@@ -720,6 +723,45 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_read_instruction_components =
+                Instant::now().duration_since(start_time_read_instruction_components.unwrap());
+        }
+
+        let start_time_prepare_instruction_components = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
+        // Prepare variables
+        self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rdu_val_fhe_uint,
+            0,
+            rd_ops_bit_size,
+            keys,
+            scratch,
+        );
+        self.mu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.mu_val_fhe_uint,
+            0,
+            ram_ops_bit_size,
+            keys,
+            scratch,
+        );
+        self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.pcu_val_fhe_uint,
+            0,
+            4,
+            keys,
+            scratch,
+        );
         self.imm_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
@@ -729,9 +771,41 @@ impl<BE: Backend> Interpreter<BE> {
             keys,
             scratch,
         ); // TODO switch to 20 bits immediate & update circuits
+        self.rs1_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rs1_addr_fhe_uint,
+            0,
+            self.reg_bit_size,
+            keys,
+            scratch,
+        );
+        self.rs2_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rs2_addr_fhe_uint,
+            0,
+            self.reg_bit_size,
+            keys,
+            scratch,
+        );
+        self.rd_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.rd_addr_fhe_uint,
+            0,
+            self.reg_bit_size,
+            keys,
+            scratch,
+        );
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_read_instruction_components =
+            this_cycle_measurement.cycle_time_prepare_instruction_components =
+                Instant::now().duration_since(start_time_prepare_instruction_components.unwrap());
+        }
+
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_read_and_prepare_instruction_components =
                 Instant::now().duration_since(start_time.unwrap());
         }
 
@@ -849,7 +923,7 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn read_registers<M, DK, H, BRA, K, S>(
+    pub(crate) fn read_and_prepare_registers<M, DK, H, BRA, K, S>(
         &mut self,
         threads: usize,
         module: &M,
@@ -885,24 +959,11 @@ impl<BE: Backend> Interpreter<BE> {
             None
         };
 
-        self.rs1_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs1_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
-            keys,
-            scratch,
-        );
-        self.rs2_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rs2_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
-            keys,
-            scratch,
-        );
+        let start_time_read_registers = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
 
         self.registers.read_stateless(
             threads,
@@ -924,6 +985,17 @@ impl<BE: Backend> Interpreter<BE> {
             scratch,
         );
 
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_read_registers =
+                Instant::now().duration_since(start_time_read_registers.unwrap());
+        }
+
+        let start_time_prepare_registers = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
+
         self.rs1_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
             module,
@@ -944,7 +1016,12 @@ impl<BE: Backend> Interpreter<BE> {
         );
 
         if self.verbose_timings {
-            this_cycle_measurement.cycle_time_read_registers =
+            this_cycle_measurement.cycle_time_prepare_registers =
+                Instant::now().duration_since(start_time_prepare_registers.unwrap());
+        }        
+
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_read_and_prepare_registers =
                 Instant::now().duration_since(start_time.unwrap());
         }
 
@@ -1157,15 +1234,6 @@ impl<BE: Backend> Interpreter<BE> {
 
         let ops_bit_size: usize = (usize::BITS - (ops.len() - 1).leading_zeros()) as usize;
 
-        self.rdu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rdu_val_fhe_uint,
-            0,
-            ops_bit_size,
-            keys,
-            scratch,
-        );
         module.glwe_blind_selection(
             &mut self.rd_val_fhe_uint,
             ops_ref,
@@ -1186,16 +1254,6 @@ impl<BE: Backend> Interpreter<BE> {
         } else {
             None
         };
-
-        self.rd_addr_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.rd_addr_fhe_uint,
-            0,
-            self.reg_bit_size,
-            keys,
-            scratch,
-        );
 
         self.rd_val_fhe_uint_prepared.prepare_custom_multi_thread(
             threads,
@@ -1327,15 +1385,6 @@ impl<BE: Backend> Interpreter<BE> {
         }
         let ops_bit_size: usize =
             (usize::BITS - (RAM_UPDATE_OP_LIST.len() - 1).leading_zeros()) as usize;
-        self.mu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.mu_val_fhe_uint,
-            0,
-            ops_bit_size,
-            keys,
-            scratch,
-        );
         module.glwe_blind_selection(
             &mut self.ram_val_fhe_uint,
             res_tmp_ref,
@@ -1393,15 +1442,6 @@ impl<BE: Backend> Interpreter<BE> {
             let mut ram_have: Vec<u32> = vec![0u32; self.ram_size];
             self.ram.decrypt(module, &mut ram_have, sk, scratch);
             let ram_want: &Vec<u32> = &vm_debug.ram;
-            //for i in 0..self.ram_size {
-            //    println!(
-            //        "RAM[{:02}]: {:08x} - {:08x} : {}",
-            //        i,
-            //        ram_have[i],
-            //        ram_want[i],
-            //        ram_have[i] - ram_want[i]
-            //    );
-            //}
             assert_eq!(&ram_have, ram_want);
         }
     }
@@ -1435,25 +1475,6 @@ impl<BE: Backend> Interpreter<BE> {
             None
         };
 
-        let start_time_pcu_prepare = if self.verbose_timings {
-            Some(Instant::now())
-        } else {
-            None
-        };
-        self.pcu_val_fhe_uint_prepared.prepare_custom_multi_thread(
-            threads,
-            module,
-            &self.pcu_val_fhe_uint,
-            0,
-            4,
-            keys,
-            scratch,
-        );
-        if self.verbose_timings {
-            this_cycle_measurement.cycle_time_pcu_prepare =
-                Instant::now().duration_since(start_time_pcu_prepare.unwrap());
-        }
-
         let start_time_pc_update_bdd = if self.verbose_timings {
             Some(Instant::now())
         } else {
@@ -1474,6 +1495,25 @@ impl<BE: Backend> Interpreter<BE> {
         if self.verbose_timings {
             this_cycle_measurement.cycle_time_pc_update_bdd =
                 Instant::now().duration_since(start_time_pc_update_bdd.unwrap());
+        }
+
+        let start_time_pc_prepare = if self.verbose_timings {
+            Some(Instant::now())
+        } else {
+            None
+        };
+        self.pc_fhe_uint_prepared.prepare_custom_multi_thread(
+            threads,
+            module,
+            &self.pc_fhe_uint,
+            0,
+            self.rom_bits_size + 2, // PC is 4bytes aligned
+            keys,
+            scratch,
+        );
+        if self.verbose_timings {
+            this_cycle_measurement.cycle_time_pc_prepare =
+                Instant::now().duration_since(start_time_pc_prepare.unwrap());
         }
 
         if self.verbose_timings {
@@ -1503,8 +1543,12 @@ impl<BE: Backend> Interpreter<BE> {
             println!(
                 "
 Average Cycle Time: {:?}
-  1. Read instruction components: {:?}
-  2. Read registers: {:?}
+  1. Read and prepare instruction components: {:?}
+     - Read instruction components: {:?}
+     - Prepare instruction components: {:?}
+  2. Read and prepare registers: {:?}
+     - Read registers: {:?}
+     - Prepare registers: {:?}
   3. Read ram: {:?}
   4. Update registers: {:?}
      - Evaluate rd ops: {:?}
@@ -1512,12 +1556,16 @@ Average Cycle Time: {:?}
      - Write rd: {:?}
   5. Update ram: {:?}
   6. Update pc: {:?}
-     - PCU prepare: {:?}
      - PC update BDD: {:?}
+     - PC prepare: {:?}
 ",
                 self.measurements.average_cycle_time(),
+                self.measurements.average_cycle_time_read_and_prepare_instruction_components(),
                 self.measurements.average_cycle_time_read_instruction_components(),
+                self.measurements.average_cycle_time_prepare_instruction_components(),
+                self.measurements.average_cycle_time_read_and_prepare_registers(),
                 self.measurements.average_cycle_time_read_registers(),
+                self.measurements.average_cycle_time_prepare_registers(),
                 self.measurements.average_cycle_time_read_ram(),
                 self.measurements.average_cycle_time_update_registers(),
                 self.measurements.average_cycle_time_evaluate_rd_ops(),
@@ -1525,8 +1573,8 @@ Average Cycle Time: {:?}
                 self.measurements.average_cycle_time_write_rd(),
                 self.measurements.average_cycle_time_update_ram(),
                 self.measurements.average_cycle_time_update_pc(),
-                self.measurements.average_cycle_time_pcu_prepare(),
-                self.measurements.average_cycle_time_pc_update_bdd()
+                self.measurements.average_cycle_time_pc_update_bdd(),
+                self.measurements.average_cycle_time_pc_prepare(),
             );
         }        
     }
