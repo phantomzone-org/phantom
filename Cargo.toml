@@ -9,4 +9,8 @@ members = [
 [workspace.package]
 
 [workspace.dependencies]
-# Add any shared dependencies here that multiple crates might use
+poulpy-hal = "0.4.0"
+poulpy-core = "0.4.0"
+poulpy-cpu-ref = "0.1.0"
+poulpy-cpu-avx = "0.1.0"
+poulpy-schemes = "0.4.0"

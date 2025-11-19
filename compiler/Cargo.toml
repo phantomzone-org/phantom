@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 elf = "0.8.0"
-poulpy-hal = {path = "../../poulpy/poulpy-hal"}
-poulpy-core = {path = "../../poulpy/poulpy-core"}
-poulpy-cpu-avx = {path = "../../poulpy/poulpy-cpu-avx"}
-poulpy-cpu-ref = {path = "../../poulpy/poulpy-cpu-ref"}
-poulpy-schemes = {path = "../../poulpy/poulpy-schemes"}
+poulpy-hal = {workspace = true}
+poulpy-core = {workspace = true}
+poulpy-cpu-avx = {workspace = true}
+poulpy-cpu-ref = {workspace = true}
+poulpy-schemes = {workspace = true}
 fhevm = { path = "../fhevm"}
 itertools = "0.14.0"
 tqdm = "0.8.0"

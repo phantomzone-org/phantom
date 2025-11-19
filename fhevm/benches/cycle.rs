@@ -6,9 +6,9 @@ use fhevm::{
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
 #[cfg(target_arch = "x86_64")]
-use poulpy_backend::FFT64Avx as BackendImpl;
+use poulpy_cpu_avx::FFT64Avx as BackendImpl;
 #[cfg(not(target_arch = "x86_64"))]
-use poulpy_backend::FFT64Ref as BackendImpl;
+use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::{
     layouts::{
@@ -23,7 +23,7 @@ use poulpy_hal::{
     layouts::{Backend, Module, Scratch, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::tfhe::{
+use poulpy_schemes::bin_fhe::{
     bdd_arithmetic::{
         BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
         FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
