@@ -12,9 +12,34 @@ use poulpy_schemes::bin_fhe::{
     circuit_bootstrapping::CircuitBootstrappingKeyLayout,
 };
 
+/*
+654 -> 3 -> 218
+Average Cycle Time: 4.632201675s
+- Prepare instruction components: 1.041632572s
+- Prepare registers: 1.147898431s
+- PC prepare: 224.262389ms
+664 - 4 -> 166
+- Prepare instruction components: 960.442533ms
+- Prepare registers: 1.074004374s
+- PC prepare: 207.734246ms
+670 - 5 -> 135
+- Prepare instruction components: 933.208184ms
+- Prepare registers: 1.01560135s
+- PC prepare: 203.287622ms
+672 - 6 -> 112
+- Prepare instruction components: 911.384349ms
+- Prepare registers: 1.018545983s
+- PC prepare: 188.22003ms
+679 - 7 -> 97
+- Prepare instruction components: 901.502526ms
+- Read registers: 11.888516ms
+- Prepare registers: 987.220313ms
+- PC prepare: 186.559494ms
+*/
+
 const LOGN_GLWE: u32 = 10;
 const N_GLWE: u32 = 1 << LOGN_GLWE;
-const N_LWE: u32 = 574;
+const N_LWE: u32 = 679;
 const K_LWE: u32 = 16;
 const LWE_BLOCK_SIZE: u32 = 7;
 const BASE2K_FHE_UINT: u32 = 15;
