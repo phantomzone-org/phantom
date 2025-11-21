@@ -881,9 +881,9 @@ dependencies = [
 
 [[package]]
 name = "poulpy-core"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92939708ce0721e120e7ab9e317816a06b9d7bcb95e065b1452e0c78de95fad2"
+checksum = "6c40e1bf28f46b8660a4a6f205469789adfa456e0f6f5a254fd5aec8e50a0c12"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -891,7 +891,6 @@ dependencies = [
  "itertools 0.14.0",
  "once_cell",
  "paste",
- "poulpy-cpu-avx",
  "poulpy-cpu-ref",
  "poulpy-hal",
  "rug",
@@ -899,9 +898,9 @@ dependencies = [
 
 [[package]]
 name = "poulpy-cpu-avx"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6667a0638819c538aedd34eb72308e8e91584cf4ac0e71455e3451538a9d870"
+checksum = "c77065d4680df384dd080418ff9fda929d5cd236b2fd542558bf89f529b0def3"
 dependencies = [
  "byteorder",
  "criterion",
@@ -919,9 +918,9 @@ dependencies = [
 
 [[package]]
 name = "poulpy-cpu-ref"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b1b12ffd9b15d10c160c12c2bfb4e652183404a8a8165ff0b7aba7317f133fe"
+checksum = "0d90d80e8aed870f7a96696ea0574a28714b8d882452fa694ebf52ab1b9181ca"
 dependencies = [
  "byteorder",
  "criterion",
@@ -937,9 +936,9 @@ dependencies = [
 
 [[package]]
 name = "poulpy-hal"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ddd49193e501a7350db9582be6d0c43758b1f103ba81f40dcd0a6e2edacacd5"
+checksum = "08543b86485243d539a1c04b6067b1e25d163a1366a06b30827a83064a5563a9"
 dependencies = [
  "bytemuck",
  "byteorder",
@@ -957,9 +956,9 @@ dependencies = [
 
 [[package]]
 name = "poulpy-schemes"
-version = "0.4.0"
+version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "242712a12d396d2049c064cb27c39c28d15d56e47970715cd73e2a841f712714"
+checksum = "89060f4d9d44c8d39daa99f370c0cc1ccf9891648c16c440d0ab8418f6385930"
 dependencies = [
  "byteorder",
  "criterion",

@@ -1,5 +1,4 @@
 use compiler::{CompileOpts, Phantom};
-use rand::{rngs::StdRng, Rng, SeedableRng};
 use std::{ops::Div, ptr};
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
@@ -53,8 +52,7 @@ fn main() {
     let elf_bytes = compiler.build("uniswap");
     let pz = Phantom::from_elf(elf_bytes);
 
-    let mut rng = StdRng::from_seed([0; 32]);
-    let mut pool = Pool { t0: 100, t1: 500 };
+    let pool = Pool { t0: 100, t1: 500 };
     let trade = Trade {
         amount: 50,
         direction: true,

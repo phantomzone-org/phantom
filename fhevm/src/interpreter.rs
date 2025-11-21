@@ -1362,11 +1362,25 @@ impl<BE: Backend> Interpreter<BE> {
             //   println!("RAM[{:02}]: {:08x} - {:08x}", i, ram_have[i], ram_want[i]);
             //}
             println!("reg: {:?}", registers_have);
-            println!(
-                "reg_noise: {:#?}",
-                self.registers
-                    .noise(module, registers_want.as_slice(), sk, scratch)
-            );
+            // println!(
+            //     "reg_noise: {:#?}",
+            //     self.registers
+            //         .noise(module, registers_want.as_slice(), sk, scratch)
+            // );
+            let reg_noise_vec = self
+                .registers
+                .noise(module, registers_want.as_slice(), sk, scratch);
+            if !reg_noise_vec.is_empty() {
+                let min = reg_noise_vec.iter().cloned().fold(f64::INFINITY, f64::min);
+                let max = reg_noise_vec.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                println!(
+                    "reg_noise: [min: {:.2}, max: {:.2}]",
+                    min, max
+                );
+            } else {
+                println!("reg_noise: []");
+            }
+
             assert_eq!(registers_have, registers_want);
         }
     }
@@ -1498,10 +1512,21 @@ impl<BE: Backend> Interpreter<BE> {
             //        ram_have[i] - ram_want[i]
             //    );
             //}
-            println!(
-                "ram_noise: {:#?}",
-                self.ram.noise(module, ram_want.as_slice(), sk, scratch)
-            );
+            // println!(
+            //     "ram_noise: {:#?}",
+            //     self.ram.noise(module, ram_want.as_slice(), sk, scratch)
+            // );
+            let ram_noise_vec = self.ram.noise(module, ram_want.as_slice(), sk, scratch);
+            if !ram_noise_vec.is_empty() {
+                let min = ram_noise_vec.iter().cloned().fold(f64::INFINITY, f64::min);
+                let max = ram_noise_vec.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+                println!(
+                    "ram_noise: [{:.2}, {:.2}]",
+                    min, max
+                );
+            } else {
+                println!("ram_noise: []");
+            }
             assert_eq!(&ram_have, ram_want);
         }
     }

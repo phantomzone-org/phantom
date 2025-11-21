@@ -4,15 +4,15 @@ use poulpy_core::layouts::{
     GGSWInfos, GGSWPreparedFactory, GGSWLayout,
 };
 use poulpy_core::{LWEFromGLWE, ScratchTakeCore};
-use poulpy_hal::api::{ScratchAvailable, ScratchFromBytes};
-use poulpy_hal::layouts::{Backend, Data, DataRef, Module};
+use poulpy_hal::api::{ScratchAvailable};
+use poulpy_hal::layouts::{Backend, DataRef, Module};
 
 use poulpy_hal::{
     layouts::{DataMut, Scratch},
 };
 
 use poulpy_schemes::bin_fhe::bdd_arithmetic::{
-    BDDKey, BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared, GetGGSWBitMut, ToBits
+    BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepare, FheUintPrepared, GetGGSWBitMut,
 };
 use poulpy_schemes::bin_fhe::bdd_arithmetic::UnsignedInteger;
 use poulpy_schemes::bin_fhe::blind_rotation::BlindRotationAlgo;
@@ -79,7 +79,9 @@ where
         let ggsw_infos: &GGSWLayout = &combined_res[0].ggsw_layout();
 
         let bits_clone = bits.clone();
-        let bit_counts_clone = bit_counts.clone();
+        let bit_counts_running_sums = std::iter::once(0)
+            .chain(bit_counts.iter().scan(0, |sum, &x| { *sum += x; Some(*sum) }))
+            .collect::<Vec<_>>();
 
         thread::scope(|scope| {
             for (thread_index, (scratch_thread, res_bits_chunk)) in scratches
@@ -90,21 +92,17 @@ where
                 let start: usize = thread_index * chunk_size;
 
                 let bits = bits_clone.clone();
-                let bit_counts = bit_counts_clone.clone();
+                let bit_counts_running_sums = bit_counts_running_sums.clone();
 
                 scope.spawn(move || {
                     let (mut tmp_ggsw, scratch_1) = scratch_thread.take_ggsw(ggsw_infos);
                     let (mut tmp_lwe, scratch_2) = scratch_1.take_lwe(bits[0]);
                     for (local_bit, dst) in res_bits_chunk.iter_mut().enumerate() {
-                        let mut start_cnt = 1;
-                        let mut sum_til_now_prev = 0;
-                        let mut sum_til_now = bit_counts[0];
-                        while sum_til_now <= start + local_bit {
-                            sum_til_now_prev += bit_counts[start_cnt-1];
-                            sum_til_now += bit_counts[start_cnt];
-                            start_cnt += 1;
+                        let mut cnt = 0;
+                        while bit_counts_running_sums[cnt+1] <= start + local_bit {
+                            cnt += 1;
                         }
-                        bits[start_cnt-1].get_bit_lwe(self, start + local_bit - sum_til_now_prev, &mut tmp_lwe, ks_glwe, ks_lwe, scratch_2);
+                        bits[cnt].get_bit_lwe(self, start + local_bit - bit_counts_running_sums[cnt], &mut tmp_lwe, ks_glwe, ks_lwe, scratch_2);
 
                         cbt.execute_to_constant(self, &mut tmp_ggsw, &tmp_lwe, 1, 1, scratch_2);
                         dst.prepare(self, &tmp_ggsw, scratch_2);
