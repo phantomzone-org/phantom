@@ -433,7 +433,7 @@ where
         let correct_mu: u32 = mu as u32;
         let correct_pcu: u32 = pcu as u32;
 
-        interpreter.pc_fhe_uint.encrypt_sk(
+        interpreter.pc_fhe_uint_prepared.encrypt_sk(
             module,
             (idx << 2) as u32,
             &sk_glwe_prepared,
