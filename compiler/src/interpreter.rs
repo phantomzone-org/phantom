@@ -4,7 +4,6 @@ use elf::{
 };
 use tqdm::tqdm;
 
-// use fhevm::parameters::Parameters;
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
     keys::{VMKeys, VMKeysPrepared},
@@ -12,9 +11,9 @@ use fhevm::{
     Interpreter,
 };
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
 use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
 use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};

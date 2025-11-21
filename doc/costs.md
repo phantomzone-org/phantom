@@ -11,26 +11,30 @@
 
 
 <!--
-Average Cycle Time: 971.058934ms
-  1. Read instruction components: 138.901955ms
-  2. Read registers: 237.512433ms
-  3. Read ram: 71.142182ms
-  4. Update registers: 317.313129ms
-     - Evaluate rd ops: 135.431726ms
-     - Blind selection: 57.133966ms
-     - Write rd: 124.746233ms
-  5. Update ram: 131.300826ms
-  6. Update pc: 74.838472ms
-     - PCU prepare: 55.132258ms
-     - PC update BDD: 19.705409ms
+Average Cycle Time: 763 ms
+  1. Read and prepare instruction components: 165 ms
+     - Read instruction components: 28.36042ms
+     - Prepare instruction components: 137 ms
+  2. Read and prepare registers: 144 ms
+     - Read registers: 7.86 ms
+     - Prepare registers: 136 ms
+  3. Read ram: 79 ms
+  4. Update registers: 210 ms
+     - Evaluate rd ops: 130 ms
+     - Blind selection: 1.42 ms
+     - Write rd: 79 ms
+  5. Update ram: 81 ms
+  6. Update pc: 81 ms
+     - PC update BDD: 18 ms
+     - PC prepare: 63 ms
 -->
 
-Below is the dependency of one cycle in Phantom.
+Below is the dependency graph of one cycle in Phantom.
 It shows how each intermediate value in Phantom is computed and which other values it depends on.
 A single cycle starts at top and ends at the bottom.
 Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
 
-The runtimes are from running Phantom on a AWS m6a.8xlarge, parallelized with 32 threads.
+The runtimes are from running Phantom on a AWS r6i.metal, with support for AVX2 and FMA instructions, parallelized across 32 cores.
 Runtimes are subject to improvement and may vary, depending on the hardware.
 
 
@@ -47,7 +51,7 @@ graph TD
 
     subgraph read_inst [" "]
         style read_inst fill:#990000,stroke:#FFFFFF
-        READ_INST_LABEL["Read<br>Instruction<br>Components<br>(138 ms)"]
+        READ_INST_LABEL["Read<br>and Prepare<br>Instruction<br>Components<br>(165 ms)"]
         IMM["IMM"]
         RS1_INDEX["RS1_INDEX"]
         RS2_INDEX["RS2_INDEX"]
@@ -56,37 +60,37 @@ graph TD
         RDU["RDU"]
         MU["MU"]
     end
+
+    subgraph read_reg [" "]
+        READ_REG_LABEL["Read<br>and Prepare<br>Registers<br>(144 ms)"]
+        RS1["RS1"]
+        RS2["RS2"]
+    end    
     
     subgraph read_ram [" "]
         style read_ram fill:#660066,stroke:#FFFFFF
-        READ_RAM_LABEL["Read RAM<br>(71 ms)"]
+        READ_RAM_LABEL["Read RAM<br>(79 ms)"]
         RAM_ADDRESS["RAM_ADDRESS"]
         RAM_VAL["RAM_VAL"]
     end
 
-    subgraph read_reg [" "]
-        READ_REG_LABEL["Read Registers<br>(237 ms)"]
-        RS1["RS1"]
-        RS2["RS2"]
-    end
-
     subgraph update_reg [" "]
         style update_reg fill:#000099,stroke:#FFFFFF
-        UPDATE_REG_LABEL["Update Registers<br>(317 ms)"]
+        UPDATE_REG_LABEL["Update<br>Registers<br>(210 ms)"]
         POSSIBLE_RD_VALS["POSSIBLE_RD_VALS"]
         RD["RD"]
     end
 
     subgraph update_ram [" "]
         style update_ram fill:#CC00CC,stroke:#FFFFFF
-        UPDATE_RAM_LABEL["Update RAM<br>(131 ms)"]
+        UPDATE_RAM_LABEL["Update RAM<br>(81 ms)"]
         POSSIBLE_RAM_VALS["POSSIBLE_RAM_VALS"]
         NEW_RAM_VAL["NEW_RAM_VAL"]
     end
 
     subgraph update_pc [" "]
         style update_pc fill:#CCCC00,stroke:#FFFFFF
-        UPDATE_PC_LABEL["Update PC<br>(74 ms)"]
+        UPDATE_PC_LABEL["Update PC<br>(81 ms)"]
         NEW_PC_VAL["NEW_PC_VAL"]
     end
 

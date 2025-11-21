@@ -36,28 +36,33 @@ The dependency graph of the operations performed in these components is describe
 
 ## Benchmark
 
-We benchmark Phantom on a AWS r6i.metal, parallelized across 32 cores, and measure the runtime of a single cycle, and all 6 components.
+We benchmark Phantom on a AWS r6i.metal, with support for AVX2 and FMA instructions, parallelized across 32 cores, and measure the runtime of a single cycle and all 6 components.
 
-Average Cycle Time: 655 ms
-  1. Read and prepare instruction components: 128 ms
-     - Read instruction components: 28 ms
-     - Prepare instruction components: 100 ms
-  2. Read and prepare registers: 106 ms
-     - Read registers: 7 ms
-     - Prepare registers: 98 ms
-  3. Read ram: 71 ms
-  4. Update registers: 203 ms
-     - Evaluate rd ops: 133 ms
-     - Blind selection: 1 ms
-     - Write rd: 69 ms
-  5. Update ram: 72 ms
-  6. Update pc: 73 ms
+Average Cycle Time: 763 ms
+  1. Read and prepare instruction components: 165 ms
+     - Read instruction components: 28.36042ms
+     - Prepare instruction components: 137 ms
+  2. Read and prepare registers: 144 ms
+     - Read registers: 7.86 ms
+     - Prepare registers: 136 ms
+  3. Read ram: 79 ms
+  4. Update registers: 210 ms
+     - Evaluate rd ops: 130 ms
+     - Blind selection: 1.42 ms
+     - Write rd: 79 ms
+  5. Update ram: 81 ms
+  6. Update pc: 81 ms
      - PC update BDD: 18 ms
-     - PC prepare: 54 ms
+     - PC prepare: 63 ms
+
 
 To reproduce benchmarks for a single cycle, run:
 ```
+# Without AVX2 and FMA support
 cargo bench --package fhevm --bench cycle
+
+# With AVX2 and FMA support
+RUSTFLAGS="-C target-feature=+avx2,+fma" cargo bench --package fhevm --bench cycle
 ```
 
 ## Contribute

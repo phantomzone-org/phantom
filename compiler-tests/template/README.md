@@ -106,9 +106,16 @@ One last thing remaining is the `loop {}` declaration at the end of the program.
 We use `main.rs` in this directory to compile the program into RISC-V instructions, instantiate Phantom, and run the program.
 To run the program, provide sample inputs for your program in `main.rs` and also choose how many cycles you want Phantom to execute.
 Note that if Phantom does not execute enough cycles, it will not produce the expected output.
-Then use the following command in this directory to run Phantom.
+
+Then use the following command in this directory to run the encrypted program.
 ```bash
+# Without AVX2 and FMA support
 cargo run --release
+
+# With AVX2 and FMA support
+RUSTFLAGS="-C target-feature=+avx2,+fma" cargo run --release
+
+
 ```
 
 For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output.

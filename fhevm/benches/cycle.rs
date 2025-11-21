@@ -6,9 +6,9 @@ use fhevm::{
 };
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
-#[cfg(target_arch = "x86_64")]
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
 use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(target_arch = "x86_64"))]
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
 use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::{
@@ -34,7 +34,7 @@ use poulpy_schemes::bin_fhe::{
 use std::hint::black_box;
 
 fn benc_cycle_with_backend(c: &mut Criterion) {
-    if cfg!(target_arch = "x86_64") {
+    if cfg!(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")) {
         println!("Running benchmark with FFT64Avx backend");
         benc_cycle::<CGGI, BackendImpl>(c, "fft64_avx");
     } else {

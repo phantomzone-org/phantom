@@ -9,8 +9,8 @@ members = [
 [workspace.package]
 
 [workspace.dependencies]
-poulpy-hal = "0.4.1"
-poulpy-core = "0.4.1"
-poulpy-cpu-ref = "0.1.1"
-poulpy-cpu-avx = "0.1.1"
-poulpy-schemes = "0.4.1"
+poulpy-hal = {version = "0.4.1"}
+poulpy-core = {version = "0.4.1", features = ["enable-avx"]}
+poulpy-cpu-ref = {version = "0.1.1"}
+poulpy-cpu-avx = {version = "0.1.1", features = ["enable-avx"]}
+poulpy-schemes = {version = "0.4.1", features = ["enable-avx"]}

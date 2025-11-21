@@ -1,13 +1,16 @@
 # Template Phantom Program
 
-This example contains a minimal template for a Phantom program. It computes a polynomial, the coefficients of which are provided in the encrytped program, over an encrypted input.
+This example progrma checks if a given string matches a given hidden string.
 For more advanced examples, check out the [otc](../otc/README.md) example.
 
 ## Project structure
+For details about the structure of the project, please refer to the [template](../template/README.md) example.
 
-The main program is implemented in the `main.rs` file of the guest crate. The guest crate is part of the workspace of its parent crate (`template` in this case). The parent crate is then responsible for compiling the guest crate and, subsequently, encrypting the compiled program.
+<!-- ## Project structure
 
-Every Phantom program should follow the same project layout.
+The main program is implemented in the `main.rs` file of the guest crate. The guest crate is part of the workspace of its parent crate (`template` in this case). The parent crate is then responsible for compiling the guest crate and, subsequently, encrypting the compiled program. -->
+
+<!-- Every Phantom program should follow the same project layout.
 
 ## Writing programs
 
@@ -111,4 +114,4 @@ Then use the following command in this directory to run Phantom.
 cargo run --release
 ```
 
-For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output.
+For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output. -->
