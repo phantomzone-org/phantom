@@ -4,9 +4,15 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-elf = "0.7.4"
+elf = "0.8.0"
+poulpy-hal = {workspace = true}
+poulpy-core = {workspace = true}
+poulpy-cpu-avx = {workspace = true}
+poulpy-cpu-ref = {workspace = true}
+poulpy-schemes = {workspace = true}
+fhevm = { path = "../fhevm"}
 itertools = "0.14.0"
-fhevm = {path = "../fhevm"}
+tqdm = "0.8.0"
 
 [features]
 verbose=[]

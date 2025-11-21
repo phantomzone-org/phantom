@@ -1,0 +1,15 @@
+[package]
+name = "gen-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+compiler = {path = "./../../compiler", features = ["verbose"]}
+rand = "0.9.0"
+serde = "1.0.228"
+quote = "1.0"
+
+[workspace]
+members = [
+    "src/guest-test1"
+]

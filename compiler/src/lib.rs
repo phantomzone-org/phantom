@@ -21,9 +21,9 @@ impl CompileOpts {
         }
     }
 
-    pub fn build(&self) -> Vec<u8> {
-        // set compilation target to riscv32im-
-        let target = "riscv32im-unknown-none-elf";
+    pub fn build(&self, destination_name: &str) -> Vec<u8> {
+        // set compilation target to riscv32i
+        let target = "riscv32i-unknown-none-elf";
         let profile = "release";
 
         // Direct path to linker file for the rust compiler
@@ -42,7 +42,7 @@ impl CompileOpts {
         let envs = vec![("CARGO_ENCODED_RUSTFLAGS", rust_flags.join("\x1f"))];
 
         // Destination for outputs
-        let destination = "/tmp/vm-experiments";
+        let destination = format!("/tmp/vm-experiments/{}", destination_name);
 
         let cargo_bin = std::env::var("CARGO").unwrap();
         let mut cmd = Command::new(cargo_bin);
@@ -58,7 +58,7 @@ impl CompileOpts {
             "--bin",
             self.program.as_str(),
             "--target-dir",
-            destination,
+            destination.as_str(),
             // "--verbose",
         ]);
         let out = cmd.output().unwrap();
@@ -72,37 +72,12 @@ impl CompileOpts {
         // Read the ELF file from destination: /tmp/vm-experiments
         let elf_path = format!(
             "{}/{}/{}/{}",
-            destination,
+            destination.as_str(),
             target,
             profile,
             self.program.as_str()
         );
         let elf_data = std::fs::read(std::path::Path::new(&elf_path)).unwrap();
         elf_data
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use interpreter::Phantom;
-
-    use super::*;
-
-    #[test]
-    fn test_compiler() {
-        let compiler = CompileOpts::new("guest");
-        let elf_data = compiler.build();
-
-        // VM
-        let mut vm = Phantom::init(elf_data).test_vm();
-
-        // vm.read_input_tape(&[123, 0, 0, 0, 89, 1, 0, 0]);
-
-        while vm.is_exec() {
-            vm.run();
-        }
-
-        let output = vm.output_tape();
-        println!("Output={:?}", output);
     }
 }

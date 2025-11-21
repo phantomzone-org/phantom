@@ -1,15 +1,22 @@
-pub mod address;
-pub mod circuit_bootstrapping;
-pub mod decompose;
+pub(crate) mod codegen;
+pub(crate) mod debug;
 pub mod instructions;
 pub mod interpreter;
-pub mod memory;
-pub mod packing;
+pub mod keys;
+pub(crate) mod measurements;
+pub(crate) mod memory;
 pub mod parameters;
-pub mod test_vector;
-pub mod trace;
+pub(crate) mod pc_update;
+pub(crate) mod ram_offset;
+pub(crate) mod ram_update;
+pub(crate) mod rd_update;
+pub mod prepare;
 
-#[inline(always)]
-pub fn reverse_bits_msb(x: usize, n: u32) -> usize {
-    x.reverse_bits() >> (usize::BITS - n)
-}
+// Re-export the main functionality
+pub(crate) use instructions::*;
+pub use interpreter::*;
+pub(crate) use measurements::*;
+pub(crate) use pc_update::*;
+
+#[cfg(test)]
+mod tests;

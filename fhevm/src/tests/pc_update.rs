@@ -1,0 +1,261 @@
+use poulpy_core::{
+    layouts::{
+        GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
+        GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret,
+    },
+    GGLWEToGGSWKeyEncryptSk, GGSWAutomorphism, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt,
+    GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
+};
+use poulpy_cpu_ref::FFT64Ref;
+use poulpy_hal::{
+    api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
+    layouts::{Backend, Module, Scratch, ScratchOwned},
+    source::Source,
+};
+use poulpy_schemes::bin_fhe::{
+    bdd_arithmetic::{
+        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPrepared,
+        FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation,
+    },
+    blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
+};
+use rand_core::RngCore;
+
+use crate::{
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::CryptographicParameters,
+    update_pc, PCU,
+};
+
+#[test]
+fn test_pc_update_fft64_ref() {
+    test_pc_update::<CGGI, FFT64Ref>()
+}
+
+fn test_pc_update<BRA: BlindRotationAlgo, BE: Backend>()
+where
+    Module<BE>: ModuleNew<BE>
+        + GLWESecretPreparedFactory<BE>
+        + FheUintPreparedFactory<u32, BE>
+        + ModuleN
+        + GLWEEncryptSk<BE>
+        + FheUintPreparedEncryptSk<u32, BE>
+        + GLWEAutomorphismKeyEncryptSk<BE>
+        + GGLWEToGGSWKeyEncryptSk<BE>
+        + GLWETrace<BE>
+        + BDDKeyEncryptSk<BRA, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEExternalProduct<BE>
+        + GLWEPackerOps<BE>
+        + GLWEPacking<BE>
+        + FheUintPrepare<BRA, BE>
+        + GGSWBlindRotation<u32, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEDecrypt<BE>
+        + GLWEAutomorphismKeyPreparedFactory<BE>
+        + GGLWEToGGSWKeyPreparedFactory<BE>
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GGSWAutomorphism<BE>,
+    ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
+    Scratch<BE>: ScratchTakeCore<BE>,
+    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
+{
+    let threads = 2;
+
+    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
+    let module: &Module<BE> = params.module();
+
+    let mut source_xs: Source = Source::new([0u8; 32]);
+    let mut source_xa: Source = Source::new([0u8; 32]);
+    let mut source_xe: Source = Source::new([0u8; 32]);
+
+    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
+
+    // Generates a new secret-key along with the public evaluation keys.
+    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
+    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
+
+    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
+        GLWESecretPrepared::alloc(module, sk_glwe.rank());
+    sk_glwe_prepared.prepare(module, &sk_glwe);
+
+    let fhe_uint_prepared_infos: &poulpy_core::layouts::GGSWLayout =
+        &params.fhe_uint_prepared_infos();
+    let fhe_uint_infos: &poulpy_core::layouts::GLWELayout = &params.fhe_uint_infos();
+
+    let mut rs1_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut rs2_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut imm_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut pc_prep: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut pc_id: FheUintPrepared<Vec<u8>, u32, BE> =
+        FheUintPrepared::alloc_from_infos(module, fhe_uint_prepared_infos);
+    let mut pc: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(fhe_uint_infos);
+
+    let keys: VMKeys<Vec<u8>, BRA> =
+        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+    let mut keys_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
+    keys_prepared.prepare(module, &keys, scratch.borrow());
+
+    [
+        PCU::BEQ
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs2_equal_rs1(),
+        PCU::BEQ
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2(),
+        PCU::BNE
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2(),
+        PCU::BNE
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs2_equal_rs1(),
+        PCU::BLTU
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2(),
+        PCU::BLTU
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_gte_rs2(),
+        PCU::BGEU
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_gte_rs2(),
+        PCU::BGEU
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2(),
+        PCU::BLT
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2_signed(),
+        PCU::BLT
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_gte_rs2_signed(),
+        PCU::BGE
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_gte_rs2_signed(),
+        PCU::BGE
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32())
+            .set_rs1_lt_rs2_signed(),
+        PCU::JAL
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32()),
+        PCU::JALR
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32()),
+        PCU::NONE
+            .u_pc(source_xa.next_u32())
+            .u_imm(source_xa.next_u32())
+            .u_rs1(source_xa.next_u32())
+            .u_rs2(source_xa.next_u32()),
+    ]
+    .iter_mut()
+    .for_each(|pcu| {
+        rs1_prep.encrypt_sk(
+            module,
+            pcu.rs1,
+            &sk_glwe_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        rs2_prep.encrypt_sk(
+            module,
+            pcu.rs2,
+            &sk_glwe_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        imm_prep.encrypt_sk(
+            module,
+            pcu.imm,
+            &sk_glwe_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        pc_prep.encrypt_sk(
+            module,
+            pcu.pc,
+            &sk_glwe_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        pc_id.encrypt_sk(
+            module,
+            pcu.op_type as u32,
+            &sk_glwe_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+
+        update_pc(
+            threads,
+            module,
+            &mut pc,
+            &rs1_prep,
+            &rs2_prep,
+            &pc_prep,
+            &imm_prep,
+            &pc_id,
+            &keys_prepared,
+            scratch.borrow(),
+        );
+
+        println!(
+            "{} {}",
+            pcu.expected_update(),
+            pc.decrypt(module, &sk_glwe_prepared, scratch.borrow())
+        );
+
+        assert_eq!(
+            pcu.expected_update(),
+            pc.decrypt(module, &sk_glwe_prepared, scratch.borrow())
+        );
+    });
+}

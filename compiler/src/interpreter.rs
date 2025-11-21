@@ -2,17 +2,34 @@ use elf::{
     abi::{PF_R, PF_W, PF_X, PT_LOAD},
     segment::ProgramHeader,
 };
+use tqdm::tqdm;
+
 use fhevm::{
     instructions::{Instruction, InstructionsParser},
-    interpreter::Interpreter,
-    parameters::Parameters,
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::CryptographicParameters,
+    Interpreter,
 };
-use itertools::Itertools;
+
+#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+use poulpy_cpu_avx::FFT64Avx as BackendImpl;
+#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+use poulpy_cpu_ref::FFT64Ref as BackendImpl;
+
+use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
+
+use poulpy_hal::{
+    api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
+    layouts::ScratchOwned,
+    source::Source,
+};
+use poulpy_schemes::bin_fhe::blind_rotation::CGGI;
 use testvm::TestVM;
 
 mod testvm;
 
-const RAM_SIZE: usize = 1 << 14;
+// RAM size default to 4KB
+const RAM_SIZE: usize = 4 * 1024;
 
 mod macros {
     macro_rules! verbose_println {
@@ -25,7 +42,7 @@ mod macros {
     pub(crate) use verbose_println;
 }
 
-struct BootMemory {
+pub struct BootMemory {
     data: Vec<u8>,
     offset: usize,
     size: usize,
@@ -35,18 +52,110 @@ impl BootMemory {
     fn new(offset: usize, size: usize, data: Vec<u8>) -> Self {
         Self { data, offset, size }
     }
+
+    pub fn data(&self) -> &Vec<u8> {
+        &self.data
+    }
+
+    pub fn offset(&self) -> &usize {
+        &self.offset
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
 }
 
 #[derive(Clone)]
-struct InputInfo {
+pub struct InputInfo {
     start_addr: usize,
     size: usize,
 }
 
+impl InputInfo {
+    pub fn start_addr(&self) -> &usize {
+        &self.start_addr
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
+}
+
 #[derive(Clone)]
-struct OutputInfo {
+pub struct OutputInfo {
     start_addr: usize,
     size: usize,
+}
+
+impl OutputInfo {
+    pub fn start_addr(&self) -> &usize {
+        &self.start_addr
+    }
+
+    pub fn size(&self) -> &usize {
+        &self.size
+    }
+}
+
+pub struct EncryptedVM {
+    params: CryptographicParameters<BackendImpl>,
+    sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl>,
+    key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl>,
+    interpreter: Interpreter<BackendImpl>,
+    output_info: OutputInfo,
+    ram_offset: usize,
+    max_cycles: usize,
+    phantom_debug: bool,
+}
+
+impl EncryptedVM {
+    pub fn execute(&mut self) {
+        let mut scratch: ScratchOwned<BackendImpl> =
+            ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
+
+        for _current_cycle in tqdm(0..self.max_cycles) {
+            if self.phantom_debug {
+                self.interpreter.cycle_debug(
+                    self.params.module(),
+                    &self.key_prepared,
+                    &self.sk_prepared,
+                    scratch.borrow(),
+                );
+            } else {
+                self.interpreter
+                    .cycle(self.params.module(), &self.key_prepared, scratch.borrow());
+            }
+        }
+    }
+
+    pub fn output_tape(&mut self) -> Vec<u8> {
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
+
+        let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE >> 2];
+        // let mem_bytes: Vec<u8> =
+        self.interpreter.ram_decrypt(
+            self.params.module(),
+            &mut data_decrypted,
+            &self.sk_prepared,
+            scratch.borrow(),
+        );
+        let mut mem_bytes = Vec::with_capacity(data_decrypted.len() * 4);
+        for word in &data_decrypted {
+            mem_bytes.push((*word & 0xFF) as u8);
+            mem_bytes.push(((*word >> 8) & 0xFF) as u8);
+            mem_bytes.push(((*word >> 16) & 0xFF) as u8);
+            mem_bytes.push(((*word >> 24) & 0xFF) as u8);
+        }
+        // assert!(mem_bytes.len() == RAM_SIZE);
+
+        let mut output = Vec::with_capacity(self.output_info.size);
+        for i in 0..self.output_info.size {
+            output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
+        }
+        output
+        // vec![]
+    }
 }
 
 /// Phantom VM: Encrypted Risc-v
@@ -55,42 +164,11 @@ pub struct Phantom {
     boot_ram: BootMemory,
     output_info: OutputInfo,
     input_info: InputInfo,
-    _elf_bytes: Vec<u8>,
-}
-
-pub struct EncryptedVM {
-    params: Parameters,
-    interpreter: Interpreter,
-    output_info: OutputInfo,
-    ram_offset: usize,
-    max_cycles: usize,
-}
-
-impl EncryptedVM {
-    pub fn execute(&mut self) {
-        let mut curr_cycles = 0;
-        while curr_cycles < self.max_cycles {
-            // let time = std::time::Instant::now();
-            self.interpreter.cycle(&self.params);
-            // println!("Time: {:?}", time.elapsed());
-            curr_cycles += 1;
-        }
-    }
-
-    pub fn output_tape(&self) -> Vec<u8> {
-        let mem_bytes: Vec<u8> = (&self.interpreter.ram).into();
-        assert!(mem_bytes.len() == RAM_SIZE);
-
-        let mut output = Vec::with_capacity(self.output_info.size);
-        for i in 0..self.output_info.size {
-            output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
-        }
-        output
-    }
+    _elf_bytes: Option<Vec<u8>>,
 }
 
 impl Phantom {
-    pub fn init(elf_bytes: Vec<u8>) -> Self {
+    pub fn from_elf(elf_bytes: Vec<u8>) -> Self {
         let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(&elf_bytes).unwrap();
 
         let phdrs: Vec<ProgramHeader> = elf
@@ -119,13 +197,12 @@ impl Phantom {
             elf_bytes[txthdr.p_offset as usize..(txthdr.p_offset + txthdr.p_memsz) as usize]
                 .to_vec(),
         );
-
-        macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
+        // macros::verbose_println!("ROM SIZE: {} bytes", txthdr.p_memsz);
 
         // load all +r/+rw headers
         let hdrs: Vec<&ProgramHeader> = phdrs
             .iter()
-            .filter(|p| (p.p_flags == PF_R || p.p_flags == PF_R + PF_W))
+            .filter(|p| p.p_flags == PF_R || p.p_flags == PF_R + PF_W)
             .collect();
         let mut ram_offset = 0;
         let mut boot_ram_data = vec![0u8; RAM_SIZE];
@@ -193,11 +270,31 @@ impl Phantom {
             boot_ram,
             output_info,
             input_info,
-            _elf_bytes: elf_bytes,
+            _elf_bytes: Some(elf_bytes),
         }
     }
 
-    pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
+    pub fn boot_rom(&self) -> &BootMemory {
+        &self.boot_rom
+    }
+
+    pub fn boot_ram(&self) -> &BootMemory {
+        &self.boot_ram
+    }
+
+    pub fn input_info(&self) -> &InputInfo {
+        &self.input_info
+    }
+
+    pub fn output_info(&self) -> &OutputInfo {
+        &self.output_info
+    }
+
+    pub fn encrypted_vm(
+        &self,
+        input_tape: &[u8],
+        max_cycles: usize,
+    ) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
@@ -214,10 +311,9 @@ impl Phantom {
             })
             .for_each(|i| parser.add(i));
 
-        // setup RAM
-        let ram_offset = self.boot_ram.offset;
-        assert!(self.boot_ram.size % 4 == 0);
-        let mut ram_with_input = self.boot_ram.data.clone();
+        // // setup RAM
+        let ram_offset: usize = self.boot_ram.offset;
+        let mut ram_with_input: Vec<u8> = self.boot_ram.data.clone();
         // read input tape
         assert!(input_tape.len() == self.input_info.size);
         ram_with_input[(self.input_info.start_addr - ram_offset)
@@ -233,36 +329,88 @@ impl Phantom {
                 }
                 date_u32
             })
-            .collect_vec();
+            .collect::<Vec<u32>>();
 
-        // Initialize interpreter
-        let params = Parameters::new(parser.instructions.len() as u32, ram_data_u32.len() as u32);
-        let mut interpreter = Interpreter::new(&params);
-        interpreter.init_pc(&params);
-        interpreter.init_instructions(parser);
-        interpreter.init_registers(&vec![0u32; 32]);
-        interpreter.init_ram(&ram_data_u32);
-        interpreter.init_ram_offset(self.boot_ram.offset as u32);
+        let verbose_timings = std::env::var("PHANTOM_VERBOSE_TIMINGS")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        let threads = std::env::var("PHANTOM_THREADS")
+            .map(|val| val.parse::<usize>().unwrap_or(1))
+            .unwrap_or(1);            
+        let phantom_debug = std::env::var("PHANTOM_DEBUG")
+            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
 
-        // interpreter.cycle(&params);
+        // Initializing cryptographic parameters
+        let params = CryptographicParameters::<BackendImpl>::new();
+        let mut source_xs: Source = Source::new([0u8; 32]);
+        let mut source_xa: Source = Source::new([0u8; 32]);
+        let mut source_xe: Source = Source::new([0u8; 32]);
+        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
 
-        // println!("Instructions: {:?}", _instructions);
+        // Generates a new secret-key along with the public evaluation keys.
+        let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
+        sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
+
+        let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
+        sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
+
+        let mut interpreter: Interpreter<BackendImpl> = if phantom_debug {
+            Interpreter::new_with_debug(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
+        } else {
+            Interpreter::new(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
+        };
+
+        let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
+            GLWESecretPrepared::alloc(params.module(), params.rank());
+        sk_prepared.prepare(params.module(), &sk_glwe);
+
+        interpreter.instructions_encrypt_sk(
+            params.module(),
+            &parser,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+        let key: VMKeys<Vec<u8>, CGGI> =
+            VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+
+        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> =
+            VMKeysPrepared::alloc(&params);
+        key_prepared.prepare(params.module(), &key, scratch.borrow());
+
+        interpreter.ram_encrypt_sk(
+            params.module(),
+            &ram_data_u32,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            scratch.borrow(),
+        );
+
+        interpreter.set_verbose_timings(verbose_timings);
+        interpreter.set_threads(threads);
 
         EncryptedVM {
-            params: params,
+            params,
+            sk_prepared,
+            key_prepared,
             interpreter,
             output_info: self.output_info.clone(),
             ram_offset: self.boot_ram.offset,
             max_cycles,
+            phantom_debug,
         }
     }
 
-    pub fn test_vm(&self) -> TestVM {
+    pub fn test_vm(&self, max_cycles: usize) -> TestVM {
         TestVM::init(
             &self.boot_rom,
             &self.boot_ram,
             &self.input_info,
             &self.output_info,
+            max_cycles,
         )
     }
 }

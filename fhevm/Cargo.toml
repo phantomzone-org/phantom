@@ -5,9 +5,23 @@ edition = "2021"
 
 [dependencies]
 itertools = "0.14.0"
-base2k = { path = "../../poulpy/base2k"}
-sampling = { path = "../../poulpy/sampling"}
-rand_core = "0.6.4"
+poulpy-hal = {workspace = true}
+poulpy-core = {workspace = true}
+poulpy-cpu-avx = {workspace = true}
+poulpy-cpu-ref = {workspace = true}
+poulpy-schemes = {workspace = true}
+rand_core = "0.9.3"
+strum = "0.27.2"
+strum_macros = "0.27.2"
+paste = "1.0.15"
+
+[dev-dependencies]
+criterion = "0.7.0"
+plotters = { version = "0.3.6", features = ["svg_backend"] }
 
 [profile.release]
 debug = true
+
+[[bench]]
+name = "cycle"
+harness = false

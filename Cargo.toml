@@ -3,12 +3,14 @@ resolver = "2"
 members = [
     "fhevm",
     "compiler",
-    "runtime",
-    "macros"
-    ]
+]
 
 # Workspace-wide dependencies and settings can go here
 [workspace.package]
 
 [workspace.dependencies]
-# Add any shared dependencies here that multiple crates might use
+poulpy-hal = {version = "0.4.1"}
+poulpy-core = {version = "0.4.1", features = ["enable-avx"]}
+poulpy-cpu-ref = {version = "0.1.1"}
+poulpy-cpu-avx = {version = "0.1.1", features = ["enable-avx"]}
+poulpy-schemes = {version = "0.4.1", features = ["enable-avx"]}

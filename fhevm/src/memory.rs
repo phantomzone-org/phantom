@@ -1,439 +1,810 @@
-use crate::address::{Address, Coordinate};
-use crate::packing::StreamRepacker;
-use crate::reverse_bits_msb;
-use crate::trace::{trace, trace_inplace_inv, trace_inv_tmp_bytes};
-use base2k::{Encoding, Infos, Module, VecZnx, VecZnxDft, VecZnxDftOps, VecZnxOps, VmpPMatOps};
-use itertools::{izip, Itertools};
+use std::{f64, thread};
+
+use poulpy_core::{
+    layouts::{
+        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos, GLWEAutomorphismKeyHelper,
+        GLWEInfos, GLWELayout, GLWESecretPreparedToRef, GLWEToMut, GetGaloisElement,
+        TorusPrecision, GLWE,
+    },
+    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWENoise, GLWENormalize, GLWEPacking,
+    GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+};
+use poulpy_hal::{
+    api::{ModuleLogN, ModuleN, ScratchAvailable, TakeSlice},
+    layouts::{Backend, DataMut, DataRef, Scratch},
+    source::Source,
+};
+use poulpy_schemes::bin_fhe::bdd_arithmetic::{
+    Cmux, FheUint, FheUintPrepared, FromBits, GLWEBlindRetrieval, GLWEBlindRetriever,
+    GLWEBlindRotation, GetGGSWBit, ToBits,
+};
 
 pub struct Memory {
-    pub data: Vec<VecZnx>,
-    pub n: usize,
-    pub log_base2k: usize,
-    pub log_k: usize,
-    pub cols: usize,
-    pub max_size: usize,
-    pub tree: Vec<Vec<VecZnx>>,
-    pub state: bool,
-}
-
-pub fn read_tmp_bytes(
-    module: &Module,
-    cols: usize,
-    address_rows: usize,
-    address_cols: usize,
-) -> usize {
-    let mut tmp_bytes: usize = 0;
-    tmp_bytes += module.bytes_of_vec_znx(cols);
-    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
-    tmp_bytes += module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
-    tmp_bytes
-}
-
-pub fn read_prepare_write_tmp_bytes(
-    module: &Module,
-    cols: usize,
-    address_rows: usize,
-    address_cols: usize,
-) -> usize {
-    let mut tmp_bytes: usize = 0;
-    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
-    tmp_bytes += module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
-    tmp_bytes
-}
-
-pub fn write_tmp_bytes(
-    module: &Module,
-    cols: usize,
-    address_rows: usize,
-    address_cols: usize,
-) -> usize {
-    let mut tmp_bytes: usize = 0;
-    tmp_bytes += 2 * module.bytes_of_vec_znx(cols);
-    tmp_bytes += trace_inv_tmp_bytes(module, cols)
-        | module.vmp_apply_dft_tmp_bytes(cols, cols, address_rows, address_cols);
-    tmp_bytes += module.bytes_of_vec_znx_dft(cols);
-    tmp_bytes
+    bits: Vec<BitArray>,
+    size: usize,
+    bit_size: usize,
+    state: bool,
 }
 
 impl Memory {
-    pub fn new(module: &Module, log_base2k: usize, cols: usize, max_size: usize) -> Self {
-        let n: usize = module.n();
-        let mut tree: Vec<Vec<VecZnx>> = Vec::new();
-
-        if max_size > n {
-            let mut size: usize = (max_size + n - 1) / n; // Skip first recursion as it is stored in data
-
-            while size != 1 {
-                size = (size + n - 1) / n;
-                let mut tmp: Vec<VecZnx> = Vec::new();
-                (0..size).for_each(|_| {
-                    tmp.push(module.new_vec_znx(cols));
-                });
-                tree.push(tmp);
-            }
-        }
-
+    pub(crate) fn alloc<A>(infos: &A, word_size: usize, size: usize) -> Self
+    where
+        A: GLWEInfos,
+    {
         Self {
-            data: Vec::new(),
-            n: n,
-            log_base2k: log_base2k,
-            cols: cols,
-            log_k: 0,
-            max_size: max_size,
-            tree: tree,
+            bits: (0..word_size)
+                .map(|_| BitArray::alloc(infos, size))
+                .collect(),
+            size,
+            bit_size: (usize::BITS - (size - 1).leading_zeros()) as usize,
             state: false,
         }
     }
 
-    pub fn debug_as_u32(&self) -> Vec<u32> {
-        let n: usize = self.data[0].n();
-        let mut values: Vec<u32> = vec![0u32; self.max_size];
-        let mut buf: Vec<i64> = vec![0i64; n];
-        for i in 0..self.data.len() {
-            let start: usize = i * n;
-            let end: usize = std::cmp::min(start + n, self.max_size);
-            self.data[i].decode_vec_i64(self.log_base2k, self.log_k, &mut buf);
-            values[start..end]
-                .iter_mut()
-                .enumerate()
-                .for_each(|(j, x)| {
-                    *x = buf[j] as u32;
-                });
-        }
-        values
+    pub(crate) fn size(&self) -> usize {
+        self.size
     }
 
-    pub fn set(&mut self, data: &[i64], log_k: usize) {
-        assert!(
-            data.len() <= self.max_size,
-            "invalid data: data.len()={} > self.max_size={}",
-            data.len(),
-            self.max_size
-        );
-        let mut vectors: Vec<VecZnx> = Vec::new();
-        for chunk in data.chunks(self.n) {
-            let mut vector: VecZnx = VecZnx::new(self.n, self.cols);
-            vector.encode_vec_i64(self.log_base2k, log_k, chunk, 32);
-            vectors.push(vector);
-        }
-        self.data = vectors;
-        self.log_k = log_k;
-    }
-
-    pub fn read(&self, module: &Module, address: &Address, tmp_bytes: &mut [u8]) -> u32 {
-        assert!(
-            self.data.len() != 0,
-            "unitialized memory: self.data.len()=0"
-        );
-        assert_eq!(
-            self.state, false,
-            "invalid call to Memory.read: internal state is true -> requires calling Memory.write"
-        );
-        assert!(
-            tmp_bytes.len() >= read_tmp_bytes(module, self.cols, address.rows(), address.cols()),
-            "invalid tmp_bytes: must be of size greater or equal to self.read_tmp_bytes"
-        );
-
-        let log_n: usize = module.log_n();
-
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols);
-        let mut results: Vec<VecZnx> = Vec::new();
-
-        let cols: usize = self.cols;
-
-        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
-        let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
-            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
-
-        let mut tmp_vec_znx: VecZnx =
-            VecZnx::from_bytes_borrow(1 << log_n, cols, tmp_bytes_vec_znx);
-        let mut tmp_b_dft: base2k::VecZnxDft =
-            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
-
-        for i in 0..address.n2() {
-            let coordinate: &Coordinate = address.at_lsh(i);
-
-            let result_prev: &Vec<VecZnx>;
-
-            if i == 0 {
-                result_prev = &self.data;
-            } else {
-                result_prev = &results;
-            }
-
-            if i < address.n2() - 1 {
-                let mut result_next: Vec<VecZnx> = Vec::new();
-
-                // Packs the first coefficient of each polynomial.
-                for chunk in result_prev.chunks(module.n()) {
-                    for j in 0..module.n() {
-                        let j_rev: usize = reverse_bits_msb(j, log_n as u32);
-                        if j_rev < chunk.len() {
-                            // Shift polynomial by X^{-idx} and then pack
-                            coordinate.product(
-                                &module,
-                                self.log_base2k,
-                                &mut tmp_vec_znx,
-                                &chunk[j_rev],
-                                &mut tmp_b_dft,
-                                tmp_bytes_apply_dft,
-                            );
-
-                            packer.add(module, Some(&tmp_vec_znx), &mut result_next);
-                        } else {
-                            packer.add(module, None, &mut result_next);
-                        }
-                    }
-                }
-
-                packer.flush(module, &mut result_next);
-                packer.reset();
-                results = result_next.clone();
-            } else {
-                if i == 0 {
-                    // Shift polynomial by X^{-idx} and then pack
-                    coordinate.product(
-                        &module,
-                        self.log_base2k,
-                        &mut tmp_vec_znx,
-                        &self.data[0],
-                        &mut tmp_b_dft,
-                        tmp_bytes_apply_dft,
-                    );
-                } else {
-                    // Shift polynomial by X^{-idx} and then pack
-                    coordinate.product(
-                        &module,
-                        self.log_base2k,
-                        &mut tmp_vec_znx,
-                        &results[0],
-                        &mut tmp_b_dft,
-                        tmp_bytes_apply_dft,
-                    );
-                }
-            }
-        }
-        tmp_vec_znx.decode_coeff_i64(self.log_base2k, self.log_k, 0) as u32
-    }
-
-    pub fn read_prepare_write(
+    pub(crate) fn encrypt_sk<M, S, BE: Backend>(
         &mut self,
-        module: &Module,
-        address: &Address,
-        tmp_bytes: &mut [u8],
-    ) -> u32 {
-        assert!(
-            self.data.len() != 0,
-            "unitialized memory: self.data.len()=0"
-        );
-        assert_eq!(self.state, false, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
-        assert!(tmp_bytes.len() >= read_prepare_write_tmp_bytes(module, self.cols, address.rows(), address.cols()), "invalid tmp_bytes: must be of size greater or equal to self.read_prepare_write_tmp_bytes");
+        module: &M,
+        data: &[u32],
+        sk: &S,
+        source_xa: &mut Source,
+        source_xe: &mut Source,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWEEncryptSk<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        u32: ToBits,
+    {
+        let size: usize = self.size;
+        let ram_chunks: usize = self.bits.len();
 
-        let log_n: usize = module.log_n();
+        assert!(data.len() / ram_chunks <= size);
 
-        let mut packer: StreamRepacker = StreamRepacker::new(module, self.log_base2k, self.cols);
+        let mut bits: Vec<u8> = vec![0u8; size];
 
-        let cols: usize = self.cols;
-
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
-        let (tmp_bytes_vec_znx_dft, tmp_bytes_apply_dft) =
-            tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
-        let mut tmp_a_dft: base2k::VecZnxDft =
-            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
-
-        //let mut coordinate_buf: Coordinate =
-        //    Coordinate::new(module, address.rows(), address.cols(), address.dims_n_decomp());
-
-        for i in 0..address.n2() {
-            let coordinate: &Coordinate = &address.at_lsh(i);
-
-            let result_prev: &mut Vec<VecZnx>;
-
-            if i == 0 {
-                result_prev = &mut self.data;
-            } else {
-                result_prev = &mut self.tree[i - 1];
+        for i in 0..ram_chunks {
+            for (x, y) in bits.iter_mut().zip(data.iter()) {
+                *x = y.bit(i);
             }
+            self.bits[i].encrypt_sk(module, &bits, sk, source_xa, source_xe, scratch);
+        }
+    }
 
-            // Shift polynomial of the last iteration by X^{-i}
-            result_prev.iter_mut().for_each(|poly| {
-                coordinate.product_inplace(
-                    module,
-                    self.log_base2k,
-                    poly,
-                    &mut tmp_a_dft,
-                    tmp_bytes_apply_dft,
-                );
-            });
+    #[allow(dead_code)]
+    pub(crate) fn decrypt<M, S, BE: Backend>(
+        &self,
+        module: &M,
+        data: &mut [u32],
+        sk: &S,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWEDecrypt<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        u32: FromBits,
+    {
+        let max_addr: usize = self.size;
+        let ram_chunks: usize = self.bits.len();
 
-            if i < address.n2() - 1 {
-                let mut result_next: Vec<VecZnx> = Vec::new();
+        assert!(data.len() / ram_chunks <= max_addr);
 
-                // Packs the first coefficient of each polynomial.
-                for chunk in result_prev.chunks(module.n()) {
-                    for i in 0..module.n() {
-                        let i_rev: usize = reverse_bits_msb(i, log_n as u32);
-                        if i_rev < chunk.len() {
-                            packer.add(module, Some(&chunk[i_rev]), &mut result_next);
-                        } else {
-                            packer.add(module, None::<&VecZnx>, &mut result_next)
-                        }
-                    }
+        let mut bits: Vec<u8> = vec![0u8; max_addr];
+
+        for i in 0..ram_chunks {
+            self.bits[i].decrypt(module, bits.as_mut_slice(), sk, scratch);
+
+            for (x, y) in bits.iter().zip(data.iter_mut()) {
+                if *x == 1 {
+                    *y |= 1 << i;
+                } else {
+                    *y &= !(1 << i);
                 }
-
-                packer.flush(module, &mut result_next);
-                packer.reset();
-
-                // Stores the packed polynomial
-                izip!(self.tree[i].iter_mut(), result_next.iter()).for_each(|(a, b)| {
-                    a.copy_from(b);
-                });
             }
         }
+    }
+
+    pub(crate) fn noise<M, S, BE: Backend>(
+        &self,
+        module: &M,
+        data: &[u32],
+        sk: &S,
+        scratch: &mut Scratch<BE>,
+    ) -> Vec<f64>
+    where
+        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        u32: FromBits,
+    {
+        let max_addr: usize = self.size;
+        let ram_chunks: usize = self.bits.len();
+
+        assert!(data.len() / ram_chunks <= max_addr);
+
+        let mut bits: Vec<u8> = vec![0u8; max_addr];
+        let mut noise: Vec<f64> = vec![0f64; self.bits.len()];
+        for i in 0..ram_chunks {
+            for (x, y) in bits.iter_mut().zip(data.iter()) {
+                *x = y.bit(i)
+            }
+            noise[i] = self.bits[i].noise(module, bits.as_slice(), sk, scratch);
+        }
+
+        noise
+    }
+
+    pub(crate) fn zero<M, BE: Backend, K, H>(
+        &mut self,
+        threads: usize,
+        module: &M,
+        addr: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: Sync + ModuleN + GLWETrace<BE> + GLWESub + GLWERotate<BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let poly: usize = addr / module.n();
+        let idx: usize = poly % module.n();
+
+        let glwe_infos: GLWELayout = self.bits[0].data[0].glwe_layout();
+        let key_infos: GGLWELayout = keys.automorphism_key_infos();
+
+        let scratch_thread_size: usize = module
+            .glwe_rotate_tmp_bytes()
+            .max(module.glwe_trace_tmp_bytes(&glwe_infos, &glwe_infos, &key_infos))
+            + GLWE::bytes_of_from_infos(&glwe_infos);
+
+        assert!(
+            scratch.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch.available()
+        );
+
+        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.bits.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for (scratch_thread, subram_chunk) in
+                scratches.iter_mut().zip(self.bits.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    let (mut tmp, scratch_1) = scratch_thread.take_glwe(&glwe_infos);
+
+                    for subram in subram_chunk.iter_mut() {
+                        let a: &mut GLWE<Vec<u8>> = &mut subram.data[poly];
+                        module.glwe_rotate_inplace(-(idx as i64), a, scratch_1);
+                        module.glwe_trace(&mut tmp, 0, a, keys, scratch_1);
+                        module.glwe_sub_inplace(a, &tmp);
+                        module.glwe_rotate_inplace(idx as i64, a, scratch_1);
+                    }
+                });
+            }
+        });
+    }
+
+    pub(crate) fn read_stateless<DR: DataMut, D: DataRef, H, M, K, BE: Backend>(
+        &mut self,
+        threads: usize,
+        module: &M,
+        res: &mut FheUint<DR, u32>,
+        address: &FheUintPrepared<D, u32, BE>,
+        offset: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: Sync + ModuleLogN + GLWEPacking<BE> + GLWEBlindRotation<BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        assert!(
+            !self.bits.is_empty(),
+            "unitialized memory: self.data.len()=0"
+        );
+
+        assert_eq!(self.state, false);
+
+        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(self.bits.len(), res);
+
+        let scratch_thread_size =
+            BitArray::retrieve_stateless_tmp_bytes(module, &self.bits[0].data[0], address);
+
+        assert!(
+            scratch_1.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch_1.available()
+        );
+
+        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.bits.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
+                .iter_mut()
+                .zip(self.bits.chunks_mut(chunk_size))
+                .zip(tmp_res.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
+                        subram.retrieve_stateless(module, res, address, offset, scratch_thread);
+                    }
+                });
+            }
+        });
+
+        res.pack(module, tmp_res, keys, scratch_1);
+    }
+
+    pub(crate) fn read_statefull<DR: DataMut, A, H, M, K, BE: Backend>(
+        &mut self,
+        threads: usize,
+        module: &M,
+        res: &mut FheUint<DR, u32>,
+        address: &A,
+        offset: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: Sync + ModuleLogN + GLWEBlindRetrieval<BE> + GLWEBlindRotation<BE> + GLWEPacking<BE>,
+        A: Sync + GetGGSWBit<BE> + GGSWInfos,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        assert!(
+            !self.bits.is_empty(),
+            "unitialized memory: self.data.len()=0"
+        );
+
+        assert_eq!(self.state, false);
+
+        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(self.bits.len(), res);
+
+        let scratch_thread_size = BitArray::retrieve_statefull_tmp_bytes(
+            module,
+            self.bit_size,
+            &self.bits[0].data[0],
+            address,
+        );
+
+        assert!(
+            scratch_1.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch_1.available()
+        );
+
+        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.bits.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
+                .iter_mut()
+                .zip(self.bits.chunks_mut(chunk_size))
+                .zip(tmp_res.chunks_mut(chunk_size))
+            {
+                scope.spawn(move || {
+                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
+                        subram.retrieve_statefull(module, res, address, offset, scratch_thread);
+                    }
+                });
+            }
+        });
+
+        res.pack(module, tmp_res, keys, scratch_1);
 
         self.state = true;
-
-        if address.n2() != 1 {
-            return self.tree.last_mut().unwrap()[0].decode_coeff_i64(self.log_base2k, self.log_k, 0)
-                as u32;
-        }
-
-        self.data[0].decode_coeff_i64(self.log_base2k, self.log_k, 0) as u32
     }
 
-    pub fn write(
+    pub(crate) fn read_statefull_rev<M, D, A, K, H, BE: Backend>(
         &mut self,
-        module: &Module,
-        address: &Address,
-        write_value: u32,
-        tmp_bytes: &mut [u8],
-    ) {
-        assert_eq!(self.state, true, "invalid call to Memory.read: internal state is true -> requires calling Memory.write_after_read");
+        threads: usize,
+        module: &M,
+        w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
+        address: &A,
+        offset: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        D: DataRef,
+        A: GetGGSWBit<BE> + GGSWInfos,
+        M: Sync
+            + ModuleLogN
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWEBlindRotation<BE>
+            + GLWEAdd
+            + GLWESub
+            + GLWENormalize<BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        assert_eq!(self.state, true);
+
+        let scratch_thread_size = BitArray::retrieve_statefull_rev_tmp_bytes(
+            module,
+            self.bit_size,
+            &self.bits[0].data[0],
+            address,
+            &keys.automorphism_key_infos(),
+        ) + GLWE::bytes_of_from_infos(w);
+
         assert!(
-            tmp_bytes.len() >= write_tmp_bytes(module, self.cols, address.rows(), address.cols()),
-            "invalid tmp_bytes: must be of size greater or equal to self.write_tmp_bytes"
+            scratch.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch.available()
         );
 
-        let log_n: usize = module.log_n();
+        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
 
-        let cols: usize = self.cols;
+        let chunk_size: usize = self.bits.len().div_ceil(threads);
 
-        let bytes_of_vec_znx: usize = module.bytes_of_vec_znx(cols);
-        let bytes_of_vec_znx_dft: usize = module.bytes_of_vec_znx_dft(cols);
-
-        let (tmp_bytes_vec_znx, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx);
-        let (tmp_bytes_vec_znx_dft, tmp_bytes) = tmp_bytes.split_at_mut(bytes_of_vec_znx_dft);
-
-        let mut tmp_a: VecZnx = VecZnx::from_bytes_borrow(1 << log_n, cols, tmp_bytes_vec_znx);
-        let mut tmp_a_dft: base2k::VecZnxDft =
-            VecZnxDft::from_bytes_borrow(module, cols, tmp_bytes_vec_znx_dft);
-
-        if address.n2() != 1 {
-            let result: &mut VecZnx = &mut self.tree.last_mut().unwrap()[0];
-            result.encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
-            result.normalize(self.log_base2k, tmp_bytes);
-        } else {
-            self.data[0].encode_coeff_i64(self.log_base2k, self.log_k, 0, write_value as i64, 32);
-            self.data[0].normalize(self.log_base2k, tmp_bytes);
-        }
-
-        // Walk back the tree in reverse order, repacking the coefficients
-        // where the read coefficient has been conditionally replaced by
-        // the write value based on the write boolean.
-        for i in (0..address.n2() - 1).rev() {
-            // Index polynomial X^{-i}
-            let coordinate: &Coordinate = &address.at_rsh(i + 1);
-
-            let result_hi: &mut Vec<VecZnx>; // Above level
-            let result_lo: &mut Vec<VecZnx>; // Current level
-
-            // Top of the tree is not stored in results.
-            if i == 0 {
-                result_hi = &mut self.data;
-                result_lo = &mut self.tree[0];
-            } else {
-                let (left, right) = self.tree.split_at_mut(i);
-                result_hi = &mut left[left.len() - 1];
-                result_lo = &mut right[0];
-            }
-
-            // Iterates over the set of chuncks of n polynomials of the level above
-            result_hi
-                .chunks_mut(module.n())
+        thread::scope(|scope| {
+            for (idx, (scratch_thread, subram_chunk)) in scratches
+                .iter_mut()
+                .zip(self.bits.chunks_mut(chunk_size))
                 .enumerate()
-                .for_each(|(j, chunk)| {
-                    // Retrieve the associated polynomial to extract and pack related to the current chunk
-                    let poly_lo: &mut VecZnx = &mut result_lo[j];
-
-                    // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
-                    // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-                    coordinate.product_inplace(
-                        &module,
-                        self.log_base2k,
-                        poly_lo,
-                        &mut tmp_a_dft,
-                        tmp_bytes,
-                    );
-
-                    // Iterates over the polynomial of the current chunk of the level above
-                    chunk.iter_mut().for_each(|poly_hi| {
-                        // Extract the first coefficient poly_lo
-                        // [a, b, c, d] -> [a, 0, 0, 0]
-                        trace(
-                            module,
-                            self.log_base2k,
-                            0,
-                            log_n,
-                            &mut tmp_a,
-                            poly_lo,
-                            tmp_bytes,
-                        );
-                        tmp_a.normalize(self.log_base2k, tmp_bytes);
-
-                        // Zeroes the first coefficient of poly_j
-                        // [a, b, c, d] -> [0, b, c, d]
-                        trace_inplace_inv(module, self.log_base2k, 0, log_n, poly_hi, tmp_bytes);
-
-                        // Adds TRACE(poly_lo) + TRACEINV(poly_hi)
-                        module.vec_znx_add_inplace(poly_hi, &tmp_a);
-
-                        // Cyclic shift poly_lo by X^-1
-                        module.vec_znx_rotate_inplace(-1, poly_lo);
-                    });
+            {
+                scope.spawn(move || {
+                    // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
+                    for (i, subram) in subram_chunk.iter_mut().enumerate() {
+                        let (mut bit, scratch_1) = scratch_thread.take_glwe(w);
+                        w.get_bit_glwe(module, chunk_size * idx + i, &mut bit, keys, scratch_1);
+                        subram
+                            .retrieve_statefull_rev(module, &bit, address, keys, offset, scratch_1);
+                    }
                 });
-        }
-
-        // TODO: use VmpPMat buffer to get the inverse of X^{-i}: X^{-i} -> (X^{-i})^-1 = X^{i}
-        // Apply the reverse cyclic shift to the polynomial by (X^{-i})^-1 = X^{i}
-        self.data.iter_mut().for_each(|poly_lo| {
-            address.at_rsh(0).product_inplace(
-                &module,
-                self.log_base2k,
-                poly_lo,
-                &mut tmp_a_dft,
-                tmp_bytes,
-            );
+            }
         });
 
         self.state = false;
     }
+
+    pub(crate) fn write<M, D, A, K, H, BE: Backend>(
+        &mut self,
+        threads: usize,
+        module: &M,
+        w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
+        address: &A,
+        offset: usize,
+        keys: &H,
+        scratch: &mut Scratch<BE>,
+    ) where
+        D: DataRef,
+        A: GetGGSWBit<BE> + GGSWInfos,
+        M: Sync
+            + ModuleLogN
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWEBlindRotation<BE>
+            + GLWEAdd
+            + GLWESub
+            + GLWENormalize<BE>,
+        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        assert_eq!(self.state, false);
+
+        let scratch_thread_size = BitArray::write_tmp_bytes(
+            module,
+            self.bit_size,
+            &self.bits[0].data[0],
+            address,
+            &keys.automorphism_key_infos(),
+        ) + GLWE::bytes_of_from_infos(w);
+
+        assert!(
+            scratch.available() >= threads * scratch_thread_size,
+            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
+            scratch.available()
+        );
+
+        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
+
+        let chunk_size: usize = self.bits.len().div_ceil(threads);
+
+        thread::scope(|scope| {
+            for (idx, (scratch_thread, subram_chunk)) in scratches
+                .iter_mut()
+                .zip(self.bits.chunks_mut(chunk_size))
+                .enumerate()
+            {
+                scope.spawn(move || {
+                    // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
+                    for (i, subram) in subram_chunk.iter_mut().enumerate() {
+                        let (mut bit, scratch_1) = scratch_thread.take_glwe(w);
+                        w.get_bit_glwe(module, chunk_size * idx + i, &mut bit, keys, scratch_1);
+                        subram.write(module, &bit, address, keys, offset, scratch_1);
+                    }
+                });
+            }
+        });
+    }
 }
 
-impl Into<Vec<u8>> for &Memory {
-    fn into(self) -> Vec<u8> {
-        let vec_u32s = self.debug_as_u32();
-        vec_u32s
-            .iter()
-            .map(|v| {
-                let mut buf = [0u8; 4];
-                for i in 0..4 {
-                    buf[i] = (v >> (i * 8)) as u8;
-                }
-                buf
-            })
-            .flatten()
-            .collect_vec()
+struct BitArray {
+    data: Vec<GLWE<Vec<u8>>>,
+    retriever: GLWEBlindRetriever,
+    bit_size: usize,
+}
+
+impl BitArray {
+    fn alloc<A>(infos: &A, size: usize) -> Self
+    where
+        A: GLWEInfos,
+    {
+        let n: usize = infos.n().into();
+        Self {
+            data: (0..size.div_ceil(n))
+                .map(|_| GLWE::alloc_from_infos(infos))
+                .collect(),
+            retriever: GLWEBlindRetriever::alloc(infos, size),
+            bit_size: (usize::BITS - (size - 1).leading_zeros()) as usize,
+        }
+    }
+
+    fn encrypt_sk<M, BE: Backend, S>(
+        &mut self,
+        module: &M,
+        data: &[u8],
+        sk_prepared: &S,
+        source_xa: &mut Source,
+        source_xe: &mut Source,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWEEncryptSk<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
+        let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
+
+        for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter_mut()) {
+            data_i64.fill(0);
+
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter()) {
+                *y = *x as i64
+            }
+
+            pt.encode_vec_i64(&data_i64, TorusPrecision(2));
+            ct.encrypt_sk(module, &pt, sk_prepared, source_xa, source_xe, scratch_2);
+        }
+    }
+
+    #[allow(dead_code)]
+    fn decrypt<M, BE: Backend, S>(
+        &self,
+        module: &M,
+        data: &mut [u8],
+        sk_prepared: &S,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleN + GLWEDecrypt<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
+        let (mut data_i64, scratch_2) = scratch_1.take_slice(module.n());
+
+        for (chunk, ct) in data.chunks_mut(module.n()).zip(self.data.iter()) {
+            ct.decrypt(module, &mut pt, sk_prepared, scratch_2);
+            pt.decode_vec_i64(&mut data_i64, TorusPrecision(2));
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
+                *x = *y as u8;
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    fn noise<M, BE: Backend, S>(
+        &self,
+        module: &M,
+        data: &[u8],
+        sk_prepared: &S,
+        scratch: &mut Scratch<BE>,
+    ) -> f64
+    where
+        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
+        S: GLWESecretPreparedToRef<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
+        let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
+
+        let mut max_noise: f64 = f64::MIN;
+
+        for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter()) {
+            for (y, x) in data_i64.iter_mut().zip(chunk.iter()) {
+                *y = *x as i64;
+            }
+            pt.encode_vec_i64(&data_i64, TorusPrecision(2));
+            max_noise = max_noise.max(
+                ct.noise(module, &mut pt, sk_prepared, scratch_2)
+                    .max()
+                    .log2(),
+            );
+        }
+
+        max_noise
+    }
+
+    fn retrieve_stateless_tmp_bytes<M, R, A, BE: Backend>(module: &M, res: &R, addr: &A) -> usize
+    where
+        M: Cmux<BE> + GLWEBlindRotation<BE>,
+        R: GLWEInfos,
+        A: GGSWInfos,
+    {
+        GLWEBlindRetriever::retrieve_tmp_bytes(module, res, addr)
+            .max(module.glwe_blind_rotation_tmp_bytes(res, addr))
+    }
+
+    fn retrieve_stateless<R, A, M, BE: Backend>(
+        &mut self,
+        module: &M,
+        res: &mut R,
+        address: &A,
+        offset: usize,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleLogN + GLWECopy + Cmux<BE> + GLWEBlindRotation<BE>,
+        R: GLWEToMut + GLWEInfos,
+        A: GetGGSWBit<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        self.retriever.retrieve(
+            module,
+            res,
+            &self.data,
+            address,
+            offset + module.log_n(),
+            scratch,
+        );
+
+        module.glwe_blind_rotation_inplace(
+            res,
+            address,
+            false,
+            offset,
+            module.log_n().min(self.bit_size),
+            0,
+            scratch,
+        );
+    }
+
+    fn retrieve_statefull_tmp_bytes<M, R, A, BE: Backend>(
+        module: &M,
+        bit_size: usize,
+        res: &R,
+        addr: &A,
+    ) -> usize
+    where
+        M: ModuleLogN + GLWEBlindRetrieval<BE> + GLWEBlindRotation<BE>,
+        R: GLWEInfos,
+        A: GGSWInfos,
+    {
+        let a: usize = module.glwe_blind_retrieval_tmp_bytes(res, addr);
+        let b: usize = if bit_size > module.log_n() {
+            module.glwe_blind_rotation_tmp_bytes(res, addr)
+        } else {
+            0
+        };
+
+        a.max(b)
+    }
+
+    fn retrieve_statefull<R, A, M, BE: Backend>(
+        &mut self,
+        module: &M,
+        res: &mut R,
+        address: &A,
+        offset: usize,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleLogN + GLWECopy + GLWEBlindRotation<BE> + GLWEBlindRetrieval<BE>,
+        R: GLWEToMut,
+        A: GetGGSWBit<BE>,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        if self.bit_size > module.log_n() {
+            module.glwe_blind_retrieval_statefull(
+                &mut self.data,
+                address,
+                offset + module.log_n(),
+                self.bit_size - module.log_n(),
+                scratch,
+            );
+        }
+        module.glwe_blind_rotation_inplace(
+            &mut self.data[0],
+            address,
+            false,
+            offset,
+            module.log_n().min(self.bit_size),
+            0,
+            scratch,
+        );
+        module.glwe_copy(res, &mut self.data[0]);
+    }
+
+    fn retrieve_statefull_rev_tmp_bytes<M, R, A, K, BE: Backend>(
+        module: &M,
+        bit_size: usize,
+        res: &R,
+        addr: &A,
+        key: &K,
+    ) -> usize
+    where
+        M: ModuleLogN
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWENormalize<BE>
+            + GLWEBlindRotation<BE>,
+        R: GLWEInfos,
+        A: GGSWInfos,
+        K: GGLWEInfos,
+    {
+        let a: usize = module.glwe_trace_tmp_bytes(res, res, key)
+            + GLWE::bytes_of_from_infos(res).max(module.glwe_normalize_tmp_bytes());
+        let b: usize = module.glwe_blind_retrieval_tmp_bytes(res, addr);
+        let c: usize = if bit_size > module.log_n() {
+            module.glwe_blind_rotation_tmp_bytes(res, addr)
+        } else {
+            0
+        };
+
+        a.max(b).max(c)
+    }
+
+    fn retrieve_statefull_rev<R, A, M, H, K, BE: Backend>(
+        &mut self,
+        module: &M,
+        res: &R,
+        address: &A,
+        keys: &H,
+        offset: usize,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleLogN
+            + GLWECopy
+            + GLWEBlindRotation<BE>
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWESub
+            + GLWEAdd,
+        R: GLWEToMut,
+        A: GetGGSWBit<BE>,
+        H: GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        {
+            let (mut tmp, scratch_1) = scratch.take_glwe(&self.data[0]);
+            module.glwe_trace(&mut tmp, 0, &mut self.data[0], keys, scratch_1);
+            module.glwe_sub_inplace(&mut self.data[0], &tmp);
+        }
+
+        module.glwe_add_inplace(&mut self.data[0], res);
+        module.glwe_normalize_inplace(&mut self.data[0], scratch);
+
+        module.glwe_blind_rotation_inplace(
+            &mut self.data[0],
+            address,
+            true,
+            offset,
+            module.log_n().min(self.bit_size),
+            0,
+            scratch,
+        );
+        if self.bit_size > module.log_n() {
+            module.glwe_blind_retrieval_statefull_rev(
+                &mut self.data,
+                address,
+                offset + module.log_n(),
+                self.bit_size - module.log_n(),
+                scratch,
+            );
+        }
+    }
+
+    fn write_tmp_bytes<M, R, A, K, BE: Backend>(
+        module: &M,
+        bit_size: usize,
+        res: &R,
+        addr: &A,
+        key: &K,
+    ) -> usize
+    where
+        M: ModuleLogN
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWENormalize<BE>
+            + GLWEBlindRotation<BE>,
+        R: GLWEInfos,
+        A: GGSWInfos,
+        K: GGLWEInfos,
+    {
+        Self::retrieve_statefull_rev_tmp_bytes(module, bit_size, res, addr, key)
+    }
+
+    fn write<R, A, M, H, K, BE: Backend>(
+        &mut self,
+        module: &M,
+        res: &R,
+        address: &A,
+        keys: &H,
+        offset: usize,
+        scratch: &mut Scratch<BE>,
+    ) where
+        M: ModuleLogN
+            + GLWECopy
+            + GLWEBlindRotation<BE>
+            + GLWEBlindRetrieval<BE>
+            + GLWETrace<BE>
+            + GLWESub
+            + GLWEAdd,
+        R: GLWEToMut,
+        A: GetGGSWBit<BE>,
+        H: GLWEAutomorphismKeyHelper<K, BE>,
+        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Scratch<BE>: ScratchTakeCore<BE>,
+    {
+        if self.bit_size > module.log_n() {
+            module.glwe_blind_retrieval_statefull(
+                &mut self.data,
+                address,
+                offset + module.log_n(),
+                self.bit_size - module.log_n(),
+                scratch,
+            );
+        }
+        module.glwe_blind_rotation_inplace(
+            &mut self.data[0],
+            address,
+            false,
+            offset,
+            module.log_n().min(self.bit_size),
+            0,
+            scratch,
+        );
+
+        {
+            let (mut tmp, scratch_1) = scratch.take_glwe(&self.data[0]);
+            module.glwe_trace(&mut tmp, 0, &mut self.data[0], keys, scratch_1);
+            module.glwe_sub_inplace(&mut self.data[0], &tmp);
+        }
+
+        module.glwe_add_inplace(&mut self.data[0], res);
+        module.glwe_normalize_inplace(&mut self.data[0], scratch);
+
+        module.glwe_blind_rotation_inplace(
+            &mut self.data[0],
+            address,
+            true,
+            offset,
+            module.log_n().min(self.bit_size),
+            0,
+            scratch,
+        );
+
+        if self.bit_size > module.log_n() {
+            module.glwe_blind_retrieval_statefull_rev(
+                &mut self.data,
+                address,
+                offset + module.log_n(),
+                self.bit_size - module.log_n(),
+                scratch,
+            );
+        }
     }
 }

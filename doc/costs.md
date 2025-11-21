@@ -1,41 +1,186 @@
+<!-- 
+- Use PC to read instruction components from ROM (IMM, RS1_INDEX, RS2_INDEX, RD_INDEX, PCU, RDU, MU)
+- Read registers (RS1_INDEX -> RS1, RS2_INDEX -> RS2)
+- Prepare all values for evaluation (IMM, RS1, RS2)
+- Compute ram address (IMM, RS1 -> RAM_ADDRESS) and read ram at ram address (RAM_ADDRESS, RAM -> RAM_VAL)
+- Compute possible new value of RD (IMM, RS1, RS2, IMM, PC, RAM_VAL -> POSSIBLE_RD_VALS)
+- Blind select correct rd value (RDU, POSSIBLE_RD_VALS -> NEW_RD_VAL)
+- Put the rd value in rd (RD_INDEX, NEW_RD_VAL -> RD)
+-  -->
+
+
+
+<!--
+Average Cycle Time: 763 ms
+  1. Read and prepare instruction components: 165 ms
+     - Read instruction components: 28.36042ms
+     - Prepare instruction components: 137 ms
+  2. Read and prepare registers: 144 ms
+     - Read registers: 7.86 ms
+     - Prepare registers: 136 ms
+  3. Read ram: 79 ms
+  4. Update registers: 210 ms
+     - Evaluate rd ops: 130 ms
+     - Blind selection: 1.42 ms
+     - Write rd: 79 ms
+  5. Update ram: 81 ms
+  6. Update pc: 81 ms
+     - PC update BDD: 18 ms
+     - PC prepare: 63 ms
+-->
+
+Below is the dependency graph of one cycle in Phantom.
+It shows how each intermediate value in Phantom is computed and which other values it depends on.
+A single cycle starts at top and ends at the bottom.
+Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
+
+The runtimes are from running Phantom on a AWS r6i.metal, with support for AVX2 and FMA instructions, parallelized across 32 cores.
+Runtimes are subject to improvement and may vary, depending on the hardware.
+
+
 ```mermaid
 graph TD
 
-    ROM["<b>ROM read (size = 8KB):</b><br> - cost: 5ms"]
+    subgraph start_block [" "]
+        style start_block fill:#FFDDC1,stroke:#FF9966
+        PC["PC "]
+        ROM["ROM"]
+        RAM["RAM"]
+        REGISTERS["REGISTERS"]
+    end
 
-    DCP["<b>DCP[4xu5,1xu6]:</b><br> - decomposes 31 bits into: 4xu5, 1xu6<br> - which requires 6 sequential DCP operations<br> - each DCP operation requires 2 BRs<br> - total 12 BRs required<br> - Cost: 12 x 20ms = 240ms"]
+    subgraph read_inst [" "]
+        style read_inst fill:#990000,stroke:#FFFFFF
+        READ_INST_LABEL["Read<br>and Prepare<br>Instruction<br>Components<br>(165 ms)"]
+        IMM["IMM"]
+        RS1_INDEX["RS1_INDEX"]
+        RS2_INDEX["RS2_INDEX"]
+        RD_INDEX["RD_INDEX"]
+        PCU["PCU"]
+        RDU["RDU"]
+        MU["MU"]
+    end
 
-    CBT1["<b>CBT[u5]:</b><br> - CBT with 5 bit value<br> - multiple CBTs in parallel with depth of 1 CBT<br> - Cost: 20ms"]
+    subgraph read_reg [" "]
+        READ_REG_LABEL["Read<br>and Prepare<br>Registers<br>(144 ms)"]
+        RS1["RS1"]
+        RS2["RS2"]
+    end    
+    
+    subgraph read_ram [" "]
+        style read_ram fill:#660066,stroke:#FFFFFF
+        READ_RAM_LABEL["Read RAM<br>(79 ms)"]
+        RAM_ADDRESS["RAM_ADDRESS"]
+        RAM_VAL["RAM_VAL"]
+    end
 
-    ExternalLWERead["<b>Read 8xu4 LWEs with external product:</b><br> - Read multiple (in parallel) 8xu4 LWEs, rs1, rs2, etc. from register poly, imm poly<br> - plaintext is stored as 8 limbs each consisting 4 bits<br> - hence, reading single 8xu8 requires 8 external products (in parallel)<br> - Cost: 1 external product = 5ms"]
+    subgraph update_reg [" "]
+        style update_reg fill:#000099,stroke:#FFFFFF
+        UPDATE_REG_LABEL["Update<br>Registers<br>(210 ms)"]
+        POSSIBLE_RD_VALS["POSSIBLE_RD_VALS"]
+        RD["RD"]
+    end
 
-    ArithmeticRoutine["<b>Arithmetic routine:</b><br> - Perform all arithmetic operations in parallel<br> - cost equals of the most expensive operation<br> - Add/Sub: 100ms<br> - Mul: 200ms<br> -Div/Rem: 3.5s<br> - Cost (rvi32): 100ms<br>- Cost (rvi32m): 3.5s"]
+    subgraph update_ram [" "]
+        style update_ram fill:#CC00CC,stroke:#FFFFFF
+        UPDATE_RAM_LABEL["Update RAM<br>(81 ms)"]
+        POSSIBLE_RAM_VALS["POSSIBLE_RAM_VALS"]
+        NEW_RAM_VAL["NEW_RAM_VAL"]
+    end
 
-    UpdateRD["<b>Update RD:</b><br> - update register RD<br> - recall: registers fit into single polynomial <br> - Cost: 10ms"]
+    subgraph update_pc [" "]
+        style update_pc fill:#CCCC00,stroke:#FFFFFF
+        UPDATE_PC_LABEL["Update PC<br>(81 ms)"]
+        NEW_PC_VAL["NEW_PC_VAL"]
+    end
 
-    RamReadWrite["<b>RAM (size = 8KB) read, write:</b><br> - Computer address ADD, read ADD, then write to ADD<br> - requires 1xu13 addition to compute ADD (32ms) - requires 4 serial DCP to extract 3x3 bits, 1x2 bits<br> - each DCP requires 2 BRs<br> - requires 4 CBTs in parallel, hence depth of 1 CBT<br> - each CBT requires 1BR<br> - RAM fits in single polynomial, \hence read = 1 external product (5ms) and write = 1 external product (5ms) + 11 K.S. (5ms)<br>  - Cost: 32ms + 8x20 ms + 20ms + 5ms + 10ms = 227ms"]
+    subgraph end_block [" "]
+        style end_block fill:#FFDDC1,stroke:#FF9966
+        PC_AFTER["PC"]
+        RAM_AFTER["RAM"]
+        REGISTERS_AFTER["REGISTERS"]
+    end
 
-    BrancOpsPCUpdate["<b>Execute branching operations and PC update:</b><br> - Exectue all branching operations (in parallel) and update PC<br> - Then CBT PC to select next instruction from ROM<br> - Branching operation requires u32 conditional following by selection, thus takes 80ms<br> - CBT PC requires 4 serial DCPs and 4 (in parallel) CBTs - Cost: 80ms + 8x20ms + 20ms = 260ms"]
+
+    PC --> IMM
+    PC --> RS1_INDEX
+    PC --> RS2_INDEX
+    PC --> RD_INDEX
+    PC --> PCU
+    PC --> RDU
+    PC --> MU
+
+    ROM --> IMM
+    ROM --> RS1_INDEX
+    ROM --> RS2_INDEX
+    ROM --> RD_INDEX
+    ROM --> PCU
+    ROM --> RDU
+    ROM --> MU    
+
+    RS1_INDEX --> RS1
+    RS2_INDEX --> RS2
+
+    REGISTERS --> RS1
+    REGISTERS --> RS2
+    IMM --> RAM_ADDRESS
+    RS1 --> RAM_ADDRESS
+
+    RAM_ADDRESS --> RAM_VAL
+    RAM --> RAM_VAL
+
+    IMM --> POSSIBLE_RD_VALS
+    RS1 --> POSSIBLE_RD_VALS
+    RS2 --> POSSIBLE_RD_VALS
+    PC --> POSSIBLE_RD_VALS
+    RAM_VAL --> POSSIBLE_RD_VALS
+
+    POSSIBLE_RD_VALS --> RD
+    RD_INDEX --> RD
+    RDU --> RD
+
+    RS2 --> POSSIBLE_RAM_VALS
+    RAM_VAL --> POSSIBLE_RAM_VALS
+    RAM_ADDRESS --> POSSIBLE_RAM_VALS
+    RS2 --> POSSIBLE_RAM_VALS
+    
+    POSSIBLE_RAM_VALS --> NEW_RAM_VAL
+    MU --> NEW_RAM_VAL
 
 
-    ROM --> DCP
-    DCP --> CBT1
-    CBT1 --> ExternalLWERead
-    ExternalLWERead --> ArithmeticRoutine
-    ArithmeticRoutine --> UpdateRD
-    ExternalLWERead --> RamReadWrite
-    ExternalLWERead --> BrancOpsPCUpdate
+    IMM --> NEW_PC_VAL
+    RS1 --> NEW_PC_VAL
+    RS2 --> NEW_PC_VAL
+    PC --> NEW_PC_VAL
+    PCU --> NEW_PC_VAL
 
-    style DCP text-align:left
-    style CBT1 text-align:left
-    style ExternalLWERead text-align:left
-    style ArithmeticRoutine text-align:left
-    style UpdateRD text-align:left
-    style BrancOpsPCUpdate text-align:left
-    style RamReadWrite text-align:left
-    style ROM text-align:left
+    NEW_PC_VAL --> PC_AFTER
+    RD --> REGISTERS_AFTER
+    NEW_RAM_VAL --> RAM_AFTER
+
+    classDef labelStyle stroke-dasharray: 5 5, font-weight: bold, font-size: 120%
+    class READ_INST_LABEL labelStyle
+    class READ_RAM_LABEL labelStyle
+    class READ_REG_LABEL labelStyle
+    class UPDATE_REG_LABEL labelStyle
+    class UPDATE_RAM_LABEL labelStyle
+    class UPDATE_PC_LABEL labelStyle
 ```
 
+
+<!--## Summary of runtime
+The runtimes are from running Phantom on a AWS r6i.metal, parallelized with 32 threads.
+
+Average Cycle Time: 971.058934ms
+  1. Read instruction components: 138.901955ms
+  2. Read registers: 237.512433ms
+  3. Read ram: 71.142182ms
+  4. Update registers: 317.313129ms
+  5. Update ram: 131.300826ms
+  6. Update pc: 74.838472ms
+-->
+
+<!-- 
 Dependency graph of operations in risc-v FHE-VM. A single cycle starts at top and ends at the bottom. Operation blocks at same level are processed in parallel, thus the total cycle time equals summation of time take by each block on longest path.
 
 <br>
@@ -50,4 +195,4 @@ Dependency graph of operations in risc-v FHE-VM. A single cycle starts at top an
     -   CBT stands for circuit bootstrapping. CBT requires $d$ blind rotations, where $d$ is decomposition count of desired RGSW ciphertext. BRs of single CBT can be processed in parallel
     -   Cost for arithmetic operations on u32 are taken from this [link](https://docs.zama.ai/tfhe-rs/get-started/benchmarks).
 -   Questions:
-    -   Are there alternative integer representations in which Div/Rem are less expensive?
+    -   Are there alternative integer representations in which Div/Rem are less expensive? -->

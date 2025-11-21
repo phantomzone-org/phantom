@@ -3,14 +3,14 @@ ENTRY(_start)
 MEMORY
 {
     /* Define different memory regions for code and data memory */
-    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 20K  /* Code memory */
-    RAM   (rwx) : ORIGIN = 0x3E800, LENGTH = 16K /* Data memory */
+    FLASH (rx)  : ORIGIN = 0x00000000, LENGTH = 256K  /* Code memory */
+    RAM   (rwx) : ORIGIN = 0x40000, LENGTH = 4K /* Data memory */
 }
 
 SECTIONS
 {
   /* stack pointer is set to max memory limit */
-  _stack_start = 0x7D000;
+  _stack_start = ORIGIN(RAM) + LENGTH(RAM);
 
   .text : ALIGN(4)
   {
@@ -29,7 +29,7 @@ SECTIONS
 
   .outdata : ALIGN(4)
   {
-    KEEP(*(.inpdata))
+    KEEP(*(.outdata))
   } > RAM AT> RAM
 
   .rodata : ALIGN(4)
@@ -50,8 +50,8 @@ SECTIONS
     . = ALIGN(4);
 
     /* Must be called __global_pointer$ for linker relaxations to work.
-       
-       Must point to address where .sdata starts offset by 2048 bytes 
+
+       Must point to address where .sdata starts offset by 2048 bytes
        for best optimisation
 
        ref: https://gnu-mcu-eclipse.github.io/arch/riscv/programmer/#the-gp-global-pointer-register
