@@ -110,12 +110,10 @@ Note that if Phantom does not execute enough cycles, it will not produce the exp
 Then use the following command in this directory to run the encrypted program.
 ```bash
 # Without AVX2 and FMA support
-cargo run --release
+PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false cargo run --release
 
 # With AVX2 and FMA support
-RUSTFLAGS="-C target-feature=+avx2,+fma" cargo run --release
-
-
+RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false cargo run --release
 ```
 
 For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output.

@@ -1,6 +1,6 @@
 # Template Phantom Program
 
-This example progrma checks if a given string matches a given hidden string.
+This example program checks if a given string matches a given hidden string.
 For more advanced examples, check out the [otc](../otc/README.md) example.
 
 ## Project structure
