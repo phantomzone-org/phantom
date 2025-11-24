@@ -18,6 +18,236 @@ impl Measurements {
     }
 
     #[allow(dead_code)]
+    pub fn average_cycle_time(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.total_cycle_time)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_prepare_pc(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_prepare_pc)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_read_and_prepare_rom(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_read_and_prepare_rom)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_read_rom(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_read_rom)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_prepare_rom(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_prepare_rom)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_read_and_prepare_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_read_and_prepare_registers)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_read_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_read_registers)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_prepare_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_prepare_registers)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_read_ram(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_read_ram)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_derive_ram_addr(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_derive_ram_addr)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_prepare_ram_addr(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_prepare_ram_addr)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_prepare_ram_read_statefull(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_prepare_ram_read_statefull)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_update_registers(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_update_registers)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_evaluate_rd_ops(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_evaluate_rd_ops)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_blind_select_rd(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_blind_select_rd)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_refresh_rd(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_refresh_rd)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_write_rd(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_write_rd)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_update_ram(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_update_ram)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_ram_update_op_eval(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_ram_update_op_eval)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_blind_select_ram_value(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_blind_select_ram_value)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_refresh_ram_value(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_refresh_ram_value)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_write_ram(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_write_ram)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
+    pub fn average_time_update_pc(&self) -> Duration {
+        let total_cycle_time = self
+            .cycle_measurements
+            .iter()
+            .map(|measurement| measurement.time_update_pc)
+            .sum::<Duration>();
+        total_cycle_time / self.cycle_measurements.len() as u32
+    }
+
+    #[allow(dead_code)]
     pub fn get_pc_val_fhe_uint_noise_list(&self) -> Vec<f64> {
         self.cycle_measurements
             .iter()

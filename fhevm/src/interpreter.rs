@@ -1147,7 +1147,7 @@ impl<BE: Backend> Interpreter<BE> {
                 }
             });
 
-            this_cycle_measurement.time_evaluate_rd_ops = measure_duration(|| {
+            this_cycle_measurement.time_blind_select_rd = measure_duration(|| {
                 let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
                 for (key, object) in rd_map.iter_mut() {
                     ops_ref.insert(*key as usize, object);
