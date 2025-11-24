@@ -1,6 +1,8 @@
 use crate::{
-    Instruction, InstructionsParser, Interpreter, RV32I, keys::{VMKeys, VMKeysPrepared}, parameters::CryptographicParameters,
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::CryptographicParameters,
     prepare::PrepareMultiple,
+    Instruction, InstructionsParser, Interpreter, RV32I,
 };
 use poulpy_core::{
     layouts::{

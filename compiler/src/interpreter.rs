@@ -11,9 +11,17 @@ use fhevm::{
     Interpreter,
 };
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
 use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+#[cfg(not(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+)))]
 use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
@@ -290,11 +298,7 @@ impl Phantom {
         &self.output_info
     }
 
-    pub fn encrypted_vm(
-        &self,
-        input_tape: &[u8],
-        max_cycles: usize,
-    ) -> EncryptedVM {
+    pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
@@ -336,7 +340,7 @@ impl Phantom {
             .unwrap_or(false);
         let threads = std::env::var("PHANTOM_THREADS")
             .map(|val| val.parse::<usize>().unwrap_or(1))
-            .unwrap_or(1);            
+            .unwrap_or(1);
         let phantom_debug = std::env::var("PHANTOM_DEBUG")
             .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
             .unwrap_or(false);

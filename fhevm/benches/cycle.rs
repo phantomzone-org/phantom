@@ -1,14 +1,24 @@
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fhevm::{
+    instructions::Instruction,
+    instructions::InstructionsParser,
+    interpreter::Interpreter,
     keys::{VMKeys, VMKeysPrepared},
     parameters::CryptographicParameters,
-    instructions::Instruction, instructions::InstructionsParser, interpreter::Interpreter,
     prepare::PrepareMultiple,
 };
-use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 
-#[cfg(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma"))]
+#[cfg(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+))]
 use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")))]
+#[cfg(not(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+)))]
 use poulpy_cpu_ref::FFT64Ref as BackendImpl;
 
 use poulpy_core::{
@@ -34,7 +44,11 @@ use poulpy_schemes::bin_fhe::{
 use std::hint::black_box;
 
 fn benc_cycle_with_backend(c: &mut Criterion) {
-    if cfg!(all(target_arch = "x86_64", target_feature = "avx2", target_feature = "fma")) {
+    if cfg!(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    )) {
         println!("Running benchmark with FFT64Avx backend");
         benc_cycle::<CGGI, BackendImpl>(c, "fft64_avx");
     } else {
@@ -46,28 +60,28 @@ fn benc_cycle_with_backend(c: &mut Criterion) {
 pub fn benc_cycle<BRA: BlindRotationAlgo, BE: Backend>(c: &mut Criterion, label: &str)
 where
     Module<BE>: ModuleNew<BE>
-    + GLWESecretPreparedFactory<BE>
-    + FheUintPreparedFactory<u32, BE>
-    + ModuleN
-    + GLWEEncryptSk<BE>
-    + FheUintPreparedEncryptSk<u32, BE>
-    + PrepareMultiple<BE, BRA>
-    + GLWEAutomorphismKeyEncryptSk<BE>
-    + GGLWEToGGSWKeyEncryptSk<BE>
-    + GLWETrace<BE>
-    + BDDKeyEncryptSk<BRA, BE>
-    + GGSWPreparedFactory<BE>
-    + GLWEExternalProduct<BE>
-    + GLWEPackerOps<BE>
-    + GLWEPacking<BE>
-    + FheUintPrepare<BRA, BE>
-    + GGSWBlindRotation<u32, BE>
-    + GGSWPreparedFactory<BE>
-    + GLWEDecrypt<BE>
-    + GLWEAutomorphismKeyPreparedFactory<BE>
-    + GGLWEToGGSWKeyPreparedFactory<BE>
-    + BDDKeyPreparedFactory<BRA, BE>
-    + GLWEBlindRetrieval<BE>,
+        + GLWESecretPreparedFactory<BE>
+        + FheUintPreparedFactory<u32, BE>
+        + ModuleN
+        + GLWEEncryptSk<BE>
+        + FheUintPreparedEncryptSk<u32, BE>
+        + PrepareMultiple<BE, BRA>
+        + GLWEAutomorphismKeyEncryptSk<BE>
+        + GGLWEToGGSWKeyEncryptSk<BE>
+        + GLWETrace<BE>
+        + BDDKeyEncryptSk<BRA, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEExternalProduct<BE>
+        + GLWEPackerOps<BE>
+        + GLWEPacking<BE>
+        + FheUintPrepare<BRA, BE>
+        + GGSWBlindRotation<u32, BE>
+        + GGSWPreparedFactory<BE>
+        + GLWEDecrypt<BE>
+        + GLWEAutomorphismKeyPreparedFactory<BE>
+        + GGLWEToGGSWKeyPreparedFactory<BE>
+        + BDDKeyPreparedFactory<BRA, BE>
+        + GLWEBlindRetrieval<BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
     Scratch<BE>: ScratchTakeCore<BE>,
     BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
@@ -139,18 +153,17 @@ where
     interpreter.set_threads(32);
 
     let mut runner = move || {
-        interpreter.cycle(
-            module,
-            &key_prepared,
-            scratch.borrow(),
-        );
+        interpreter.cycle(module, &key_prepared, scratch.borrow());
         black_box(());
     };
 
-    let id: BenchmarkId = BenchmarkId::from_parameter(format!("n_glwe: {} n_lwe: {}", params.n_glwe(), params.n_lwe()));
+    let id: BenchmarkId = BenchmarkId::from_parameter(format!(
+        "n_glwe: {} n_lwe: {}",
+        params.n_glwe(),
+        params.n_lwe()
+    ));
     group.bench_with_input(id, &(), |b, _| b.iter(&mut runner));
 }
-
 
 criterion_group!(benches, benc_cycle_with_backend);
 

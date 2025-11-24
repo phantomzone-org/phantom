@@ -1,6 +1,9 @@
 use crate::{
-    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST, keys::{VMKeys, VMKeysPrepared}, parameters::CryptographicParameters, rd_update::Evaluate,
+    keys::{VMKeys, VMKeysPrepared},
+    parameters::CryptographicParameters,
     prepare::PrepareMultiple,
+    rd_update::Evaluate,
+    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
 use poulpy_core::{
     layouts::{
@@ -123,7 +126,7 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
+    let mut this_cycle_measurement = crate::Measurement::new();
     interpreter.read_and_prepare_instruction_components(
         1,
         module,
@@ -251,7 +254,7 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
+    let mut this_cycle_measurement = crate::Measurement::new();
     interpreter.read_and_prepare_instruction_components(
         1,
         module,
@@ -441,7 +444,7 @@ where
             &mut source_xe,
             scratch.borrow(),
         );
-        let mut this_cycle_measurement = crate::PerCycleMeasurements::new();
+        let mut this_cycle_measurement = crate::Measurement::new();
         interpreter.read_and_prepare_instruction_components(
             1,
             module,
@@ -601,7 +604,7 @@ where
 
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
-    
+
     interpreter.set_verbose_timings(true);
     interpreter.set_threads(16);
 

@@ -198,23 +198,23 @@ impl<B: Backend> CryptographicParameters<B> {
         self.base2k_cbt_brk
     }
 
-    pub fn base2k_cbt_atk(&self) -> Base2K{
+    pub fn base2k_cbt_atk(&self) -> Base2K {
         self.base2k_cbt_atk
     }
 
-    pub fn base2k_cbt_tsk(&self) -> Base2K{
+    pub fn base2k_cbt_tsk(&self) -> Base2K {
         self.base2k_cbt_tsk
     }
 
-    pub fn base2k_fhe_uint(&self) -> Base2K{
+    pub fn base2k_fhe_uint(&self) -> Base2K {
         self.base2k_fhe_uint
     }
 
-    pub fn base2k_glwe_to_glwe_ksk(&self) -> Base2K{
+    pub fn base2k_glwe_to_glwe_ksk(&self) -> Base2K {
         self.base2k_glwe_to_glwe_ksk
     }
 
-    pub fn base2k_glwe_to_lwe_ksk(&self) -> Base2K{
+    pub fn base2k_glwe_to_lwe_ksk(&self) -> Base2K {
         self.base2k_glwe_to_lwe_ksk
     }
 
@@ -250,11 +250,11 @@ impl<B: Backend> CryptographicParameters<B> {
         self.k_lwe
     }
 
-    pub fn k_glwe_to_glwe_ksk(&self) -> TorusPrecision{
+    pub fn k_glwe_to_glwe_ksk(&self) -> TorusPrecision {
         self.k_glwe_to_glwe_ksk
     }
 
-    pub fn k_glwe_to_lwe_ksk(&self) -> TorusPrecision{
+    pub fn k_glwe_to_lwe_ksk(&self) -> TorusPrecision {
         self.k_glwe_to_lwe_ksk
     }
 
@@ -271,7 +271,10 @@ impl<B: Backend> CryptographicParameters<B> {
                 n_lwe: self.n_lwe.into(),
                 base2k: self.base2k_cbt_brk(),
                 k: self.k_pbs(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_brk()).into(),
+                dnum: self
+                    .k_fhe_uint_prepared()
+                    .div_ceil(self.base2k_cbt_brk())
+                    .into(),
                 rank: self.rank(),
             },
             layout_atk: GLWEAutomorphismKeyLayout {
@@ -279,7 +282,10 @@ impl<B: Backend> CryptographicParameters<B> {
                 base2k: self.base2k_cbt_atk(),
                 k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_atk()).into(),
+                dnum: self
+                    .k_fhe_uint_prepared()
+                    .div_ceil(self.base2k_cbt_atk())
+                    .into(),
                 dsize: Dsize(1),
             },
             layout_tsk: GGLWEToGGSWKeyLayout {
@@ -287,7 +293,10 @@ impl<B: Backend> CryptographicParameters<B> {
                 base2k: self.base2k_cbt_tsk(),
                 k: self.k_pbs(),
                 rank: self.rank(),
-                dnum: self.k_fhe_uint_prepared().div_ceil(self.base2k_cbt_tsk()).into(),
+                dnum: self
+                    .k_fhe_uint_prepared()
+                    .div_ceil(self.base2k_cbt_tsk())
+                    .into(),
                 dsize: Dsize(1),
             },
         }
