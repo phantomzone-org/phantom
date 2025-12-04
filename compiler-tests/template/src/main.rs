@@ -1,4 +1,5 @@
 use compiler::{CompileOpts, Phantom};
+use std::env;
 use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
@@ -33,7 +34,10 @@ fn main() {
     // Set the number of cycles you want to run
     // Allow enough cycles for the guest program to reach the point where it
     // writes the output buffer before hitting the busy loop at the end.
-    let max_cycles = 700;
+    let max_cycles = env::var("MAX_CYCLES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(700);
 
     // Provide sample Inputs
     let input = Input {

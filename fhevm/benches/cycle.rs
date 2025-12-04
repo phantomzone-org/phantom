@@ -7,6 +7,7 @@ use fhevm::{
     parameters::CryptographicParameters,
     prepare::PrepareMultiple,
 };
+use std::env;
 
 #[cfg(all(
     target_arch = "x86_64",
@@ -44,20 +45,29 @@ use poulpy_schemes::bin_fhe::{
 use std::hint::black_box;
 
 fn benc_cycle_with_backend(c: &mut Criterion) {
+    // Parse thread count from environment variable
+    // Usage: THREADS=64 cargo bench --package fhevm --bench cycle
+    let threads = env::var("PHANTOM_THREADS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(32);
+
+    println!("Using {} threads", threads);
+
     if cfg!(all(
         target_arch = "x86_64",
         target_feature = "avx2",
         target_feature = "fma"
     )) {
         println!("Running benchmark with FFT64Avx backend");
-        benc_cycle::<CGGI, BackendImpl>(c, "fft64_avx");
+        benc_cycle::<CGGI, BackendImpl>(c, "fft64_avx", threads);
     } else {
         println!("Running benchmark with FFT64Ref backend");
-        benc_cycle::<CGGI, BackendImpl>(c, "fft64_ref");
+        benc_cycle::<CGGI, BackendImpl>(c, "fft64_ref", threads);
     }
 }
 
-pub fn benc_cycle<BRA: BlindRotationAlgo, BE: Backend>(c: &mut Criterion, label: &str)
+pub fn benc_cycle<BRA: BlindRotationAlgo, BE: Backend>(c: &mut Criterion, label: &str, threads: usize)
 where
     Module<BE>: ModuleNew<BE>
         + GLWESecretPreparedFactory<BE>
@@ -149,8 +159,8 @@ where
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
     key_prepared.prepare(module, &key, scratch.borrow());
 
-    interpreter.set_verbose_timings(true);
-    interpreter.set_threads(32);
+    interpreter.set_verbose_timings(false);
+    interpreter.set_threads(threads);
 
     let mut runner = move || {
         interpreter.cycle(module, &key_prepared, scratch.borrow());

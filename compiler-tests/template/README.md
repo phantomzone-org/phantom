@@ -9,20 +9,25 @@ The main program is implemented in the `main.rs` file of the guest crate. The gu
 
 Every Phantom program should follow the same project layout.
 
-## Writing programs
-
-### TL;DR Checklist for Writing a Phantom Program
+## TL;DR Checklist for Writing, Compiling, and Running a Phantom Program
 
 To write a program for Phantom, inside the `guest` crate in `main.rs`:
 - [ ] Define the input and output struct(s) for your program.
 - [ ] Declare a panic handler function (or keep the default).
 - [ ] Implement your desired logic in the `main` function.
 
-To run the program, in `main.rs` the current directory:
+To compile and run the program, in `main.rs` the current directory:
 - [ ] Redeclare the input and output struct(s) for your program.
 - [ ] Provide sample inputs for your program.
-- [ ] Run `PHANTOM_THREADS=[# of threads] PHANTOM_DEBUG=[true/false] PHANTOM_VERBOSE_TIMINGS=[true/false] cargo run --release` in this directory to run Phantom.
+- [ ] Run `PHANTOM_THREADS=[# of threads] PHANTOM_DEBUG=[true/false] PHANTOM_VERBOSE_TIMINGS=[true/false] MAX_CYCLES=[# of cycles] cargo run --release` in this directory to run Phantom.
 - [ ] For testing, implement the expected functionality to compare with Phantom's output.
+
+## Writing programs
+
+This module allows you to write a normal Rust program, which is then compiled into a RISC-V binary.
+The RISC-V binary is then loaded into Phantom, which encrypts the instructions and hidden constants.
+The `main.rs` of this crate is responsible for compiling the program into a RISC-V binary, loading it into Phantom, and then executing it on encrypted inputs.
+All the steps outlined below are providing the necessary information to prepare Phantom.
 
 ### Explaining the Components of the Phantom Program
 
@@ -110,10 +115,20 @@ Note that if Phantom does not execute enough cycles, it will not produce the exp
 Then use the following command in this directory to run the encrypted program.
 ```bash
 # Without AVX2 and FMA support
-PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false cargo run --release
+PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false MAX_CYCLES=700 cargo run --release
 
 # With AVX2 and FMA support
-RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false cargo run --release
+RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false MAX_CYCLES=700 cargo run --release
 ```
+
+The description of the environment variables is as follows:
+| Environment Variable      | Description                                          | Default Value |
+|--------------------------|-------------------------------------------------------|---------------|
+| `PHANTOM_THREADS`        | Number of threads to use during execution             | `32`          |
+| `PHANTOM_VERBOSE_TIMINGS`| Print timing breakdown of each cycle                  | `false`       |
+| `PHANTOM_DEBUG`          | Print debug information during execution              | `false`       |
+| `MAX_CYCLES`             | Maximum number of cycles to execute                   | `700`         |
+| `RUSTFLAGS`              | Rust compiler flags (only set with AVX2 and FMA)      | `""`          |
+
 
 For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output.

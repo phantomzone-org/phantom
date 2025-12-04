@@ -9,6 +9,16 @@ The implemented quote generation algorithm works over f32 values and is a simpli
 ## Project structure
 For details about the structure of the project, please refer to the [template](../template/README.md) example.
 
+## Compiling and running the program
+To compile and run the program, run the following command in this directory to execute the encrypted program.
+```bash
+# Without AVX2 and FMA support
+PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false MAX_CYCLES=9000 cargo run --release
+
+# With AVX2 and FMA support
+RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=32 PHANTOM_VERBOSE_TIMINGS=true PHANTOM_DEBUG=false MAX_CYCLES=700 cargo run --release
+```
+
 <!-- ## Project structure
 
 The main program is implemented in the `main.rs` file of the guest crate. The guest crate is part of the workspace of its parent crate (`otc` in this case). The parent crate is then responsible for compiling the guest crate and, subsequently, encrypting the compiled program.

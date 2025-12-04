@@ -52,7 +52,10 @@ fn main() {
     let elf_bytes = compiler.build("string-match");
     let pz = Phantom::from_elf(elf_bytes);
 
-    let max_cycles = 100;
+    let max_cycles = env::var("MAX_CYCLES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100);
 
     let input = Input {
         input_string: UpperBoundedString::new("not-mississippi"),

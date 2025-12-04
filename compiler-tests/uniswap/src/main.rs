@@ -68,7 +68,10 @@ fn main() {
         account: account.clone(),
     };
 
-    let max_cycles = 300;
+    let max_cycles = env::var("MAX_CYCLES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(300);
     // let max_cycles = 10; // For testing purposes
 
     let input_tape = to_u8_slice(&input);

@@ -38,7 +38,10 @@ fn main() {
     };
 
     // test vm
-    let max_cycles = 9_000;
+    let max_cycles = env::var("MAX_CYCLES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(9_000);
     // let max_cycles = 10; // For testing purposes
     
     println!("Initializing Phantom...");

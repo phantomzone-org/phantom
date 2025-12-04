@@ -40,7 +40,7 @@ We benchmark Phantom on a AWS r6i.metal, with support for AVX2 and FMA instructi
 
 Average Cycle Time: 763 ms
   1. Read and prepare instruction components: 165 ms
-     - Read instruction components: 28.36042ms
+     - Read instruction components: 28 ms
      - Prepare instruction components: 137 ms
   2. Read and prepare registers: 144 ms
      - Read registers: 7.86 ms
@@ -56,13 +56,13 @@ Average Cycle Time: 763 ms
      - PC prepare: 63 ms
 
 
-To reproduce benchmarks for a single cycle, run:
+To reproduce benchmarks for a single cycle, set the number of threads and run:
 ```
 # Without AVX2 and FMA support
-cargo bench --package fhevm --bench cycle
+PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 
 # With AVX2 and FMA support
-RUSTFLAGS="-C target-feature=+avx2,+fma" cargo bench --package fhevm --bench cycle
+RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 ```
 
 ## Contribute
