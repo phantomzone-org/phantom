@@ -28,6 +28,42 @@ This module allows you to write a normal Rust program, which is then compiled in
 The RISC-V binary is then loaded into Phantom, which encrypts the instructions and hidden constants.
 The `main.rs` of this crate is responsible for compiling the program into a RISC-V binary, loading it into Phantom, and then executing it on encrypted inputs.
 All the steps outlined below are providing the necessary information to prepare Phantom.
+Below is an annotated snippet of the steps.
+
+```rust
+    // Instantiate the compiler
+    let compiler = CompileOpts::new("guest");
+    
+    // Compile the desired program (in this case, `template`)
+    let elf_bytes = compiler.build("template");
+    
+    // Load the bytes of the compiled program into Phantom
+    let pz = Phantom::from_elf(elf_bytes);
+
+    // Choose the number of cycles to execute (see below)
+    let max_cycles = 700;
+
+    // Provide sample Inputs
+    let input = Input {
+        point: 123,
+    };
+
+    // Convert the input struct into bytes
+    let input_tape = to_u8_slice(&input);
+    
+    // Load Phantom with the given inputs, and other parameters
+    let mut enc_vm = pz.encrypted_vm(input_tape, max_cycles);
+
+    // Execute the program on Phantom
+    enc_vm.execute();
+    
+    // Extract the output from Phantom
+    let encrypted_vm_output_tape = enc_vm.output_tape();
+
+    // Parse the output
+    let output = from_u8_slice::<Output>(&encrypted_vm_output_tape);
+```
+
 
 ### Explaining the Components of the Phantom Program
 
@@ -127,8 +163,53 @@ The description of the environment variables is as follows:
 | `PHANTOM_THREADS`        | Number of threads to use during execution             | `32`          |
 | `PHANTOM_VERBOSE_TIMINGS`| Print timing breakdown of each cycle                  | `false`       |
 | `PHANTOM_DEBUG`          | Print debug information during execution              | `false`       |
-| `MAX_CYCLES`             | Maximum number of cycles to execute                   | `700`         |
+| `MAX_CYCLES`             | Maximum number of cycles to execute (see below)       | `700`         |
 | `RUSTFLAGS`              | Rust compiler flags (only set with AVX2 and FMA)      | `""`          |
 
-
 For testing purposes, you can also implement the expected behavior in `main.rs` to compare with Phantom's output.
+
+## Choosing the maximum number of cycles
+
+In a conventional computer, a virtual machine executes instructions until it encounters a termination instruction that marks the end of the program.
+In Phantom, however, all instructions are encrypted, so the interpreter cannot detect when the program has logically terminated.
+Therefore, we must pre-specify an upper bound on the number of execution cycles.
+This bound must be large enough to ensure that the program completes successfully within the allocated number of cycles.
+
+To determine an appropriate cycle bound for your program, you can run the provided test VM on representative sample inputs.
+This will give an estimate of the maximum number of cycles your program requires.
+Below, we include an annotated snippet of the code responsible for running the test VM.
+
+```rust
+    // Instantiate the compiler
+    let compiler = CompileOpts::new("guest");
+
+    // Load the desired program
+    let elf_bytes = compiler.build("template");
+
+    // Provide sample Inputs
+    let input = Input {
+        point: 123,
+    };
+
+    // Choose a candidate max_cycles
+    let max_cycles = 1000;
+
+    // Instantiating the Test VM
+    let mut vm = pz.test_vm(max_cycles);
+
+    // Reading the inputs into the test VM
+    vm.read_input_tape(input_tape);
+
+    // Running the test VM
+    vm.execute();
+
+    // Extracting the output tape of the test VM
+    let output_tape = vm.output_tape();
+
+    // Parsing the output of the testVM 
+    let have_output = from_u8_slice::<Output>(&output_tape);
+
+    // Compare have_output to your expected output to see if the program executed correctly
+    // If not, increase max_cycles and repeat
+
+```
