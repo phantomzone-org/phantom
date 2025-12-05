@@ -38,22 +38,22 @@ The dependency graph of the operations performed in these components is describe
 
 We benchmark Phantom on a AWS r6i.metal, with support for AVX2 and FMA instructions, parallelized across 32 cores, and measure the runtime of a single cycle and all 6 components.
 
-Average Cycle Time: 763 ms
-  1. Read and prepare instruction components: 165 ms
-     - Read instruction components: 28 ms
-     - Prepare instruction components: 137 ms
-  2. Read and prepare registers: 144 ms
-     - Read registers: 7.86 ms
-     - Prepare registers: 136 ms
-  3. Read ram: 79 ms
-  4. Update registers: 210 ms
-     - Evaluate rd ops: 130 ms
-     - Blind selection: 1.42 ms
-     - Write rd: 79 ms
-  5. Update ram: 81 ms
-  6. Update pc: 81 ms
-     - PC update BDD: 18 ms
-     - PC prepare: 63 ms
+Average Cycle Time: 655.711279ms
+  1. Read and prepare instruction components: 128.463434ms
+     - Read instruction components: 28.019331ms
+     - Prepare instruction components: 100.443453ms
+  2. Read and prepare registers: 106.049704ms
+     - Read registers: 7.524631ms
+     - Prepare registers: 98.524193ms
+  3. Read ram: 71.201851ms
+  4. Update registers: 203.944757ms
+     - Evaluate rd ops: 133.086641ms
+     - Blind selection: 1.544176ms
+     - Write rd: 69.312716ms
+  5. Update ram: 72.566678ms
+  6. Update pc: 73.433935ms
+     - PC update BDD: 18.872475ms
+     - PC prepare: 54.560689ms
 
 
 To reproduce benchmarks for a single cycle, set the number of threads and run:
@@ -65,4 +65,6 @@ PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 ```
 
-## Contribute
+## Acknowledgement
+
+Development of Phantom is primarily supported by the [Ethereum foundation](https://ethereum.foundation/).
