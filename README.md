@@ -10,7 +10,23 @@ It enables black-box execution of any RISC-V program, allowing developers to wri
 
 ## Building Phantom
 
-We provide a setup script at [setup.sh](./scripts/setup.sh) to build Phantom and required dependencies from scratch on a fresh Debian/Ubuntu machine.
+We provide setup scripts to build Phantom and required dependencies from scratch:
+- **Ubuntu/Debian**: [setup.sh](./scripts/setup.sh)
+- **macOS**: [setup-macos.sh](./scripts/setup-macos.sh)
+
+### macOS Setup Notes
+
+On macOS, this project requires `rustup` (not Homebrew Rust) to add the `riscv32i-unknown-none-elf` target needed for compiling guest programs. If you have Rust installed via Homebrew, please uninstall it first:
+
+```bash
+brew uninstall rust rust-analyzer
+```
+
+Then run the macOS setup script:
+
+```bash
+./scripts/setup-macos.sh
+```
 
 ## How to use Phantom
 
