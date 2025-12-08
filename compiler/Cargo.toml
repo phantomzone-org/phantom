@@ -13,6 +13,7 @@ poulpy-schemes = {workspace = true}
 fhevm = { path = "../fhevm"}
 itertools = "0.14.0"
 tqdm = "0.8.0"
+num_cpus = "1.0"
 
 [features]
 verbose=[]

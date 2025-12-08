@@ -40,20 +40,18 @@ fn main() {
         .unwrap_or(700);
 
     // Provide sample Inputs
-    let input = Input {
-        point: 123,
-    };
+    let input = Input { point: 123 };
 
     // Running the encrypted VM
     let input_tape = to_u8_slice(&input);
-    println!("Initializing Phantom...");    
+    println!("Initializing Phantom...");
     let mut enc_vm = pz.encrypted_vm(input_tape, max_cycles);
     println!("Phantom initialized!");
 
     println!("Executing Encrypted Cycles...");
     enc_vm.execute();
     println!("Finished Executing Encrypted Cycles!");
-    
+
     let encrypted_vm_output_tape = enc_vm.output_tape();
 
     // Running the cleartext VM for comparison and testing purposes

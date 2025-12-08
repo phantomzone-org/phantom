@@ -1,7 +1,7 @@
-use std::ptr;
-
 use compiler::{CompileOpts, Phantom};
 use otc::{quote, ClientProfile, ClientType, MarketData, Quote, Trade};
+use std::env;
+use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
     unsafe { core::slice::from_raw_parts((v as *const T) as *const u8, core::mem::size_of::<T>()) }
@@ -43,11 +43,11 @@ fn main() {
         .and_then(|v| v.parse().ok())
         .unwrap_or(9_000);
     // let max_cycles = 10; // For testing purposes
-    
+
     println!("Initializing Phantom...");
     let mut enc_vm = pz.encrypted_vm(to_u8_slice(&input), max_cycles);
     println!("Phantom initialized!");
-    
+
     println!("Executing Encrypted Cycles...");
     enc_vm.execute();
     println!("Finished Executing Encrypted Cycles!");

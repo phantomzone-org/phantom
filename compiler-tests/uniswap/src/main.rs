@@ -1,5 +1,5 @@
 use compiler::{CompileOpts, Phantom};
-use std::{ops::Div, ptr};
+use std::{env, ops::Div, ptr};
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
     unsafe { core::slice::from_raw_parts((v as *const T) as *const u8, core::mem::size_of::<T>()) }

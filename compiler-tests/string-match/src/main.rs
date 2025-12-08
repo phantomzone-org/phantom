@@ -1,4 +1,5 @@
 use compiler::{CompileOpts, Phantom};
+use std::env;
 use std::ptr;
 
 fn to_u8_slice<T>(v: &T) -> &[u8] {
@@ -69,7 +70,7 @@ fn main() {
     println!("Executing Encrypted Cycles...");
     enc_vm.execute();
     println!("Finished Executing Encrypted Cycles!");
-    
+
     let encrypted_vm_output_tape = enc_vm.output_tape();
 
     // Running the cleartext VM for comparison and testing purposes
@@ -81,7 +82,6 @@ fn main() {
     assert_eq!(output_tape, encrypted_vm_output_tape);
     println!("Encrypted Tape and Test VM Tape are equal");
     println!("output_tape={:?}", output_tape);
-
 
     fn expected_output(input: Input) -> Output {
         let hidden_string = UpperBoundedString::new("mississippi");
