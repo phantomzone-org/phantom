@@ -339,7 +339,6 @@ impl Phantom {
             .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
         let default_threads = num_cpus::get_physical();
-        dbg!(default_threads);
         let threads = std::env::var("PHANTOM_THREADS")
             .map(|val| val.parse::<usize>().unwrap_or(default_threads))
             .unwrap_or(default_threads);
