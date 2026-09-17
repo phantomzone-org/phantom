@@ -9,8 +9,10 @@ members = [
 [workspace.package]
 
 [workspace.dependencies]
-poulpy-hal = {version = "0.4.1"}
-poulpy-core = {version = "0.4.1", features = ["enable-avx"]}
-poulpy-cpu-ref = {version = "0.1.1"}
-poulpy-cpu-avx = {version = "0.1.1", features = ["enable-avx"]}
-poulpy-schemes = {version = "0.4.1", features = ["enable-avx"]}
+poulpy-hal = {version = "0.8.3"}
+poulpy-core = {version = "0.8.3"}
+poulpy-cpu-ref = {version = "0.8.3", features = ["enable-core"]}
+# `enable-avx` requires RUSTFLAGS="-C target-feature=+avx2,+fma"; `enable-rayon`
+# adds the rayon-scheduled `FFT64AvxRayon` backend (PHANTOM_BACKEND=fft64-avx-rayon).
+poulpy-cpu-avx = {version = "0.8.3", features = ["enable-avx", "enable-rayon"]}
+poulpy-bin-fhe = {version = "0.8.3"}

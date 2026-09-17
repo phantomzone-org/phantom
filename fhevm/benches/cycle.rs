@@ -1,11 +1,11 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fhevm::{
+    backend::{prelude::*, PhantomBackend, PhantomBootstrapModule},
     instructions::Instruction,
     instructions::InstructionsParser,
     interpreter::Interpreter,
     keys::{VMKeys, VMKeysPrepared},
     parameters::CryptographicParameters,
-    prepare::PrepareMultiple,
 };
 use std::env;
 
@@ -14,39 +14,20 @@ use std::env;
     target_feature = "avx2",
     target_feature = "fma"
 ))]
-use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma"
-)))]
-use poulpy_cpu_ref::FFT64Ref as BackendImpl;
+use poulpy_cpu_avx::{FFT64Avx, FFT64AvxRayon};
+use poulpy_cpu_ref::FFT64Ref;
 
-use poulpy_core::{
-    layouts::{
-        GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
-        GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret,
-    },
-    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt, GLWEEncryptSk,
-    GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
-};
+use poulpy_bin_fhe::blind_rotation::{BlindRotationAlgo, CGGI};
+use poulpy_core::layouts::{GLWESecret, GLWESecretPrepared, LWESecret};
 use poulpy_hal::{
-    api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
-    layouts::{Backend, Module, Scratch, ScratchOwned},
+    layouts::{Module, ScratchOwned},
     source::Source,
-};
-use poulpy_schemes::bin_fhe::{
-    bdd_arithmetic::{
-        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
-    },
-    blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
 };
 use std::hint::black_box;
 
 fn benc_cycle_with_backend(c: &mut Criterion) {
     // Parse thread count from environment variable
-    // Usage: THREADS=64 cargo bench --package fhevm --bench cycle
+    // Usage: PHANTOM_THREADS=64 cargo bench --package fhevm --bench cycle
     let threads = env::var("PHANTOM_THREADS")
         .ok()
         .and_then(|s| s.parse::<usize>().ok())
@@ -54,47 +35,54 @@ fn benc_cycle_with_backend(c: &mut Criterion) {
 
     println!("Using {} threads", threads);
 
-    if cfg!(all(
+    // PHANTOM_BACKEND selects the backend: fft64-ref, fft64-avx (default when
+    // the build has AVX2/FMA) or fft64-avx-rayon.
+    let has_avx = cfg!(all(
         target_arch = "x86_64",
         target_feature = "avx2",
         target_feature = "fma"
-    )) {
-        println!("Running benchmark with FFT64Avx backend");
-        benc_cycle::<CGGI, BackendImpl>(c, "fft64_avx", threads);
-    } else {
-        println!("Running benchmark with FFT64Ref backend");
-        benc_cycle::<CGGI, BackendImpl>(c, "fft64_ref", threads);
+    ));
+    let backend = env::var("PHANTOM_BACKEND")
+        .map(|s| s.trim().to_ascii_lowercase().replace('_', "-"))
+        .unwrap_or_else(|_| {
+            if has_avx {
+                "fft64-avx".into()
+            } else {
+                "fft64-ref".into()
+            }
+        });
+    println!("Running benchmark with {backend} backend");
+
+    match backend.as_str() {
+        "fft64-ref" => benc_cycle::<CGGI, FFT64Ref>(c, "fft64_ref", threads),
+        #[cfg(all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ))]
+        "fft64-avx" => benc_cycle::<CGGI, FFT64Avx>(c, "fft64_avx", threads),
+        #[cfg(all(
+            target_arch = "x86_64",
+            target_feature = "avx2",
+            target_feature = "fma"
+        ))]
+        "fft64-avx-rayon" => {
+            let _ = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build_global();
+            benc_cycle::<CGGI, FFT64AvxRayon>(c, "fft64_avx_rayon", threads)
+        }
+        other => panic!("PHANTOM_BACKEND={other}: unknown or unavailable in this build"),
     }
 }
 
-pub fn benc_cycle<BRA: BlindRotationAlgo, BE: Backend>(c: &mut Criterion, label: &str, threads: usize)
-where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>
-        + GLWEBlindRetrieval<BE>,
+pub fn benc_cycle<BRA: BlindRotationAlgo, BE: PhantomBackend>(
+    c: &mut Criterion,
+    label: &str,
+    threads: usize,
+) where
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
     let group_name: String = format!("cycle::{label}");
 
@@ -116,10 +104,10 @@ where
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
     // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
+    let mut sk_glwe: GLWESecret<Vec<u8>, i64> = module.glwe_secret_alloc(params.rank());
+    module.glwe_secret_fill_ternary_prob(&mut sk_glwe, 0.5, &mut source_xs);
+    let mut sk_lwe: LWESecret<Vec<u8>, i64> = module.lwe_secret_alloc(params.n_lwe());
+    module.lwe_secret_fill_binary_block(&mut sk_lwe, params.lwe_block_size(), &mut source_xs);
 
     let mut interpreter: Interpreter<BE> =
         Interpreter::new_with_debug(&params, rom.len(), ram.len());
@@ -130,8 +118,8 @@ where
     }
 
     let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
+        module.glwe_secret_prepared_alloc(params.rank());
+    module.glwe_secret_prepare(&mut sk_glwe_prepared, &sk_glwe);
 
     interpreter.instructions_encrypt_sk(
         module,
@@ -139,7 +127,7 @@ where
         &sk_glwe_prepared,
         &mut source_xa,
         &mut source_xe,
-        scratch.borrow(),
+        &mut scratch.borrow(),
     );
 
     interpreter.ram_encrypt_sk(
@@ -148,7 +136,7 @@ where
         &sk_glwe_prepared,
         &mut source_xa,
         &mut source_xe,
-        scratch.borrow(),
+        &mut scratch.borrow(),
     );
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 28);
@@ -157,13 +145,13 @@ where
         VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
 
     let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
+    key_prepared.prepare(module, &key, &mut scratch.borrow());
 
     interpreter.set_verbose_timings(false);
     interpreter.set_threads(threads);
 
     let mut runner = move || {
-        interpreter.cycle(module, &key_prepared, scratch.borrow());
+        interpreter.cycle(module, &key_prepared, &mut scratch.borrow());
         black_box(());
     };
 

@@ -65,6 +65,20 @@ PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 RUSTFLAGS="-C target-feature=+avx2,+fma" PHANTOM_THREADS=[# of threads] cargo bench --package fhevm --bench cycle
 ```
 
+`PHANTOM_THREADS` sets the number of worker threads and `PHANTOM_BACKEND` selects the
+[poulpy](https://github.com/poulpy-fhe/poulpy) backend:
+
+| `PHANTOM_BACKEND` | backend | threading |
+|---|---|---|
+| `fft64-avx` (default with AVX2/FMA) | `FFT64Avx` | Phantom's own loops on `std` threads; poulpy's operations serial |
+| `fft64-avx-rayon` | `FFT64AvxRayon` | every loop, Phantom's and poulpy's, on a rayon pool of `PHANTOM_THREADS` threads |
+| `fft64-ref` (default otherwise) | `FFT64Ref` | as `fft64-avx`, portable |
+
+At Phantom's ring size (N = 1024) the rayon backend is much slower than `fft64-avx` with
+Phantom's own threads (measured on the template program with poulpy 0.8.3: 12 s versus
+1.55 s per cycle at 16 threads), because poulpy's kernels split into fine-grained rayon
+tasks; it is kept selectable for comparison with future poulpy releases.
+
 ## Acknowledgement
 
 Development of Phantom is primarily supported by the [Ethereum foundation](https://ethereum.foundation/).

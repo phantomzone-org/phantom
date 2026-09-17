@@ -1,6 +1,4 @@
-use poulpy_schemes::bin_fhe::bdd_arithmetic::{
-    BitCircuit, BitCircuitFamily, BitCircuitInfo, Circuit, Node,
-};
+use poulpy_bin_fhe::bdd_arithmetic::{BitCircuit, BitCircuitFamily, BitCircuitInfo, Circuit, Node};
 pub(crate) enum AnyBitCircuit {
     B0(BitCircuit<4>),
     B1(BitCircuit<8>),

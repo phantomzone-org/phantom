@@ -1,77 +1,47 @@
 use std::collections::HashMap;
 
-use poulpy_core::{
-    layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GetGaloisElement},
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEPacking, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
-};
-use poulpy_hal::{
-    api::ModuleLogN,
-    layouts::{Backend, DataMut, DataRef, Scratch},
-};
-use poulpy_schemes::bin_fhe::bdd_arithmetic::{
-    FheUint, FheUintPrepared, GLWEBlinSelection, UnsignedInteger,
-};
+use poulpy_bin_fhe::bdd_arithmetic::{FheUint, FheUintPrepared, UnsignedInteger};
+use poulpy_core::layouts::GetAutomorphismKey;
+use poulpy_hal::layouts::{Module, ScratchArena};
 
-use crate::RAM_UPDATE;
+#[allow(unused_imports)]
+use crate::backend::prelude::*;
+use crate::{
+    backend::{PhantomBackend, PhantomModule},
+    RAM_UPDATE,
+};
 
 pub trait Store<T: UnsignedInteger> {
-    fn eval_enc<R, D, A, B, H, K, M, BE: Backend>(
+    #[allow(clippy::too_many_arguments)]
+    fn eval_enc<H, BE: PhantomBackend>(
         &self,
         threads: usize,
-        module: &M,
-        res: &mut FheUint<R, T>,
-        rs2: &FheUint<A, T>,
-        loaded: &FheUint<B, T>,
-        offset: &FheUintPrepared<D, u32, BE>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, T, i64>,
+        rs2: &FheUint<Vec<u8>, T, i64>,
+        loaded: &FheUint<Vec<u8>, T, i64>,
+        offset: &FheUintPrepared<Vec<u8>, u32, BE>,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        R: DataMut,
-        A: DataRef,
-        D: DataRef,
-        B: DataRef,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        M: ModuleLogN
-            + GLWEBlinSelection<u32, BE>
-            + GLWERotate<BE>
-            + GLWETrace<BE>
-            + GLWESub
-            + GLWEAdd
-            + GLWECopy
-            + GLWEDecrypt<BE>
-            + GLWEPacking<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>;
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>;
 }
 
 impl Store<u32> for RAM_UPDATE {
-    fn eval_enc<R, D, A, B, H, K, M, BE: Backend>(
+    fn eval_enc<H, BE: PhantomBackend>(
         &self,
         _threads: usize,
-        module: &M,
-        res: &mut FheUint<R, u32>,
-        rs2: &FheUint<A, u32>,
-        loaded: &FheUint<B, u32>,
-        offset: &FheUintPrepared<D, u32, BE>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, u32, i64>,
+        rs2: &FheUint<Vec<u8>, u32, i64>,
+        loaded: &FheUint<Vec<u8>, u32, i64>,
+        offset: &FheUintPrepared<Vec<u8>, u32, BE>,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        R: DataMut,
-        A: DataRef,
-        D: DataRef,
-        B: DataRef,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        M: ModuleLogN
-            + GLWEBlinSelection<u32, BE>
-            + GLWERotate<BE>
-            + GLWETrace<BE>
-            + GLWESub
-            + GLWEAdd
-            + GLWECopy
-            + GLWEDecrypt<BE>
-            + GLWEPacking<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>,
     {
         match self {
             Self::NONE => {
@@ -83,13 +53,14 @@ impl Store<u32> for RAM_UPDATE {
             }
 
             Self::SB => {
-                let mut cts: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut cts: HashMap<usize, FheUint<Vec<u8>, u32, i64>> = HashMap::new();
                 for i in 0..4 {
-                    let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(res);
+                    let mut tmp: FheUint<Vec<u8>, u32, i64> =
+                        FheUint::alloc_from_infos(module, res);
                     tmp.splice_u8(module, i, 0, loaded, rs2, keys, scratch);
                     cts.insert(i, tmp);
                 }
-                let mut cts_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut cts_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32, i64>> = HashMap::new();
                 for (key, object) in cts.iter_mut() {
                     cts_ref.insert(*key, object);
                 }
@@ -97,13 +68,14 @@ impl Store<u32> for RAM_UPDATE {
             }
 
             Self::SH => {
-                let mut cts: HashMap<usize, FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut cts: HashMap<usize, FheUint<Vec<u8>, u32, i64>> = HashMap::new();
                 for i in 0..2 {
-                    let mut tmp: FheUint<Vec<u8>, u32> = FheUint::alloc_from_infos(res);
+                    let mut tmp: FheUint<Vec<u8>, u32, i64> =
+                        FheUint::alloc_from_infos(module, res);
                     tmp.splice_u16(module, i, 0, loaded, rs2, keys, scratch);
                     cts.insert(i << 1, tmp);
                 }
-                let mut cts_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut cts_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32, i64>> = HashMap::new();
                 for (key, object) in cts.iter_mut() {
                     cts_ref.insert(*key, object);
                 }

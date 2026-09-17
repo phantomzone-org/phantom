@@ -1,20 +1,22 @@
-use poulpy_core::{
-    layouts::{GGLWEInfos, GGLWEPreparedToRef, GLWEAutomorphismKeyHelper, GetGaloisElement},
-    GLWEAdd, GLWECopy, GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
-};
-use poulpy_hal::{
-    api::ModuleLogN,
-    layouts::{Backend, DataMut, DataRef, Scratch},
-};
-use poulpy_schemes::{
-    bin_fhe::bdd_arithmetic::{
+use poulpy_bin_fhe::{
+    bdd_arithmetic::{
         Add, And, ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepared, Or, Sll, Slt, Sltu, Sra, Srl,
         Sub, UnsignedInteger, Xor,
     },
     define_bdd_2w_to_1w_trait, impl_bdd_2w_to_1w_trait,
 };
+use poulpy_core::{
+    layouts::{GGSWInfos, GLWEInfos, GLWEToBackendMut, GetAutomorphismKey},
+    GLWEBytesOf,
+};
+use poulpy_hal::layouts::{Backend, Module, ScratchArena};
 
-use crate::RD_UPDATE;
+#[allow(unused_imports)]
+use crate::backend::prelude::*;
+use crate::{
+    backend::{for_each_with_scratch, worker_bytes, PhantomBackend, PhantomModule},
+    RD_UPDATE,
+};
 
 define_bdd_2w_to_1w_trait!(pub Auipc, auipc);
 impl_bdd_2w_to_1w_trait!(
@@ -43,68 +45,98 @@ impl_bdd_2w_to_1w_trait!(
     crate::codegen::codegen_lui::OUTPUT_CIRCUITS
 );
 
-pub trait Evaluate<T: UnsignedInteger, BE: Backend> {
-    fn eval_enc<R, R1, R2, IM, PC, RA, H, K, M>(
+pub trait Evaluate<T: UnsignedInteger, BE: PhantomBackend> {
+    /// Scratch bytes needed by [`Self::eval_enc`] with one thread.
+    fn eval_enc_tmp_bytes<R, G, H>(
+        &self,
+        module: &Module<BE>,
+        res_infos: &R,
+        ggsw_infos: &G,
+        keys: &H,
+    ) -> usize
+    where
+        R: GLWEInfos,
+        G: GGSWInfos,
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>;
+
+    #[allow(clippy::too_many_arguments)]
+    fn eval_enc<H>(
         &self,
         threads: usize,
-        module: &M,
-        res: &mut FheUint<R, u32>,
-        rs1: &FheUintPrepared<R1, u32, BE>,
-        rs2: &FheUintPrepared<R2, u32, BE>,
-        imm: &FheUintPrepared<IM, u32, BE>,
-        pc: &FheUintPrepared<PC, u32, BE>,
-        ram: &FheUint<RA, u32>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, u32, i64>,
+        rs1: &FheUintPrepared<Vec<u8>, u32, BE>,
+        rs2: &FheUintPrepared<Vec<u8>, u32, BE>,
+        imm: &FheUintPrepared<Vec<u8>, u32, BE>,
+        pc: &FheUintPrepared<Vec<u8>, u32, BE>,
+        ram: &FheUint<Vec<u8>, u32, i64>,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        R: DataMut,
-        R1: DataRef,
-        R2: DataRef,
-        IM: DataRef,
-        PC: DataRef,
-        RA: DataRef,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<BE>
-            + ModuleLogN
-            + GLWERotate<BE>
-            + GLWETrace<BE>
-            + GLWEAdd
-            + GLWESub
-            + GLWECopy,
-        Scratch<BE>: ScratchTakeCore<BE>;
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>;
 }
 
-impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
-    fn eval_enc<R, R1, R2, IM, PC, RA, H, K, M>(
+impl<BE: PhantomBackend> Evaluate<u32, BE> for RD_UPDATE {
+    fn eval_enc_tmp_bytes<R, G, H>(
+        &self,
+        module: &Module<BE>,
+        res_infos: &R,
+        ggsw_infos: &G,
+        keys: &H,
+    ) -> usize
+    where
+        R: GLWEInfos,
+        G: GGSWInfos,
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>,
+    {
+        // A `FheUint` is only needed to name the op's `*_tmp_bytes` method.
+        let probe: FheUint<Vec<u8>, u32, i64> =
+            FheUint::alloc(module, res_infos.base2k(), res_infos.k(), res_infos.rank());
+        // The load ops isolate bytes with rotations and traces.
+        let atk = keys
+            .get_automorphism_key(-1, res_infos.k())
+            .unwrap_or_else(|e| panic!("{e}"));
+        let byte_ops: usize = module
+            .glwe_trace_tmp_bytes(res_infos, res_infos, &atk)
+            .max(module.glwe_rotate_tmp_bytes());
+        match self {
+            Self::NONE => 0,
+            Self::AUIPC => probe.auipc_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::JAL | Self::JALR => probe.jalr_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::LUI => probe.lui_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::ADD | Self::ADDI => probe.add_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SUB => probe.sub_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SLL | Self::SLLI => probe.sll_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SLT | Self::SLTI => probe.slt_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SLTU | Self::SLTIU => probe.sltu_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::XOR | Self::XORI => probe.xor_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SRL | Self::SRLI => probe.srl_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::SRA | Self::SRAI => probe.sra_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::OR | Self::ORI => probe.or_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::AND | Self::ANDI => probe.and_tmp_bytes(module, res_infos, ggsw_infos, keys),
+            Self::LB | Self::LBU | Self::LH | Self::LHU | Self::LW => byte_ops,
+            _ => 0,
+        }
+    }
+
+    fn eval_enc<H>(
         &self,
         threads: usize,
-        module: &M,
-        res: &mut FheUint<R, u32>,
-        rs1: &FheUintPrepared<R1, u32, BE>,
-        rs2: &FheUintPrepared<R2, u32, BE>,
-        imm: &FheUintPrepared<IM, u32, BE>,
-        pc: &FheUintPrepared<PC, u32, BE>,
-        ram: &FheUint<RA, u32>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, u32, i64>,
+        rs1: &FheUintPrepared<Vec<u8>, u32, BE>,
+        rs2: &FheUintPrepared<Vec<u8>, u32, BE>,
+        imm: &FheUintPrepared<Vec<u8>, u32, BE>,
+        pc: &FheUintPrepared<Vec<u8>, u32, BE>,
+        ram: &FheUint<Vec<u8>, u32, i64>,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        R: DataMut,
-        R1: DataRef,
-        R2: DataRef,
-        IM: DataRef,
-        PC: DataRef,
-        RA: DataRef,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        M: ExecuteBDDCircuit2WTo1W<BE>
-            + ModuleLogN
-            + GLWERotate<BE>
-            + GLWETrace<BE>
-            + GLWEAdd
-            + GLWESub
-            + GLWECopy,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        H: GetAutomorphismKey<BE>,
+        Module<BE>: PhantomModule<BE>,
     {
         match self {
             Self::NONE => {}
@@ -163,4 +195,49 @@ impl<BE: Backend> Evaluate<u32, BE> for RD_UPDATE {
             }
         }
     }
+}
+
+/// Evaluates every op of `ops` on the same operands, one op per task over at
+/// most `threads` workers, writing `res[i] = ops[i](...)`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn eval_ops_parallel<H, BE: PhantomBackend>(
+    threads: usize,
+    module: &Module<BE>,
+    ops: &[RD_UPDATE],
+    res: &mut [FheUint<Vec<u8>, u32, i64>],
+    rs1: &FheUintPrepared<Vec<u8>, u32, BE>,
+    rs2: &FheUintPrepared<Vec<u8>, u32, BE>,
+    imm: &FheUintPrepared<Vec<u8>, u32, BE>,
+    pc: &FheUintPrepared<Vec<u8>, u32, BE>,
+    ram: &FheUint<Vec<u8>, u32, i64>,
+    keys: &H,
+    scratch: &mut ScratchArena<'_, BE>,
+) where
+    H: Sync + GetAutomorphismKey<BE>,
+    Module<BE>: PhantomModule<BE>,
+{
+    assert_eq!(ops.len(), res.len());
+    if res.is_empty() {
+        return;
+    }
+    let per_worker: usize = worker_bytes::<BE>(
+        ops.iter()
+            .map(|op| op.eval_enc_tmp_bytes(module, &res[0], rs1, keys))
+            .max()
+            .unwrap_or(0),
+    );
+    for_each_with_scratch(threads, res, 0, per_worker, scratch, &|i, out, scratch| {
+        ops[i].eval_enc(
+            1,
+            module,
+            out,
+            rs1,
+            rs2,
+            imm,
+            pc,
+            ram,
+            keys,
+            &mut scratch.borrow(),
+        );
+    });
 }

@@ -1,23 +1,23 @@
-use std::{f64, thread};
+use std::f64;
 
+use poulpy_bin_fhe::bdd_arithmetic::{
+    FheUint, FheUintPrepared, FromBits, GLWEBlindRetriever, GetGGSWBit, ToBits,
+};
 use poulpy_core::{
     layouts::{
-        GGLWEInfos, GGLWELayout, GGLWEPreparedToRef, GGSWInfos, GLWEAutomorphismKeyHelper,
-        GLWEInfos, GLWELayout, GLWESecretPreparedToRef, GLWEToMut, GetGaloisElement,
-        TorusPrecision, GLWE,
+        GGLWEInfos, GGSWInfos, GLWEInfos, GLWELayout, GLWEPlaintext, GLWEPlaintextLayout,
+        GLWESecretPreparedToBackendRef, GLWEToBackendMut, GetAutomorphismKey, TorusPrecision, GLWE,
     },
-    GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWENoise, GLWENormalize, GLWEPacking,
-    GLWERotate, GLWESub, GLWETrace, ScratchTakeCore,
+    ScratchArenaTakeCore,
 };
 use poulpy_hal::{
-    api::{ModuleLogN, ModuleN, ScratchAvailable, TakeSlice},
-    layouts::{Backend, DataMut, DataRef, Scratch},
+    layouts::{Module, ScratchArena},
     source::Source,
 };
-use poulpy_schemes::bin_fhe::bdd_arithmetic::{
-    Cmux, FheUint, FheUintPrepared, FromBits, GLWEBlindRetrieval, GLWEBlindRetriever,
-    GLWEBlindRotation, GetGGSWBit, ToBits,
-};
+
+#[allow(unused_imports)]
+use crate::backend::prelude::*;
+use crate::backend::{default_noise_infos, for_each_with_scratch, PhantomBackend, PhantomModule};
 
 pub struct Memory {
     bits: Vec<BitArray>,
@@ -27,13 +27,19 @@ pub struct Memory {
 }
 
 impl Memory {
-    pub(crate) fn alloc<A>(infos: &A, word_size: usize, size: usize) -> Self
+    pub(crate) fn alloc<A, BE: PhantomBackend>(
+        module: &Module<BE>,
+        infos: &A,
+        word_size: usize,
+        size: usize,
+    ) -> Self
     where
         A: GLWEInfos,
+        Module<BE>: PhantomModule<BE>,
     {
         Self {
             bits: (0..word_size)
-                .map(|_| BitArray::alloc(infos, size))
+                .map(|_| BitArray::alloc(module, infos, size))
                 .collect(),
             size,
             bit_size: (usize::BITS - (size - 1).leading_zeros()) as usize,
@@ -45,18 +51,17 @@ impl Memory {
         self.size
     }
 
-    pub(crate) fn encrypt_sk<M, S, BE: Backend>(
+    pub(crate) fn encrypt_sk<S, BE: PhantomBackend>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u32],
         sk: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleN + GLWEEncryptSk<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-        S: GLWESecretPreparedToRef<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
         u32: ToBits,
     {
         let size: usize = self.size;
@@ -75,16 +80,15 @@ impl Memory {
     }
 
     #[allow(dead_code)]
-    pub(crate) fn decrypt<M, S, BE: Backend>(
+    pub(crate) fn decrypt<S, BE: PhantomBackend>(
         &self,
-        module: &M,
+        module: &Module<BE>,
         data: &mut [u32],
         sk: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleN + GLWEDecrypt<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-        S: GLWESecretPreparedToRef<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
         u32: FromBits,
     {
         let max_addr: usize = self.size;
@@ -107,17 +111,16 @@ impl Memory {
         }
     }
 
-    pub(crate) fn noise<M, S, BE: Backend>(
+    pub(crate) fn noise<S, BE: PhantomBackend>(
         &self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u32],
         sk: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) -> Vec<f64>
     where
-        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-        S: GLWESecretPreparedToRef<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
         u32: FromBits,
     {
         let max_addr: usize = self.size;
@@ -137,338 +140,293 @@ impl Memory {
         noise
     }
 
-    pub(crate) fn zero<M, BE: Backend, K, H>(
+    /// Zeroes the word at `addr`.
+    pub(crate) fn zero<BE: PhantomBackend, H>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         addr: usize,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: Sync + ModuleN + GLWETrace<BE> + GLWESub + GLWERotate<BE>,
-        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        H: Sync + GetAutomorphismKey<BE>,
     {
         let poly: usize = addr / module.n();
         let idx: usize = poly % module.n();
 
         let glwe_infos: GLWELayout = self.bits[0].data[0].glwe_layout();
-        let key_infos: GGLWELayout = keys.automorphism_key_infos();
+        let key_infos = keys
+            .get_automorphism_key(-1, glwe_infos.k())
+            .unwrap_or_else(|e| panic!("{e}"));
 
-        let scratch_thread_size: usize = module
-            .glwe_rotate_tmp_bytes()
-            .max(module.glwe_trace_tmp_bytes(&glwe_infos, &glwe_infos, &key_infos))
-            + GLWE::bytes_of_from_infos(&glwe_infos);
-
-        assert!(
-            scratch.available() >= threads * scratch_thread_size,
-            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
-            scratch.available()
+        let scratch_thread_size: usize = crate::backend::worker_bytes::<BE>(
+            module
+                .glwe_rotate_tmp_bytes()
+                .max(module.glwe_trace_tmp_bytes(&glwe_infos, &glwe_infos, &key_infos))
+                + module.glwe_bytes_of_from_infos(&glwe_infos),
         );
 
-        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
-
-        let chunk_size: usize = self.bits.len().div_ceil(threads);
-
-        thread::scope(|scope| {
-            for (scratch_thread, subram_chunk) in
-                scratches.iter_mut().zip(self.bits.chunks_mut(chunk_size))
-            {
-                scope.spawn(move || {
-                    let (mut tmp, scratch_1) = scratch_thread.take_glwe(&glwe_infos);
-
-                    for subram in subram_chunk.iter_mut() {
-                        let a: &mut GLWE<Vec<u8>> = &mut subram.data[poly];
-                        module.glwe_rotate_inplace(-(idx as i64), a, scratch_1);
-                        module.glwe_trace(&mut tmp, 0, a, keys, scratch_1);
-                        module.glwe_sub_inplace(a, &tmp);
-                        module.glwe_rotate_inplace(idx as i64, a, scratch_1);
-                    }
-                });
-            }
-        });
+        for_each_with_scratch(
+            threads,
+            &mut self.bits,
+            0,
+            scratch_thread_size,
+            scratch,
+            &|_, subram, scratch| {
+                let (mut tmp, mut scratch_1) = scratch.borrow().take_glwe_scratch(&glwe_infos);
+                let a: &mut GLWE<Vec<u8>, i64> = &mut subram.data[poly];
+                module.glwe_rotate_assign(-(idx as i64), a, &mut scratch_1);
+                module.glwe_trace(&mut tmp, 0, a, keys, &mut scratch_1);
+                module.glwe_sub_assign(a, &tmp);
+                module.glwe_rotate_assign(idx as i64, a, &mut scratch_1);
+            },
+        );
     }
 
-    pub(crate) fn read_stateless<DR: DataMut, D: DataRef, H, M, K, BE: Backend>(
+    pub(crate) fn read_stateless<H, BE: PhantomBackend>(
         &mut self,
         threads: usize,
-        module: &M,
-        res: &mut FheUint<DR, u32>,
-        address: &FheUintPrepared<D, u32, BE>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, u32, i64>,
+        address: &FheUintPrepared<Vec<u8>, u32, BE>,
         offset: usize,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: Sync + ModuleLogN + GLWEPacking<BE> + GLWEBlindRotation<BE>,
-        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        H: Sync + GetAutomorphismKey<BE>,
     {
         assert!(
             !self.bits.is_empty(),
             "unitialized memory: self.data.len()=0"
         );
 
-        assert_eq!(self.state, false);
+        assert!(!self.state);
 
-        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(self.bits.len(), res);
+        let (mut tmp_res, mut scratch_1) = scratch
+            .borrow()
+            .take_glwe_slice_scratch(self.bits.len(), res);
 
-        let scratch_thread_size =
-            BitArray::retrieve_stateless_tmp_bytes(module, &self.bits[0].data[0], address);
-
-        assert!(
-            scratch_1.available() >= threads * scratch_thread_size,
-            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
-            scratch_1.available()
+        let scratch_thread_size: usize = crate::backend::worker_bytes::<BE>(
+            BitArray::retrieve_stateless_tmp_bytes(module, &self.bits[0].data[0], address),
         );
 
-        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
+        let mut items: Vec<(&mut BitArray, &mut _)> =
+            self.bits.iter_mut().zip(tmp_res.iter_mut()).collect();
 
-        let chunk_size: usize = self.bits.len().div_ceil(threads);
+        for_each_with_scratch(
+            threads,
+            &mut items,
+            0,
+            scratch_thread_size,
+            &mut scratch_1,
+            &|_, (subram, res), scratch| {
+                subram.retrieve_stateless(module, *res, address, offset, scratch);
+            },
+        );
 
-        thread::scope(|scope| {
-            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
-                .iter_mut()
-                .zip(self.bits.chunks_mut(chunk_size))
-                .zip(tmp_res.chunks_mut(chunk_size))
-            {
-                scope.spawn(move || {
-                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
-                        subram.retrieve_stateless(module, res, address, offset, scratch_thread);
-                    }
-                });
-            }
-        });
-
-        res.pack(module, tmp_res, keys, scratch_1);
+        res.pack(module, tmp_res, keys, &mut scratch_1);
     }
 
-    pub(crate) fn read_statefull<DR: DataMut, A, H, M, K, BE: Backend>(
+    pub(crate) fn read_statefull<A, H, BE: PhantomBackend>(
         &mut self,
         threads: usize,
-        module: &M,
-        res: &mut FheUint<DR, u32>,
+        module: &Module<BE>,
+        res: &mut FheUint<Vec<u8>, u32, i64>,
         address: &A,
         offset: usize,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: Sync + ModuleLogN + GLWEBlindRetrieval<BE> + GLWEBlindRotation<BE> + GLWEPacking<BE>,
-        A: Sync + GetGGSWBit<BE> + GGSWInfos,
-        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GetGaloisElement + GGLWEInfos,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        A: Sync + GetGGSWBit<BE> + GGSWInfos + 'static,
+        H: Sync + GetAutomorphismKey<BE>,
     {
         assert!(
             !self.bits.is_empty(),
             "unitialized memory: self.data.len()=0"
         );
 
-        assert_eq!(self.state, false);
+        assert!(!self.state);
 
-        let (mut tmp_res, scratch_1) = scratch.take_glwe_slice(self.bits.len(), res);
+        let (mut tmp_res, mut scratch_1) = scratch
+            .borrow()
+            .take_glwe_slice_scratch(self.bits.len(), res);
 
-        let scratch_thread_size = BitArray::retrieve_statefull_tmp_bytes(
-            module,
-            self.bit_size,
-            &self.bits[0].data[0],
-            address,
+        let scratch_thread_size: usize =
+            crate::backend::worker_bytes::<BE>(BitArray::retrieve_statefull_tmp_bytes(
+                module,
+                self.bit_size,
+                &self.bits[0].data[0],
+                address,
+            ));
+
+        let mut items: Vec<(&mut BitArray, &mut _)> =
+            self.bits.iter_mut().zip(tmp_res.iter_mut()).collect();
+
+        for_each_with_scratch(
+            threads,
+            &mut items,
+            0,
+            scratch_thread_size,
+            &mut scratch_1,
+            &|_, (subram, res), scratch| {
+                subram.retrieve_statefull(module, *res, address, offset, scratch);
+            },
         );
 
-        assert!(
-            scratch_1.available() >= threads * scratch_thread_size,
-            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
-            scratch_1.available()
-        );
-
-        let (mut scratches, _) = scratch_1.split_mut(threads, scratch_thread_size);
-
-        let chunk_size: usize = self.bits.len().div_ceil(threads);
-
-        thread::scope(|scope| {
-            for ((scratch_thread, subram_chunk), tmp_chunk) in scratches
-                .iter_mut()
-                .zip(self.bits.chunks_mut(chunk_size))
-                .zip(tmp_res.chunks_mut(chunk_size))
-            {
-                scope.spawn(move || {
-                    for (subram, res) in subram_chunk.iter_mut().zip(tmp_chunk.iter_mut()) {
-                        subram.retrieve_statefull(module, res, address, offset, scratch_thread);
-                    }
-                });
-            }
-        });
-
-        res.pack(module, tmp_res, keys, scratch_1);
+        res.pack(module, tmp_res, keys, &mut scratch_1);
 
         self.state = true;
     }
 
-    pub(crate) fn read_statefull_rev<M, D, A, K, H, BE: Backend>(
+    pub(crate) fn read_statefull_rev<A, H, BE: PhantomBackend>(
         &mut self,
         threads: usize,
-        module: &M,
-        w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
+        module: &Module<BE>,
+        w: &FheUint<Vec<u8>, u32, i64>, // Must encrypt [w, 0, 0, ..., 0];
         address: &A,
         offset: usize,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        D: DataRef,
-        A: GetGGSWBit<BE> + GGSWInfos,
-        M: Sync
-            + ModuleLogN
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWEBlindRotation<BE>
-            + GLWEAdd
-            + GLWESub
-            + GLWENormalize<BE>,
-        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        A: Sync + GetGGSWBit<BE> + GGSWInfos + 'static,
+        H: Sync + GetAutomorphismKey<BE>,
     {
-        assert_eq!(self.state, true);
+        assert!(self.state);
 
-        let scratch_thread_size = BitArray::retrieve_statefull_rev_tmp_bytes(
-            module,
-            self.bit_size,
-            &self.bits[0].data[0],
-            address,
-            &keys.automorphism_key_infos(),
-        ) + GLWE::bytes_of_from_infos(w);
+        let key_infos = keys
+            .get_automorphism_key(-1, w.k())
+            .unwrap_or_else(|e| panic!("{e}"));
 
-        assert!(
-            scratch.available() >= threads * scratch_thread_size,
-            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
-            scratch.available()
+        let scratch_thread_size: usize = crate::backend::worker_bytes::<BE>(
+            BitArray::retrieve_statefull_rev_tmp_bytes(
+                module,
+                self.bit_size,
+                &self.bits[0].data[0],
+                address,
+                &key_infos,
+            ) + module.glwe_bytes_of_from_infos(w),
         );
 
-        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
-
-        let chunk_size: usize = self.bits.len().div_ceil(threads);
-
-        thread::scope(|scope| {
-            for (idx, (scratch_thread, subram_chunk)) in scratches
-                .iter_mut()
-                .zip(self.bits.chunks_mut(chunk_size))
-                .enumerate()
-            {
-                scope.spawn(move || {
-                    // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
-                    for (i, subram) in subram_chunk.iter_mut().enumerate() {
-                        let (mut bit, scratch_1) = scratch_thread.take_glwe(w);
-                        w.get_bit_glwe(module, chunk_size * idx + i, &mut bit, keys, scratch_1);
-                        subram
-                            .retrieve_statefull_rev(module, &bit, address, keys, offset, scratch_1);
-                    }
-                });
-            }
-        });
+        for_each_with_scratch(
+            threads,
+            &mut self.bits,
+            0,
+            scratch_thread_size,
+            scratch,
+            &|bit, subram, scratch| {
+                // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
+                let (mut bit_glwe, mut scratch_1) = scratch.borrow().take_glwe_scratch(w);
+                w.get_bit_glwe(module, bit, &mut bit_glwe, keys, &mut scratch_1);
+                subram.retrieve_statefull_rev(
+                    module,
+                    &bit_glwe,
+                    address,
+                    keys,
+                    offset,
+                    &mut scratch_1,
+                );
+            },
+        );
 
         self.state = false;
     }
 
-    pub(crate) fn write<M, D, A, K, H, BE: Backend>(
+    pub(crate) fn write<A, H, BE: PhantomBackend>(
         &mut self,
         threads: usize,
-        module: &M,
-        w: &FheUint<D, u32>, // Must encrypt [w, 0, 0, ..., 0];
+        module: &Module<BE>,
+        w: &FheUint<Vec<u8>, u32, i64>, // Must encrypt [w, 0, 0, ..., 0];
         address: &A,
         offset: usize,
         keys: &H,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        D: DataRef,
-        A: GetGGSWBit<BE> + GGSWInfos,
-        M: Sync
-            + ModuleLogN
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWEBlindRotation<BE>
-            + GLWEAdd
-            + GLWESub
-            + GLWENormalize<BE>,
-        H: Sync + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        A: Sync + GetGGSWBit<BE> + GGSWInfos + 'static,
+        H: Sync + GetAutomorphismKey<BE>,
     {
-        assert_eq!(self.state, false);
+        assert!(!self.state);
 
-        let scratch_thread_size = BitArray::write_tmp_bytes(
-            module,
-            self.bit_size,
-            &self.bits[0].data[0],
-            address,
-            &keys.automorphism_key_infos(),
-        ) + GLWE::bytes_of_from_infos(w);
+        let key_infos = keys
+            .get_automorphism_key(-1, w.k())
+            .unwrap_or_else(|e| panic!("{e}"));
 
-        assert!(
-            scratch.available() >= threads * scratch_thread_size,
-            "scratch.available(): {} < threads:{threads} * scratch_thread_size: {scratch_thread_size}",
-            scratch.available()
+        let scratch_thread_size: usize = crate::backend::worker_bytes::<BE>(
+            BitArray::write_tmp_bytes(
+                module,
+                self.bit_size,
+                &self.bits[0].data[0],
+                address,
+                &key_infos,
+            ) + module.glwe_bytes_of_from_infos(w),
         );
 
-        let (mut scratches, _) = scratch.split_mut(threads, scratch_thread_size);
-
-        let chunk_size: usize = self.bits.len().div_ceil(threads);
-
-        thread::scope(|scope| {
-            for (idx, (scratch_thread, subram_chunk)) in scratches
-                .iter_mut()
-                .zip(self.bits.chunks_mut(chunk_size))
-                .enumerate()
-            {
-                scope.spawn(move || {
-                    // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
-                    for (i, subram) in subram_chunk.iter_mut().enumerate() {
-                        let (mut bit, scratch_1) = scratch_thread.take_glwe(w);
-                        w.get_bit_glwe(module, chunk_size * idx + i, &mut bit, keys, scratch_1);
-                        subram.write(module, &bit, address, keys, offset, scratch_1);
-                    }
-                });
-            }
-        });
+        for_each_with_scratch(
+            threads,
+            &mut self.bits,
+            0,
+            scratch_thread_size,
+            scratch,
+            &|bit, subram, scratch| {
+                // Overwrites the coefficient that was read: to_write_on = to_write_on - TRACE(to_write_on) + w
+                let (mut bit_glwe, mut scratch_1) = scratch.borrow().take_glwe_scratch(w);
+                w.get_bit_glwe(module, bit, &mut bit_glwe, keys, &mut scratch_1);
+                subram.write(module, &bit_glwe, address, keys, offset, &mut scratch_1);
+            },
+        );
     }
 }
 
 struct BitArray {
-    data: Vec<GLWE<Vec<u8>>>,
-    retriever: GLWEBlindRetriever,
+    data: Vec<GLWE<Vec<u8>, i64>>,
+    retriever: GLWEBlindRetriever<Vec<u8>, i64>,
     bit_size: usize,
 }
 
 impl BitArray {
-    fn alloc<A>(infos: &A, size: usize) -> Self
+    fn alloc<A, BE: PhantomBackend>(module: &Module<BE>, infos: &A, size: usize) -> Self
     where
         A: GLWEInfos,
+        Module<BE>: PhantomModule<BE>,
     {
         let n: usize = infos.n().into();
         Self {
             data: (0..size.div_ceil(n))
-                .map(|_| GLWE::alloc_from_infos(infos))
+                .map(|_| module.glwe_alloc_from_infos(infos))
                 .collect(),
-            retriever: GLWEBlindRetriever::alloc(infos, size),
+            retriever: GLWEBlindRetriever::alloc(module, infos, size),
             bit_size: (usize::BITS - (size - 1).leading_zeros()) as usize,
         }
     }
 
-    fn encrypt_sk<M, BE: Backend, S>(
+    fn plaintext_infos(&self) -> GLWEPlaintextLayout {
+        GLWEPlaintextLayout {
+            n: self.data[0].n(),
+            base2k: self.data[0].base2k(),
+            k: TorusPrecision(2),
+        }
+    }
+
+    fn encrypt_sk<BE: PhantomBackend, S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u8],
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleN + GLWEEncryptSk<BE>,
-        S: GLWESecretPreparedToRef<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
-        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
-        let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
+        let noise = default_noise_infos(&self.data[0]);
+        let mut pt: GLWEPlaintext<Vec<u8>, i64> =
+            module.glwe_plaintext_alloc_from_infos(&self.plaintext_infos());
+        let mut data_i64: Vec<i64> = vec![0i64; module.n()];
 
         for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter_mut()) {
             data_i64.fill(0);
@@ -478,27 +436,27 @@ impl BitArray {
             }
 
             pt.encode_vec_i64(&data_i64, TorusPrecision(2));
-            ct.encrypt_sk(module, &pt, sk_prepared, source_xa, source_xe, scratch_2);
+            module.glwe_encrypt_sk(ct, &pt, sk_prepared, &noise, source_xe, source_xa, scratch);
         }
     }
 
     #[allow(dead_code)]
-    fn decrypt<M, BE: Backend, S>(
+    fn decrypt<BE: PhantomBackend, S>(
         &self,
-        module: &M,
+        module: &Module<BE>,
         data: &mut [u8],
         sk_prepared: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleN + GLWEDecrypt<BE>,
-        S: GLWESecretPreparedToRef<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
-        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
-        let (mut data_i64, scratch_2) = scratch_1.take_slice(module.n());
+        let mut pt: GLWEPlaintext<Vec<u8>, i64> =
+            module.glwe_plaintext_alloc_from_infos(&self.plaintext_infos());
+        let mut data_i64: Vec<i64> = vec![0i64; module.n()];
 
         for (chunk, ct) in data.chunks_mut(module.n()).zip(self.data.iter()) {
-            ct.decrypt(module, &mut pt, sk_prepared, scratch_2);
+            module.glwe_decrypt(ct, &mut pt, sk_prepared, scratch);
             pt.decode_vec_i64(&mut data_i64, TorusPrecision(2));
             for (y, x) in data_i64.iter_mut().zip(chunk.iter_mut()) {
                 *x = *y as u8;
@@ -507,30 +465,32 @@ impl BitArray {
     }
 
     #[allow(dead_code)]
-    fn noise<M, BE: Backend, S>(
+    fn noise<BE: PhantomBackend, S>(
         &self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u8],
         sk_prepared: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) -> f64
     where
-        M: ModuleN + GLWEDecrypt<BE> + GLWENoise<BE>,
-        S: GLWESecretPreparedToRef<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
-        let (mut pt, scratch_1) = scratch.take_glwe_plaintext(&self.data[0]);
-        let (data_i64, scratch_2) = scratch_1.take_slice(module.n());
+        let mut pt: GLWEPlaintext<Vec<u8>, i64> =
+            module.glwe_plaintext_alloc_from_infos(&self.plaintext_infos());
+        let mut data_i64: Vec<i64> = vec![0i64; module.n()];
 
         let mut max_noise: f64 = f64::MIN;
 
         for (chunk, ct) in data.chunks(module.n()).zip(self.data.iter()) {
+            data_i64.fill(0);
             for (y, x) in data_i64.iter_mut().zip(chunk.iter()) {
                 *y = *x as i64;
             }
             pt.encode_vec_i64(&data_i64, TorusPrecision(2));
             max_noise = max_noise.max(
-                ct.noise(module, &mut pt, sk_prepared, scratch_2)
+                module
+                    .glwe_noise(ct, &pt, sk_prepared, scratch)
                     .max()
                     .log2(),
             );
@@ -539,9 +499,13 @@ impl BitArray {
         max_noise
     }
 
-    fn retrieve_stateless_tmp_bytes<M, R, A, BE: Backend>(module: &M, res: &R, addr: &A) -> usize
+    fn retrieve_stateless_tmp_bytes<R, A, BE: PhantomBackend>(
+        module: &Module<BE>,
+        res: &R,
+        addr: &A,
+    ) -> usize
     where
-        M: Cmux<BE> + GLWEBlindRotation<BE>,
+        Module<BE>: PhantomModule<BE>,
         R: GLWEInfos,
         A: GGSWInfos,
     {
@@ -549,18 +513,17 @@ impl BitArray {
             .max(module.glwe_blind_rotation_tmp_bytes(res, addr))
     }
 
-    fn retrieve_stateless<R, A, M, BE: Backend>(
+    fn retrieve_stateless<R, A, BE: PhantomBackend>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         res: &mut R,
         address: &A,
         offset: usize,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleLogN + GLWECopy + Cmux<BE> + GLWEBlindRotation<BE>,
-        R: GLWEToMut + GLWEInfos,
-        A: GetGGSWBit<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        R: GLWEToBackendMut<BE> + GLWEInfos,
+        A: GetGGSWBit<BE> + 'static,
     {
         self.retriever.retrieve(
             module,
@@ -571,7 +534,7 @@ impl BitArray {
             scratch,
         );
 
-        module.glwe_blind_rotation_inplace(
+        module.glwe_blind_rotation_assign(
             res,
             address,
             false,
@@ -582,39 +545,40 @@ impl BitArray {
         );
     }
 
-    fn retrieve_statefull_tmp_bytes<M, R, A, BE: Backend>(
-        module: &M,
+    fn retrieve_statefull_tmp_bytes<R, A, BE: PhantomBackend>(
+        module: &Module<BE>,
         bit_size: usize,
         res: &R,
         addr: &A,
     ) -> usize
     where
-        M: ModuleLogN + GLWEBlindRetrieval<BE> + GLWEBlindRotation<BE>,
+        Module<BE>: PhantomModule<BE>,
         R: GLWEInfos,
         A: GGSWInfos,
     {
-        let a: usize = module.glwe_blind_retrieval_tmp_bytes(res, addr);
-        let b: usize = if bit_size > module.log_n() {
-            module.glwe_blind_rotation_tmp_bytes(res, addr)
+        // The blind rotation over the low address bits always runs; the
+        // conditional swaps only when the memory spans several polynomials.
+        let rotation: usize = module.glwe_blind_rotation_tmp_bytes(res, addr);
+        let retrieval: usize = if bit_size > module.log_n() {
+            module.glwe_blind_retrieval_tmp_bytes(res, addr)
         } else {
             0
         };
 
-        a.max(b)
+        rotation.max(retrieval)
     }
 
-    fn retrieve_statefull<R, A, M, BE: Backend>(
+    fn retrieve_statefull<R, A, BE: PhantomBackend>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         res: &mut R,
         address: &A,
         offset: usize,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleLogN + GLWECopy + GLWEBlindRotation<BE> + GLWEBlindRetrieval<BE>,
-        R: GLWEToMut,
-        A: GetGGSWBit<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        R: GLWEToBackendMut<BE> + GLWEInfos,
+        A: GetGGSWBit<BE> + 'static,
     {
         if self.bit_size > module.log_n() {
             module.glwe_blind_retrieval_statefull(
@@ -625,7 +589,7 @@ impl BitArray {
                 scratch,
             );
         }
-        module.glwe_blind_rotation_inplace(
+        module.glwe_blind_rotation_assign(
             &mut self.data[0],
             address,
             false,
@@ -634,70 +598,62 @@ impl BitArray {
             0,
             scratch,
         );
-        module.glwe_copy(res, &mut self.data[0]);
+        module.glwe_copy(res, &self.data[0]);
     }
 
-    fn retrieve_statefull_rev_tmp_bytes<M, R, A, K, BE: Backend>(
-        module: &M,
+    fn retrieve_statefull_rev_tmp_bytes<R, A, K, BE: PhantomBackend>(
+        module: &Module<BE>,
         bit_size: usize,
         res: &R,
         addr: &A,
         key: &K,
     ) -> usize
     where
-        M: ModuleLogN
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWENormalize<BE>
-            + GLWEBlindRotation<BE>,
+        Module<BE>: PhantomModule<BE>,
         R: GLWEInfos,
         A: GGSWInfos,
         K: GGLWEInfos,
     {
-        let a: usize = module.glwe_trace_tmp_bytes(res, res, key)
-            + GLWE::bytes_of_from_infos(res).max(module.glwe_normalize_tmp_bytes());
-        let b: usize = module.glwe_blind_retrieval_tmp_bytes(res, addr);
-        let c: usize = if bit_size > module.log_n() {
-            module.glwe_blind_rotation_tmp_bytes(res, addr)
+        let trace: usize = module.glwe_trace_tmp_bytes(res, res, key)
+            + module
+                .glwe_bytes_of_from_infos(res)
+                .max(module.glwe_normalize_tmp_bytes());
+        // The blind rotation over the low address bits always runs; the
+        // conditional swaps only when the memory spans several polynomials.
+        let rotation: usize = module.glwe_blind_rotation_tmp_bytes(res, addr);
+        let retrieval: usize = if bit_size > module.log_n() {
+            module.glwe_blind_retrieval_tmp_bytes(res, addr)
         } else {
             0
         };
 
-        a.max(b).max(c)
+        trace.max(rotation).max(retrieval)
     }
 
-    fn retrieve_statefull_rev<R, A, M, H, K, BE: Backend>(
+    fn retrieve_statefull_rev<R, A, H, BE: PhantomBackend>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         res: &R,
         address: &A,
         keys: &H,
         offset: usize,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleLogN
-            + GLWECopy
-            + GLWEBlindRotation<BE>
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWESub
-            + GLWEAdd,
-        R: GLWEToMut,
-        A: GetGGSWBit<BE>,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        R: GLWEToBackendMut<BE>,
+        A: GetGGSWBit<BE> + 'static,
+        H: GetAutomorphismKey<BE>,
     {
         {
-            let (mut tmp, scratch_1) = scratch.take_glwe(&self.data[0]);
-            module.glwe_trace(&mut tmp, 0, &mut self.data[0], keys, scratch_1);
-            module.glwe_sub_inplace(&mut self.data[0], &tmp);
+            let (mut tmp, mut scratch_1) = scratch.borrow().take_glwe_scratch(&self.data[0]);
+            module.glwe_trace(&mut tmp, 0, &self.data[0], keys, &mut scratch_1);
+            module.glwe_sub_assign(&mut self.data[0], &tmp);
         }
 
-        module.glwe_add_inplace(&mut self.data[0], res);
-        module.glwe_normalize_inplace(&mut self.data[0], scratch);
+        module.glwe_add_assign(&mut self.data[0], res);
+        module.glwe_normalize_assign(&mut self.data[0], scratch);
 
-        module.glwe_blind_rotation_inplace(
+        module.glwe_blind_rotation_assign(
             &mut self.data[0],
             address,
             true,
@@ -717,19 +673,15 @@ impl BitArray {
         }
     }
 
-    fn write_tmp_bytes<M, R, A, K, BE: Backend>(
-        module: &M,
+    fn write_tmp_bytes<R, A, K, BE: PhantomBackend>(
+        module: &Module<BE>,
         bit_size: usize,
         res: &R,
         addr: &A,
         key: &K,
     ) -> usize
     where
-        M: ModuleLogN
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWENormalize<BE>
-            + GLWEBlindRotation<BE>,
+        Module<BE>: PhantomModule<BE>,
         R: GLWEInfos,
         A: GGSWInfos,
         K: GGLWEInfos,
@@ -737,27 +689,19 @@ impl BitArray {
         Self::retrieve_statefull_rev_tmp_bytes(module, bit_size, res, addr, key)
     }
 
-    fn write<R, A, M, H, K, BE: Backend>(
+    fn write<R, A, H, BE: PhantomBackend>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         res: &R,
         address: &A,
         keys: &H,
         offset: usize,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: ModuleLogN
-            + GLWECopy
-            + GLWEBlindRotation<BE>
-            + GLWEBlindRetrieval<BE>
-            + GLWETrace<BE>
-            + GLWESub
-            + GLWEAdd,
-        R: GLWEToMut,
-        A: GetGGSWBit<BE>,
-        H: GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        R: GLWEToBackendMut<BE>,
+        A: GetGGSWBit<BE> + 'static,
+        H: GetAutomorphismKey<BE>,
     {
         if self.bit_size > module.log_n() {
             module.glwe_blind_retrieval_statefull(
@@ -768,7 +712,7 @@ impl BitArray {
                 scratch,
             );
         }
-        module.glwe_blind_rotation_inplace(
+        module.glwe_blind_rotation_assign(
             &mut self.data[0],
             address,
             false,
@@ -779,15 +723,15 @@ impl BitArray {
         );
 
         {
-            let (mut tmp, scratch_1) = scratch.take_glwe(&self.data[0]);
-            module.glwe_trace(&mut tmp, 0, &mut self.data[0], keys, scratch_1);
-            module.glwe_sub_inplace(&mut self.data[0], &tmp);
+            let (mut tmp, mut scratch_1) = scratch.borrow().take_glwe_scratch(&self.data[0]);
+            module.glwe_trace(&mut tmp, 0, &self.data[0], keys, &mut scratch_1);
+            module.glwe_sub_assign(&mut self.data[0], &tmp);
         }
 
-        module.glwe_add_inplace(&mut self.data[0], res);
-        module.glwe_normalize_inplace(&mut self.data[0], scratch);
+        module.glwe_add_assign(&mut self.data[0], res);
+        module.glwe_normalize_assign(&mut self.data[0], scratch);
 
-        module.glwe_blind_rotation_inplace(
+        module.glwe_blind_rotation_assign(
             &mut self.data[0],
             address,
             true,

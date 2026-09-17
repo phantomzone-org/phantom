@@ -11,27 +11,20 @@ use fhevm::{
     Interpreter,
 };
 
+use fhevm::backend::{prelude::*, PhantomBackend, PhantomBootstrapModule};
+use poulpy_bin_fhe::blind_rotation::CGGI;
+use poulpy_core::layouts::{GLWESecret, GLWESecretPrepared, LWESecret};
 #[cfg(all(
     target_arch = "x86_64",
     target_feature = "avx2",
     target_feature = "fma"
 ))]
-use poulpy_cpu_avx::FFT64Avx as BackendImpl;
-#[cfg(not(all(
-    target_arch = "x86_64",
-    target_feature = "avx2",
-    target_feature = "fma"
-)))]
-use poulpy_cpu_ref::FFT64Ref as BackendImpl;
-
-use poulpy_core::layouts::{prepared::GLWESecretPrepared, GLWESecret, LWESecret};
-
+use poulpy_cpu_avx::{FFT64Avx, FFT64AvxRayon};
+use poulpy_cpu_ref::FFT64Ref;
 use poulpy_hal::{
-    api::{ScratchOwnedAlloc, ScratchOwnedBorrow},
-    layouts::ScratchOwned,
+    layouts::{Module, ScratchOwned},
     source::Source,
 };
-use poulpy_schemes::bin_fhe::blind_rotation::CGGI;
 use testvm::TestVM;
 
 mod testvm;
@@ -106,20 +99,214 @@ impl OutputInfo {
     }
 }
 
-pub struct EncryptedVM {
-    params: CryptographicParameters<BackendImpl>,
-    sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl>,
-    key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl>,
-    interpreter: Interpreter<BackendImpl>,
+/// Whether this build carries the AVX2/FMA backends (`RUSTFLAGS="-C target-feature=+avx2,+fma"`).
+pub const HAS_AVX: bool = cfg!(all(
+    target_arch = "x86_64",
+    target_feature = "avx2",
+    target_feature = "fma"
+));
+
+/// The poulpy backend the encrypted VM runs on.
+///
+/// Selected with `PHANTOM_BACKEND` (`fft64-ref`, `fft64-avx`, `fft64-avx-rayon`);
+/// the default is the fastest available one, `fft64-avx` when the build has AVX2
+/// and FMA, `fft64-ref` otherwise.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Backend {
+    /// Portable backend; Phantom's own loops are multi-threaded, poulpy's are serial.
+    Fft64Ref,
+    /// AVX2/FMA backend; Phantom's own loops are multi-threaded, poulpy's are serial.
+    Fft64Avx,
+    /// AVX2/FMA backend scheduled by rayon: every parallel loop, Phantom's and
+    /// poulpy's, runs on a rayon pool of `PHANTOM_THREADS` threads.
+    Fft64AvxRayon,
+}
+
+impl Backend {
+    pub const ENV: &'static str = "PHANTOM_BACKEND";
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Backend::Fft64Ref => "fft64-ref",
+            Backend::Fft64Avx => "fft64-avx",
+            Backend::Fft64AvxRayon => "fft64-avx-rayon",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+            "fft64-ref" | "ref" => Some(Backend::Fft64Ref),
+            "fft64-avx" | "avx" => Some(Backend::Fft64Avx),
+            "fft64-avx-rayon" | "avx-rayon" | "rayon" => Some(Backend::Fft64AvxRayon),
+            _ => None,
+        }
+    }
+
+    pub fn is_available(self) -> bool {
+        match self {
+            Backend::Fft64Ref => true,
+            Backend::Fft64Avx | Backend::Fft64AvxRayon => HAS_AVX,
+        }
+    }
+
+    /// The fastest backend this build supports.
+    pub fn default_backend() -> Self {
+        if HAS_AVX {
+            Backend::Fft64Avx
+        } else {
+            Backend::Fft64Ref
+        }
+    }
+
+    /// Reads `PHANTOM_BACKEND`, falling back to [`Self::default_backend`].
+    ///
+    /// # Panics
+    ///
+    /// Panics on an unknown name, or on an AVX backend in a build without AVX2/FMA.
+    pub fn from_env() -> Self {
+        match std::env::var(Self::ENV) {
+            Ok(name) => {
+                let backend = Self::parse(&name).unwrap_or_else(|| {
+                    panic!(
+                        "{}={name:?}: expected fft64-ref, fft64-avx or fft64-avx-rayon",
+                        Self::ENV
+                    )
+                });
+                assert!(
+                    backend.is_available(),
+                    "{}={}: this build has no AVX2/FMA support, rebuild with RUSTFLAGS=\"-C target-feature=+avx2,+fma\"",
+                    Self::ENV,
+                    backend.name()
+                );
+                backend
+            }
+            Err(_) => Self::default_backend(),
+        }
+    }
+}
+
+/// Run-time knobs read from the environment.
+#[derive(Debug, Clone, Copy)]
+pub struct RunOptions {
+    pub backend: Backend,
+    pub threads: usize,
+    pub verbose_timings: bool,
+    pub debug: bool,
+}
+
+impl RunOptions {
+    /// `PHANTOM_BACKEND`, `PHANTOM_THREADS` (default: physical cores),
+    /// `PHANTOM_VERBOSE_TIMINGS` and `PHANTOM_DEBUG`.
+    pub fn from_env() -> Self {
+        let flag = |name: &str| {
+            std::env::var(name)
+                .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
+                .unwrap_or(false)
+        };
+        let default_threads = num_cpus::get_physical();
+        let threads = std::env::var("PHANTOM_THREADS")
+            .map(|val| val.parse::<usize>().unwrap_or(default_threads))
+            .unwrap_or(default_threads);
+        Self {
+            backend: Backend::from_env(),
+            threads,
+            verbose_timings: flag("PHANTOM_VERBOSE_TIMINGS"),
+            debug: flag("PHANTOM_DEBUG"),
+        }
+    }
+}
+
+/// The encrypted VM on one backend; construct it through [`Phantom::encrypted_vm_with`].
+pub struct EncryptedVMImpl<BE: PhantomBackend> {
+    params: CryptographicParameters<BE>,
+    sk_prepared: GLWESecretPrepared<Vec<u8>, BE>,
+    key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BE>,
+    interpreter: Interpreter<BE>,
     output_info: OutputInfo,
     ram_offset: usize,
     max_cycles: usize,
     phantom_debug: bool,
 }
 
-impl EncryptedVM {
-    pub fn execute(&mut self) {
-        let mut scratch: ScratchOwned<BackendImpl> =
+impl<BE: PhantomBackend> EncryptedVMImpl<BE>
+where
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<CGGI, BE>,
+    ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
+{
+    fn new(
+        phantom: &Phantom,
+        parser: &InstructionsParser,
+        ram_data_u32: &[u32],
+        max_cycles: usize,
+        options: RunOptions,
+    ) -> Self {
+        // Initializing cryptographic parameters
+        let params = CryptographicParameters::<BE>::new();
+        let mut source_xs: Source = Source::new([0u8; 32]);
+        let mut source_xa: Source = Source::new([0u8; 32]);
+        let mut source_xe: Source = Source::new([0u8; 32]);
+        let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
+
+        // Generates a new secret-key along with the public evaluation keys.
+        let module = params.module();
+        let mut sk_glwe: GLWESecret<Vec<u8>, i64> = module.glwe_secret_alloc(params.rank());
+        module.glwe_secret_fill_ternary_prob(&mut sk_glwe, 0.5, &mut source_xs);
+
+        let mut sk_lwe: LWESecret<Vec<u8>, i64> = module.lwe_secret_alloc(params.n_lwe());
+        module.lwe_secret_fill_binary_block(&mut sk_lwe, params.lwe_block_size(), &mut source_xs);
+
+        let rom_size = phantom.boot_rom.size >> 2;
+        let ram_size = phantom.boot_ram.size >> 2;
+        let mut interpreter: Interpreter<BE> = if options.debug {
+            Interpreter::new_with_debug(&params, rom_size, ram_size)
+        } else {
+            Interpreter::new(&params, rom_size, ram_size)
+        };
+
+        let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BE> =
+            module.glwe_secret_prepared_alloc(params.rank());
+        module.glwe_secret_prepare(&mut sk_prepared, &sk_glwe);
+
+        interpreter.instructions_encrypt_sk(
+            module,
+            parser,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            &mut scratch.borrow(),
+        );
+        let key: VMKeys<Vec<u8>, CGGI> =
+            VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
+
+        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BE> = VMKeysPrepared::alloc(&params);
+        key_prepared.prepare(module, &key, &mut scratch.borrow());
+
+        interpreter.ram_encrypt_sk(
+            module,
+            ram_data_u32,
+            &sk_prepared,
+            &mut source_xa,
+            &mut source_xe,
+            &mut scratch.borrow(),
+        );
+
+        interpreter.set_verbose_timings(options.verbose_timings);
+        interpreter.set_threads(options.threads);
+
+        Self {
+            params,
+            sk_prepared,
+            key_prepared,
+            interpreter,
+            output_info: phantom.output_info.clone(),
+            ram_offset: phantom.boot_ram.offset,
+            max_cycles,
+            phantom_debug: options.debug,
+        }
+    }
+
+    fn execute(&mut self) {
+        let mut scratch: ScratchOwned<BE> =
             ScratchOwned::alloc((1 << 24) * self.interpreter.threads());
 
         for _current_cycle in tqdm(0..self.max_cycles) {
@@ -128,25 +315,27 @@ impl EncryptedVM {
                     self.params.module(),
                     &self.key_prepared,
                     &self.sk_prepared,
-                    scratch.borrow(),
+                    &mut scratch.borrow(),
                 );
             } else {
-                self.interpreter
-                    .cycle(self.params.module(), &self.key_prepared, scratch.borrow());
+                self.interpreter.cycle(
+                    self.params.module(),
+                    &self.key_prepared,
+                    &mut scratch.borrow(),
+                );
             }
         }
     }
 
-    pub fn output_tape(&mut self) -> Vec<u8> {
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
+    fn output_tape(&mut self) -> Vec<u8> {
+        let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
         let mut data_decrypted: Vec<u32> = vec![0u32; RAM_SIZE >> 2];
-        // let mem_bytes: Vec<u8> =
         self.interpreter.ram_decrypt(
             self.params.module(),
             &mut data_decrypted,
             &self.sk_prepared,
-            scratch.borrow(),
+            &mut scratch.borrow(),
         );
         let mut mem_bytes = Vec::with_capacity(data_decrypted.len() * 4);
         for word in &data_decrypted {
@@ -155,14 +344,77 @@ impl EncryptedVM {
             mem_bytes.push(((*word >> 16) & 0xFF) as u8);
             mem_bytes.push(((*word >> 24) & 0xFF) as u8);
         }
-        // assert!(mem_bytes.len() == RAM_SIZE);
 
         let mut output = Vec::with_capacity(self.output_info.size);
         for i in 0..self.output_info.size {
             output.push(mem_bytes[(self.output_info.start_addr + i - self.ram_offset) % RAM_SIZE]);
         }
         output
-        // vec![]
+    }
+}
+
+/// The encrypted VM, on the backend chosen at construction (see [`Backend`]).
+pub enum EncryptedVM {
+    Fft64Ref(Box<EncryptedVMImpl<FFT64Ref>>),
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
+    Fft64Avx(Box<EncryptedVMImpl<FFT64Avx>>),
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx2",
+        target_feature = "fma"
+    ))]
+    Fft64AvxRayon(Box<EncryptedVMImpl<FFT64AvxRayon>>),
+}
+
+macro_rules! dispatch {
+    ($self:expr, $vm:ident => $body:expr) => {
+        match $self {
+            EncryptedVM::Fft64Ref($vm) => $body,
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            EncryptedVM::Fft64Avx($vm) => $body,
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            EncryptedVM::Fft64AvxRayon($vm) => $body,
+        }
+    };
+}
+
+impl EncryptedVM {
+    pub fn backend(&self) -> Backend {
+        match self {
+            EncryptedVM::Fft64Ref(_) => Backend::Fft64Ref,
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            EncryptedVM::Fft64Avx(_) => Backend::Fft64Avx,
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            EncryptedVM::Fft64AvxRayon(_) => Backend::Fft64AvxRayon,
+        }
+    }
+
+    pub fn execute(&mut self) {
+        dispatch!(self, vm => vm.execute())
+    }
+
+    pub fn output_tape(&mut self) -> Vec<u8> {
+        dispatch!(self, vm => vm.output_tape())
     }
 }
 
@@ -298,7 +550,19 @@ impl Phantom {
         &self.output_info
     }
 
+    /// Encrypts the program and `input_tape` on the backend and with the
+    /// options read from the environment (see [`RunOptions::from_env`]).
     pub fn encrypted_vm(&self, input_tape: &[u8], max_cycles: usize) -> EncryptedVM {
+        self.encrypted_vm_with(input_tape, max_cycles, RunOptions::from_env())
+    }
+
+    /// Encrypts the program and `input_tape` with explicit options.
+    pub fn encrypted_vm_with(
+        &self,
+        input_tape: &[u8],
+        max_cycles: usize,
+        options: RunOptions,
+    ) -> EncryptedVM {
         // map .text section to collection of Instructions
         // boot_rom always has offset = 0
         assert!(self.boot_rom.data.len() % 4 == 0);
@@ -335,77 +599,60 @@ impl Phantom {
             })
             .collect::<Vec<u32>>();
 
-        let verbose_timings = std::env::var("PHANTOM_VERBOSE_TIMINGS")
-            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        let default_threads = num_cpus::get_physical();
-        let threads = std::env::var("PHANTOM_THREADS")
-            .map(|val| val.parse::<usize>().unwrap_or(default_threads))
-            .unwrap_or(default_threads);
-        let phantom_debug = std::env::var("PHANTOM_DEBUG")
-            .map(|val| val == "1" || val.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-
-        // Initializing cryptographic parameters
-        let params = CryptographicParameters::<BackendImpl>::new();
-        let mut source_xs: Source = Source::new([0u8; 32]);
-        let mut source_xa: Source = Source::new([0u8; 32]);
-        let mut source_xe: Source = Source::new([0u8; 32]);
-        let mut scratch: ScratchOwned<BackendImpl> = ScratchOwned::alloc(1 << 24);
-
-        // Generates a new secret-key along with the public evaluation keys.
-        let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-        sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-
-        let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-        sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
-
-        let mut interpreter: Interpreter<BackendImpl> = if phantom_debug {
-            Interpreter::new_with_debug(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
-        } else {
-            Interpreter::new(&params, self.boot_rom.size >> 2, self.boot_ram.size >> 2)
-        };
-
-        let mut sk_prepared: GLWESecretPrepared<Vec<u8>, BackendImpl> =
-            GLWESecretPrepared::alloc(params.module(), params.rank());
-        sk_prepared.prepare(params.module(), &sk_glwe);
-
-        interpreter.instructions_encrypt_sk(
-            params.module(),
-            &parser,
-            &sk_prepared,
-            &mut source_xa,
-            &mut source_xe,
-            scratch.borrow(),
-        );
-        let key: VMKeys<Vec<u8>, CGGI> =
-            VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-        let mut key_prepared: VMKeysPrepared<Vec<u8>, CGGI, BackendImpl> =
-            VMKeysPrepared::alloc(&params);
-        key_prepared.prepare(params.module(), &key, scratch.borrow());
-
-        interpreter.ram_encrypt_sk(
-            params.module(),
-            &ram_data_u32,
-            &sk_prepared,
-            &mut source_xa,
-            &mut source_xe,
-            scratch.borrow(),
+        macros::verbose_println!(
+            "Phantom backend: {} ({} threads)",
+            options.backend.name(),
+            options.threads
         );
 
-        interpreter.set_verbose_timings(verbose_timings);
-        interpreter.set_threads(threads);
-
-        EncryptedVM {
-            params,
-            sk_prepared,
-            key_prepared,
-            interpreter,
-            output_info: self.output_info.clone(),
-            ram_offset: self.boot_ram.offset,
-            max_cycles,
-            phantom_debug,
+        match options.backend {
+            Backend::Fft64Ref => EncryptedVM::Fft64Ref(Box::new(EncryptedVMImpl::new(
+                self,
+                &parser,
+                &ram_data_u32,
+                max_cycles,
+                options,
+            ))),
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            Backend::Fft64Avx => EncryptedVM::Fft64Avx(Box::new(EncryptedVMImpl::new(
+                self,
+                &parser,
+                &ram_data_u32,
+                max_cycles,
+                options,
+            ))),
+            #[cfg(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            ))]
+            Backend::Fft64AvxRayon => {
+                // poulpy's rayon backend schedules on the global pool; size it
+                // once to the requested thread count (a later call is a no-op).
+                let _ = rayon::ThreadPoolBuilder::new()
+                    .num_threads(options.threads)
+                    .build_global();
+                EncryptedVM::Fft64AvxRayon(Box::new(EncryptedVMImpl::new(
+                    self,
+                    &parser,
+                    &ram_data_u32,
+                    max_cycles,
+                    options,
+                )))
+            }
+            #[cfg(not(all(
+                target_arch = "x86_64",
+                target_feature = "avx2",
+                target_feature = "fma"
+            )))]
+            other => panic!(
+                "{} is not available in this build (no AVX2/FMA)",
+                other.name()
+            ),
         }
     }
 

@@ -1,34 +1,32 @@
 use std::{collections::HashMap, time::Instant};
 
+#[allow(unused_imports)]
+use crate::backend::prelude::*;
 use crate::{
-    debug::InterpreterDebug, measure_duration, memory::Memory, parameters::CryptographicParameters,
-    prepare::PrepareMultiple, ram_offset::ram_offset, ram_update::Store, rd_update::Evaluate,
+    backend::{PhantomBackend, PhantomBootstrapModule, PhantomModule},
+    debug::InterpreterDebug,
+    measure_duration,
+    memory::Memory,
+    parameters::CryptographicParameters,
+    prepare::PrepareMultiple,
+    ram_offset::ram_offset,
+    ram_update::Store,
+    rd_update::eval_ops_parallel,
     update_pc, Measurement, Measurements, RAM_UPDATE_OP_LIST, RD_UPDATE, RD_UPDATE_RV32I_OP_LIST,
 };
 
 use poulpy_hal::{
-    api::{ModuleLogN, ModuleN},
-    layouts::{Backend, DataRef, Module, Scratch},
+    layouts::{Module, ScratchArena},
     source::Source,
 };
 
-use poulpy_core::{
-    layouts::{
-        GGLWEInfos, GGLWEPreparedToRef, GGSWLayout, GGSWPreparedFactory, GLWEAutomorphismKeyHelper,
-        GLWEInfos, GLWELayout, GLWESecretPrepared, GLWESecretPreparedToRef, GetGaloisElement,
-    },
-    GGSWEncryptSk, GLWEAdd, GLWECopy, GLWEDecrypt, GLWEEncryptSk, GLWEExternalProduct, GLWENoise,
-    GLWENormalize, GLWEPackerOps, GLWEPacking, GLWERotate, GLWESub, GLWETrace, GetDistribution,
-    ScratchTakeCore,
-};
-use poulpy_schemes::bin_fhe::{
-    bdd_arithmetic::{
-        BDDKeyHelper, BDDKeyInfos, Cmux, ExecuteBDDCircuit, ExecuteBDDCircuit1WTo1W,
-        ExecuteBDDCircuit2WTo1W, FheUint, FheUintPrepare, FheUintPrepared,
-        FheUintPreparedEncryptSk, FheUintPreparedFactory, GGSWBlindRotation, GLWEBlinSelection,
-        GLWEBlindRetrieval, Identity,
-    },
+use poulpy_bin_fhe::{
+    bdd_arithmetic::{BDDKeyHelper, BDDKeyInfos, FheUint, FheUintPrepared, Identity},
     blind_rotation::BlindRotationAlgo,
+};
+use poulpy_core::layouts::{
+    GGSWLayout, GLWEInfos, GLWELayout, GLWESecretPrepared, GLWESecretPreparedToBackendRef,
+    GetAutomorphismKey,
 };
 
 use crate::instructions::InstructionsParser;
@@ -38,7 +36,7 @@ pub enum InstructionSet {
     RV32I,
 }
 
-pub struct Interpreter<BE: Backend> {
+pub struct Interpreter<BE: PhantomBackend> {
     pub(crate) cycle: u32,
     pub(crate) vm_debug: Option<InterpreterDebug>,
 
@@ -67,50 +65,50 @@ pub struct Interpreter<BE: Backend> {
     pub(crate) ram_bit_size: usize, // log2(#items)
     pub(crate) ram_size: usize,
     pub(crate) ram: Memory,
-    pub(crate) ram_addr_fhe_uint: FheUint<Vec<u8>, u32>,
-    pub(crate) ram_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) ram_addr_fhe_uint: FheUint<Vec<u8>, u32, i64>,
+    pub(crate) ram_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) ram_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
     pub(crate) ram_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // PC
-    pub(crate) pc_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) pc_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) pc_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RS1
-    pub(crate) rs1_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs1_addr_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rs1_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub(crate) rs1_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs1_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rs1_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RS2
-    pub(crate) rs2_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs2_addr_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rs2_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub(crate) rs2_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rs2_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rs2_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // IMM
-    pub(crate) imm_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) imm_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) imm_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // RD
-    pub(crate) rd_addr_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_addr_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rd_addr_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub(crate) rd_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rd_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rd_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 
     // OP ID GLWE
-    pub(crate) rdu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) rdu_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) rdu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub(crate) mu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) mu_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) mu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
-    pub(crate) pcu_val_fhe_uint: FheUint<Vec<u8>, u32>,
+    pub(crate) pcu_val_fhe_uint: FheUint<Vec<u8>, u32, i64>,
     pub(crate) pcu_val_fhe_uint_prepared: FheUintPrepared<Vec<u8>, u32, BE>,
 }
 
-impl<BE: Backend> Interpreter<BE> {
+impl<BE: PhantomBackend> Interpreter<BE> {
     pub fn new(params: &CryptographicParameters<BE>, rom_size: usize, ram_size: usize) -> Self
     where
-        Module<BE>: FheUintPreparedFactory<u32, BE>,
+        Module<BE>: PhantomModule<BE>,
     {
         Self::new_internal::<false>(params, rom_size, ram_size)
     }
@@ -121,7 +119,7 @@ impl<BE: Backend> Interpreter<BE> {
         ram_size: usize,
     ) -> Self
     where
-        Module<BE>: FheUintPreparedFactory<u32, BE>,
+        Module<BE>: PhantomModule<BE>,
     {
         Self::new_internal::<true>(params, rom_size, ram_size)
     }
@@ -132,26 +130,25 @@ impl<BE: Backend> Interpreter<BE> {
         ram_size: usize,
     ) -> Self
     where
-        Module<BE>: FheUintPreparedFactory<u32, BE>,
+        Module<BE>: PhantomModule<BE>,
     {
+        let module: &Module<BE> = params.module();
         let rom_infos: &GLWELayout = &params.rom_infos();
         let ram_infos: &GLWELayout = &params.ram_infos();
 
-        let imm_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let rs1_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let rs2_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let rd_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let rdu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let mu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
-        let pcu_rom: Memory = Memory::alloc(rom_infos, 32, rom_size);
+        let imm_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let rs1_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let rs2_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let rd_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let rdu_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let mu_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
+        let pcu_rom: Memory = Memory::alloc(module, rom_infos, 32, rom_size);
 
-        let registers: Memory = Memory::alloc(ram_infos, 32, 32);
-        let ram: Memory = Memory::alloc(ram_infos, 32, ram_size);
+        let registers: Memory = Memory::alloc(module, ram_infos, 32, 32);
+        let ram: Memory = Memory::alloc(module, ram_infos, 32, ram_size);
 
         let fhe_uint_infos: &GLWELayout = &params.fhe_uint_infos();
         let fhe_uint_prepared_infos: &GGSWLayout = &params.fhe_uint_prepared_infos();
-
-        let module: &Module<BE> = params.module();
 
         let vm_debug: Option<InterpreterDebug> = if DEBUG {
             Some(InterpreterDebug::new(rom_size, ram_size))
@@ -184,8 +181,8 @@ impl<BE: Backend> Interpreter<BE> {
                 module,
                 fhe_uint_prepared_infos,
             ),
-            rd_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            ram_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            rd_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            ram_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
             pcu_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
@@ -198,9 +195,9 @@ impl<BE: Backend> Interpreter<BE> {
                 module,
                 fhe_uint_prepared_infos,
             ),
-            pc_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            rs1_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            rs2_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            pc_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            rs1_addr_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            rs2_addr_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
             rs1_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
@@ -209,18 +206,18 @@ impl<BE: Backend> Interpreter<BE> {
                 module,
                 fhe_uint_prepared_infos,
             ),
-            rd_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            rd_addr_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
             rd_addr_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
             ),
-            rdu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            mu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            pcu_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            rs1_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            rs2_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            imm_val_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
-            ram_addr_fhe_uint: FheUint::alloc_from_infos(fhe_uint_infos),
+            rdu_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            mu_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            pcu_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            rs1_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            rs2_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            imm_val_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
+            ram_addr_fhe_uint: FheUint::alloc_from_infos(module, fhe_uint_infos),
             rs1_val_fhe_uint_prepared: FheUintPrepared::alloc_from_infos(
                 module,
                 fhe_uint_prepared_infos,
@@ -260,18 +257,17 @@ impl<BE: Backend> Interpreter<BE> {
         self.threads
     }
 
-    pub fn instructions_encrypt_sk<M, S>(
+    pub fn instructions_encrypt_sk<S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         instructions: &InstructionsParser,
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        M: ModuleN + GLWEEncryptSk<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         if let Some(vm_debug) = &mut self.vm_debug {
             vm_debug.set_instructions(instructions)
@@ -358,35 +354,33 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn init_registers<M, S>(
+    pub fn init_registers<S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u32],
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        M: ModuleN + GLWEEncryptSk<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         self.registers
             .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
-    pub fn ram_encrypt_sk<M, S>(
+    pub fn ram_encrypt_sk<S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         data: &[u32],
         sk_prepared: &S,
         source_xa: &mut Source,
         source_xe: &mut Source,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        M: ModuleN + GLWEEncryptSk<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         assert!(data.len() <= self.ram.size());
 
@@ -398,16 +392,15 @@ impl<BE: Backend> Interpreter<BE> {
             .encrypt_sk(module, data, sk_prepared, source_xa, source_xe, scratch);
     }
 
-    pub fn ram_decrypt<M, S>(
+    pub fn ram_decrypt<S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         data_decrypted: &mut [u32],
         sk_prepared: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        M: ModuleN + GLWEDecrypt<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomModule<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         assert_eq!(data_decrypted.len(), self.ram.size());
 
@@ -415,31 +408,15 @@ impl<BE: Backend> Interpreter<BE> {
             .decrypt(module, data_decrypted, sk_prepared, scratch);
     }
 
-    pub fn cycle<M, DK, H, K, BRA>(&mut self, module: &M, keys: &H, scratch: &mut Scratch<BE>)
-    where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + PrepareMultiple<BE, BRA>
-            + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>
-            + GLWEBlinSelection<u32, BE>
-            + GGSWBlindRotation<u32, BE>
-            + GLWENoise<BE>
-            + GGSWEncryptSk<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>
-            + GLWEBlindRetrieval<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
+    pub fn cycle<BRA, H>(
+        &mut self,
+        module: &Module<BE>,
+        keys: &H,
+        scratch: &mut ScratchArena<'_, BE>,
+    ) where
         BRA: BlindRotationAlgo,
-        DK: DataRef,
-        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
     {
         self.cycle_internal(
             module,
@@ -449,72 +426,32 @@ impl<BE: Backend> Interpreter<BE> {
         );
     }
 
-    pub fn cycle_debug<M, DK, H, BRA, K, S>(
+    pub fn cycle_debug<BRA, H, S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: &S,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + PrepareMultiple<BE, BRA>
-            + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>
-            + GLWEBlinSelection<u32, BE>
-            + GGSWBlindRotation<u32, BE>
-            + GLWENoise<BE>
-            + GGSWEncryptSk<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>
-            + GLWEBlindRetrieval<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
-        DK: DataRef,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
-        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         self.cycle_internal(module, keys, Some(sk), scratch);
     }
 
-    fn cycle_internal<M, DK, H, BRA, K, S>(
+    fn cycle_internal<BRA, H, S>(
         &mut self,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
     ) where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + PrepareMultiple<BE, BRA>
-            + FheUintPrepare<BRA, BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>
-            + GLWEBlinSelection<u32, BE>
-            + GGSWBlindRotation<u32, BE>
-            + GLWENoise<BE>
-            + GGSWEncryptSk<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>
-            + GLWEBlindRetrieval<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
         BRA: BlindRotationAlgo,
-        DK: DataRef,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
-        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         let threads = self.threads;
         let mut this_cycle_measurement = Measurement::new();
@@ -536,12 +473,11 @@ impl<BE: Backend> Interpreter<BE> {
             } else {
                 None
             };
-            self.pc_fhe_uint_prepared.prepare_custom_multi_thread(
+            module.prepare_multiple_fheuint(
                 threads,
-                module,
-                &self.pc_fhe_uint,
-                0,
-                self.rom_bits_size + 2, // PC is 4bytes aligned
+                &mut vec![&mut self.pc_fhe_uint_prepared],
+                vec![&self.pc_fhe_uint],
+                vec![self.rom_bits_size + 2], // PC is 4bytes aligned
                 keys,
                 scratch,
             );
@@ -626,37 +562,19 @@ impl<BE: Backend> Interpreter<BE> {
         self.cycle += 1;
     }
 
-    pub(crate) fn read_and_prepare_instruction_components<M, D, BRA, H, K, S>(
+    pub(crate) fn read_and_prepare_instruction_components<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + FheUintPrepare<BRA, BE>
-            + ModuleN
-            + GGSWBlindRotation<u32, BE>
-            + GGSWPreparedFactory<BE>
-            + GLWEDecrypt<BE>
-            + GLWENoise<BE>
-            + GGSWEncryptSk<BE>
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPreparedEncryptSk<u32, BE>
-            + PrepareMultiple<BE, BRA>,
-        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
-        D: DataRef,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_read_and_prepare_rom = measure_duration(|| {
             this_cycle_measurement.time_read_rom = measure_duration(|| {
@@ -888,36 +806,19 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn read_and_prepare_registers<M, DK, H, BRA, K, S>(
+    pub(crate) fn read_and_prepare_registers<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
         BRA: BlindRotationAlgo,
-        DK: DataRef,
-        M: Sync
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, BE>
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + ModuleN
-            + FheUintPreparedFactory<u32, BE>
-            + PrepareMultiple<BE, BRA>
-            + FheUintPrepare<BRA, BE>
-            + GGSWBlindRotation<u32, BE>
-            + GLWEDecrypt<BE>
-            + GLWENoise<BE>,
-        H: Sync + BDDKeyHelper<DK, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_read_and_prepare_registers = measure_duration(|| {
             this_cycle_measurement.time_read_registers = measure_duration(|| {
@@ -983,36 +884,19 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn read_ram<D, M, H, BRA, K, S>(
+    pub(crate) fn read_ram<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + ModuleN
-            + GGSWBlindRotation<u32, BE>
-            + GGSWPreparedFactory<BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + FheUintPrepare<BRA, BE>
-            + GLWEBlinSelection<u32, BE>
-            + GLWENoise<BE>
-            + GLWEBlindRetrieval<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        D: DataRef,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_read_ram = measure_duration(|| {
             this_cycle_measurement.time_derive_ram_addr = measure_duration(|| {
@@ -1029,12 +913,11 @@ impl<BE: Backend> Interpreter<BE> {
             });
 
             this_cycle_measurement.time_prepare_ram_addr = measure_duration(|| {
-                self.ram_addr_fhe_uint_prepared.prepare_custom_multi_thread(
+                module.prepare_multiple_fheuint(
                     threads,
-                    module,
-                    &self.ram_addr_fhe_uint,
-                    0,
-                    self.ram_bit_size + 2, // ram_bit_size is 4bytes alined
+                    &mut vec![&mut self.ram_addr_fhe_uint_prepared],
+                    vec![&self.ram_addr_fhe_uint],
+                    vec![self.ram_bit_size + 2], // ram_bit_size is 4bytes alined
                     keys,
                     scratch,
                 );
@@ -1089,66 +972,57 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_registers<M, H, D, BRA, K, S>(
+    pub(crate) fn update_registers<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         ops: &[RD_UPDATE],
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
-        M: Sync
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>
-            + GLWEBlinSelection<u32, BE>
-            + ModuleLogN
-            + GLWERotate<BE>
-            + GLWETrace<BE>
-            + GLWESub
-            + GLWEAdd
-            + GLWECopy
-            + GGSWPreparedFactory<BE>
-            + ModuleN
-            + FheUintPreparedFactory<u32, BE>
-            + FheUintPrepare<BRA, BE>
-            + GGSWBlindRotation<u32, BE>
-            + GLWENormalize<BE>
-            + GLWEExternalProduct<BE>
-            + GLWENoise<BE>
-            + GLWEPackerOps<BE>
-            + GLWEBlindRetrieval<BE>,
         BRA: BlindRotationAlgo,
-        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        D: DataRef,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_update_registers = measure_duration(|| {
             let rs1: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs1_val_fhe_uint_prepared;
             let rs2: &FheUintPrepared<Vec<u8>, u32, BE> = &self.rs2_val_fhe_uint_prepared;
             let imm: &FheUintPrepared<Vec<u8>, u32, BE> = &self.imm_val_fhe_uint_prepared;
             let pc: &FheUintPrepared<Vec<u8>, u32, BE> = &self.pc_fhe_uint_prepared;
-            let ram_val: &FheUint<Vec<u8>, u32> = &self.ram_val_fhe_uint;
+            let ram_val: &FheUint<Vec<u8>, u32, i64> = &self.ram_val_fhe_uint;
 
-            let mut rd_map: HashMap<u32, FheUint<Vec<u8>, u32>> = HashMap::new();
+            let mut rd_map: HashMap<u32, FheUint<Vec<u8>, u32, i64>> = HashMap::new();
 
             this_cycle_measurement.time_evaluate_rd_ops = measure_duration(|| {
-                // Evaluates arithmetic operations & store in map with respective op ID
-                for op in ops {
-                    let mut tmp: FheUint<Vec<u8>, u32> =
-                        FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
-                    op.eval_enc(
-                        threads, module, &mut tmp, rs1, rs2, imm, pc, ram_val, keys, scratch,
-                    );
+                // Evaluates the arithmetic operations, one op per worker, and
+                // stores them in a map with their respective op ID.
+                let mut results: Vec<FheUint<Vec<u8>, u32, i64>> = ops
+                    .iter()
+                    .map(|_| FheUint::alloc_from_infos(module, &self.imm_val_fhe_uint))
+                    .collect();
+                eval_ops_parallel(
+                    threads,
+                    module,
+                    ops,
+                    &mut results,
+                    rs1,
+                    rs2,
+                    imm,
+                    pc,
+                    ram_val,
+                    keys,
+                    scratch,
+                );
+                for (op, tmp) in ops.iter().zip(results) {
                     rd_map.insert(op.id(), tmp);
                 }
             });
 
             this_cycle_measurement.time_blind_select_rd = measure_duration(|| {
-                let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut ops_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32, i64>> = HashMap::new();
                 for (key, object) in rd_map.iter_mut() {
                     ops_ref.insert(*key as usize, object);
                 }
@@ -1166,12 +1040,11 @@ impl<BE: Backend> Interpreter<BE> {
             });
 
             this_cycle_measurement.time_refresh_rd = measure_duration(|| {
-                self.rd_val_fhe_uint_prepared.prepare_custom_multi_thread(
+                module.prepare_multiple_fheuint(
                     threads,
-                    module,
-                    &self.rd_val_fhe_uint,
-                    0,
-                    32,
+                    &mut vec![&mut self.rd_val_fhe_uint_prepared],
+                    vec![&self.rd_val_fhe_uint],
+                    vec![32],
                     keys,
                     scratch,
                 );
@@ -1240,46 +1113,28 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_ram<D, M, H, BRA, K, S>(
+    pub(crate) fn update_ram<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
-        M: Sync
-            + GGSWPreparedFactory<BE>
-            + GLWEExternalProduct<BE>
-            + GLWEPackerOps<BE>
-            + GLWETrace<BE>
-            + GLWEPacking<BE>
-            + ModuleN
-            + GGSWBlindRotation<u32, BE>
-            + GGSWPreparedFactory<BE>
-            + ExecuteBDDCircuit2WTo1W<BE>
-            + ExecuteBDDCircuit1WTo1W<BE>
-            + FheUintPrepare<BRA, BE>
-            + GLWEBlinSelection<u32, BE>
-            + GLWENoise<BE>
-            + GGSWEncryptSk<BE>
-            + GLWEBlindRetrieval<BE>,
-        Scratch<BE>: ScratchTakeCore<BE>,
-        H: Sync + BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
         BRA: BlindRotationAlgo,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos + GetDistribution,
-        D: DataRef,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_update_ram = measure_duration(|| {
-            let mut res_tmp: HashMap<u32, FheUint<Vec<u8>, u32>> = HashMap::new();
+            let mut res_tmp: HashMap<u32, FheUint<Vec<u8>, u32, i64>> = HashMap::new();
 
             this_cycle_measurement.time_ram_update_op_eval = measure_duration(|| {
                 // Constructs diffferent possible values that are stored back
                 for op in RAM_UPDATE_OP_LIST {
-                    let mut tmp: FheUint<Vec<u8>, u32> =
-                        FheUint::alloc_from_infos(&self.imm_val_fhe_uint);
+                    let mut tmp: FheUint<Vec<u8>, u32, i64> =
+                        FheUint::alloc_from_infos(module, &self.imm_val_fhe_uint);
                     op.eval_enc(
                         threads,
                         module,
@@ -1296,7 +1151,8 @@ impl<BE: Backend> Interpreter<BE> {
 
             this_cycle_measurement.time_blind_select_ram_value = measure_duration(|| {
                 // Blind selection of the value to store
-                let mut res_tmp_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32>> = HashMap::new();
+                let mut res_tmp_ref: HashMap<usize, &mut FheUint<Vec<u8>, u32, i64>> =
+                    HashMap::new();
                 for (key, object) in res_tmp.iter_mut() {
                     res_tmp_ref.insert(*key as usize, object);
                 }
@@ -1313,12 +1169,11 @@ impl<BE: Backend> Interpreter<BE> {
             });
 
             this_cycle_measurement.time_refresh_ram_value = measure_duration(|| {
-                self.ram_val_fhe_uint_prepared.prepare_custom_multi_thread(
+                module.prepare_multiple_fheuint(
                     threads,
-                    module,
-                    &self.ram_val_fhe_uint,
-                    0,
-                    32,
+                    &mut vec![&mut self.ram_val_fhe_uint_prepared],
+                    vec![&self.ram_val_fhe_uint],
+                    vec![32],
                     keys,
                     scratch,
                 );
@@ -1375,28 +1230,19 @@ impl<BE: Backend> Interpreter<BE> {
         }
     }
 
-    pub(crate) fn update_pc<M, K, S, H, BRA: BlindRotationAlgo, D>(
+    pub(crate) fn update_pc<BRA, H, S>(
         &mut self,
         threads: usize,
-        module: &M,
+        module: &Module<BE>,
         keys: &H,
         sk: Option<&S>,
-        scratch: &mut Scratch<BE>,
+        scratch: &mut ScratchArena<'_, BE>,
         this_cycle_measurement: &mut Measurement,
     ) where
-        M: ModuleLogN
-            + GLWEPacking<BE>
-            + GLWECopy
-            + ExecuteBDDCircuit<BE>
-            + FheUintPrepare<BRA, BE>
-            + Cmux<BE>
-            + GLWEDecrypt<BE>
-            + GLWENoise<BE>,
-        S: GLWESecretPreparedToRef<BE> + GLWEInfos,
-        H: BDDKeyHelper<D, BRA, BE> + BDDKeyInfos + GLWEAutomorphismKeyHelper<K, BE>,
-        K: GGLWEPreparedToRef<BE> + GGLWEInfos + GetGaloisElement,
-        D: DataRef,
-        Scratch<BE>: ScratchTakeCore<BE>,
+        BRA: BlindRotationAlgo,
+        Module<BE>: PhantomBootstrapModule<BRA, BE>,
+        H: Sync + BDDKeyHelper<Vec<u8>, BRA, BE> + BDDKeyInfos + GetAutomorphismKey<BE>,
+        S: GLWESecretPreparedToBackendRef<BE> + GLWEInfos,
     {
         this_cycle_measurement.time_update_pc = measure_duration(|| {
             update_pc(

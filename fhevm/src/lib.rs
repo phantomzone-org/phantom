@@ -1,3 +1,4 @@
+pub mod backend;
 pub(crate) mod codegen;
 pub(crate) mod debug;
 pub mod instructions;

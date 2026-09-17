@@ -1,29 +1,12 @@
-use crate::{
-    keys::{VMKeys, VMKeysPrepared},
-    parameters::CryptographicParameters,
-    prepare::PrepareMultiple,
-    Instruction, InstructionsParser, Interpreter, RV32I,
-};
-use poulpy_core::{
-    layouts::{
-        GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
-        GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret,
-    },
-    GGLWEToGGSWKeyEncryptSk, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt, GLWEEncryptSk,
-    GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
-};
+use poulpy_bin_fhe::blind_rotation::{BlindRotationAlgo, CGGI};
 use poulpy_cpu_ref::FFT64Ref;
-use poulpy_hal::{
-    api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
-    layouts::{Backend, Module, Scratch, ScratchOwned},
-    source::Source,
-};
-use poulpy_schemes::bin_fhe::{
-    bdd_arithmetic::{
-        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
-    },
-    blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
+use poulpy_hal::layouts::{Module, ScratchOwned};
+
+use crate::{
+    backend::{prelude::*, PhantomBackend, PhantomBootstrapModule},
+    parameters::CryptographicParameters,
+    tests::TestContext,
+    Instruction, InstructionsParser, Interpreter, RV32I,
 };
 
 #[test]
@@ -31,34 +14,10 @@ fn test_interpreter_cycles_fft64_ref() {
     test_interpreter_cycles::<CGGI, FFT64Ref>()
 }
 
-fn test_interpreter_cycles<BRA: BlindRotationAlgo, BE: Backend>()
+fn test_interpreter_cycles<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>
-        + GLWEBlindRetrieval<BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
     let rom: Vec<Instruction> = vec![
         // RD[31] <- 1<<18
@@ -79,63 +38,46 @@ where
 
     let ram: Vec<u32> = vec![0u32; 64];
 
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-    let module: &Module<BE> = params.module();
-
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
-    // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
-
     let mut interpreter: Interpreter<BE> =
-        Interpreter::new_with_debug(&params, rom.len(), ram.len());
+        Interpreter::new_with_debug(&ctx.params, rom.len(), ram.len());
 
     let mut instructions = InstructionsParser::new();
     for inst in &rom {
         instructions.add(*inst);
     }
 
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
-
     interpreter.instructions_encrypt_sk(
-        module,
+        ctx.params.module(),
         &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
     interpreter.ram_encrypt_sk(
-        module,
+        ctx.params.module(),
         &ram,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 28);
 
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
-
     interpreter.set_verbose_timings(true);
 
     for _ in 0..rom.len() {
-        interpreter.cycle_debug(module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
+        interpreter.cycle_debug(
+            ctx.params.module(),
+            &ctx.keys_prepared,
+            &ctx.sk_glwe_prepared,
+            &mut scratch.borrow(),
+        );
     }
 }
 
@@ -144,34 +86,10 @@ fn test_interpreter_cycles_noise_progression_fft64_ref() {
     test_interpreter_cycles_noise_progression::<CGGI, FFT64Ref>()
 }
 
-fn test_interpreter_cycles_noise_progression<BRA: BlindRotationAlgo, BE: Backend>()
+fn test_interpreter_cycles_noise_progression<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>
-        + GLWEBlindRetrieval<BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
     let num_instructions = 100;
     let instruction = Instruction::new(0b00000000_00000000_00000000_1110011);
@@ -179,64 +97,47 @@ where
 
     let ram: Vec<u32> = vec![0u32; 64];
 
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-    let module: &Module<BE> = params.module();
-
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
 
-    // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
-
     let mut interpreter: Interpreter<BE> =
-        Interpreter::new_with_debug(&params, rom.len(), ram.len());
+        Interpreter::new_with_debug(&ctx.params, rom.len(), ram.len());
 
     let mut instructions = InstructionsParser::new();
     for inst in &rom {
         instructions.add(*inst);
     }
 
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
-
     interpreter.instructions_encrypt_sk(
-        module,
+        ctx.params.module(),
         &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
     interpreter.ram_encrypt_sk(
-        module,
+        ctx.params.module(),
         &ram,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 28);
-
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.set_verbose_timings(false);
     interpreter.set_threads(16);
 
     for _ in 0..rom.len() {
-        interpreter.cycle_debug(module, &key_prepared, &sk_glwe_prepared, scratch.borrow());
+        interpreter.cycle_debug(
+            ctx.params.module(),
+            &ctx.keys_prepared,
+            &ctx.sk_glwe_prepared,
+            &mut scratch.borrow(),
+        );
         let series = vec![
             (
                 "PC value noise".to_string(),
@@ -270,12 +171,12 @@ where
             }
             let plot_path = plot_dir.join(format!(
                 "noise_progression_n-glwe={}_n-lwe={}_rank={}_base2k={}.png",
-                params.n_glwe(),
-                params.n_lwe(),
-                params.rank(),
-                params.base2k_fhe_uint()
+                ctx.params.n_glwe(),
+                ctx.params.n_lwe(),
+                ctx.params.rank(),
+                ctx.params.base2k_fhe_uint()
             ));
-            match plot_noise_progression(&params, &plot_path, &series) {
+            match plot_noise_progression(&ctx.params, &plot_path, &series) {
                 Ok(()) => println!("Noise progression plot written to {}", plot_path.display()),
                 Err(err) => println!("Failed to render noise progression plot: {err}"),
             }
@@ -283,7 +184,7 @@ where
     }
 }
 
-fn plot_noise_progression<P: AsRef<std::path::Path>, BE: Backend>(
+fn plot_noise_progression<P: AsRef<std::path::Path>, BE: PhantomBackend>(
     params: &CryptographicParameters<BE>,
     output_path: P,
     series: &[(String, Vec<f64>)],

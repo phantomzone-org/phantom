@@ -1,100 +1,46 @@
-use crate::{
-    keys::{VMKeys, VMKeysPrepared},
-    parameters::CryptographicParameters,
-    prepare::PrepareMultiple,
-    rd_update::Evaluate,
-    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
-};
-use poulpy_core::{
-    layouts::{
-        GGLWEToGGSWKeyPreparedFactory, GGSWPreparedFactory, GLWEAutomorphismKeyPreparedFactory,
-        GLWEInfos, GLWESecret, GLWESecretPrepared, GLWESecretPreparedFactory, LWESecret,
-    },
-    GGLWEToGGSWKeyEncryptSk, GGSWAutomorphism, GLWEAutomorphismKeyEncryptSk, GLWEDecrypt,
-    GLWEEncryptSk, GLWEExternalProduct, GLWEPackerOps, GLWEPacking, GLWETrace, ScratchTakeCore,
+use poulpy_bin_fhe::{
+    bdd_arithmetic::FheUint,
+    blind_rotation::{BlindRotationAlgo, CGGI},
 };
 use poulpy_cpu_ref::FFT64Ref;
-use poulpy_hal::{
-    api::{ModuleN, ModuleNew, ScratchOwnedAlloc, ScratchOwnedBorrow},
-    layouts::{Backend, Module, Scratch, ScratchOwned},
-    source::Source,
+use poulpy_hal::layouts::{Module, ScratchOwned};
+use rand_core::Rng;
+
+use crate::{
+    backend::{prelude::*, PhantomBackend, PhantomBootstrapModule},
+    rd_update::Evaluate,
+    tests::TestContext,
+    Instruction, InstructionsParser, Interpreter, RD_UPDATE_RV32I_OP_LIST,
 };
-use poulpy_schemes::bin_fhe::{
-    bdd_arithmetic::{
-        BDDKeyEncryptSk, BDDKeyPreparedFactory, FheUint, FheUintPrepare, FheUintPreparedEncryptSk,
-        FheUintPreparedFactory, GGSWBlindRotation, GLWEBlindRetrieval,
-    },
-    blind_rotation::{BlindRotationAlgo, BlindRotationKey, BlindRotationKeyFactory, CGGI},
-};
-use rand_core::RngCore;
 
 #[test]
 fn test_interpreter_init_one_instruction_fft64_ref() {
     test_interpreter_init_one_instruction::<CGGI, FFT64Ref>()
 }
 
-pub fn test_interpreter_init_one_instruction<BRA: BlindRotationAlgo, BE: Backend>()
+pub fn test_interpreter_init_one_instruction<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-
-    let module: &Module<BE> = params.module();
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 22);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
-
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
-
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&ctx.params, rom_size, ram_size);
 
     let instruction_u32 = 258455;
     let mut instructions: InstructionsParser = InstructionsParser::new();
     instructions.add(Instruction::new(instruction_u32));
 
     interpreter.instructions_encrypt_sk(
-        module,
+        ctx.params.module(),
         &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
     let idx = 0;
@@ -111,60 +57,33 @@ where
     let correct_mu: u32 = mu as u32;
     let correct_pcu: u32 = pcu as u32;
 
-    interpreter.pc_fhe_uint.encrypt_sk(
-        module,
-        idx as u32,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
+    interpreter.pc_fhe_uint = ctx.encrypt_fhe_uint(idx as u32, &mut scratch.borrow());
 
     let mut this_cycle_measurement = crate::Measurement::new();
     interpreter.read_and_prepare_instruction_components(
         1,
-        module,
-        &key_prepared,
-        Some(&sk_glwe_prepared),
-        scratch.borrow(),
+        ctx.params.module(),
+        &ctx.keys_prepared,
+        Some(&ctx.sk_glwe_prepared),
+        &mut scratch.borrow(),
         &mut this_cycle_measurement,
     );
 
-    let dec_rs1: u32 =
-        interpreter
-            .rs1_addr_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    let dec_rs2: u32 =
-        interpreter
-            .rs2_addr_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    let dec_rd: u32 =
-        interpreter
-            .rd_addr_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    let dec_imm: u32 =
-        interpreter
-            .imm_val_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec = |ct: &FheUint<Vec<u8>, u32, i64>, scratch: &mut ScratchOwned<BE>| -> u32 {
+        ct.decrypt(
+            ctx.params.module(),
+            &ctx.sk_glwe_prepared,
+            &mut scratch.borrow(),
+        )
+    };
 
-    let dec_rdu: u32 =
-        interpreter
-            .rdu_val_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    let dec_mu: u32 =
-        interpreter
-            .mu_val_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
-    let dec_pcu: u32 =
-        interpreter
-            .pcu_val_fhe_uint
-            .decrypt(params.module(), &sk_glwe_prepared, scratch.borrow());
+    let dec_rs1: u32 = dec(&interpreter.rs1_addr_fhe_uint, &mut scratch);
+    let dec_rs2: u32 = dec(&interpreter.rs2_addr_fhe_uint, &mut scratch);
+    let dec_rd: u32 = dec(&interpreter.rd_addr_fhe_uint, &mut scratch);
+    let dec_imm: u32 = dec(&interpreter.imm_val_fhe_uint, &mut scratch);
+    let dec_rdu: u32 = dec(&interpreter.rdu_val_fhe_uint, &mut scratch);
+    let dec_mu: u32 = dec(&interpreter.mu_val_fhe_uint, &mut scratch);
+    let dec_pcu: u32 = dec(&interpreter.pcu_val_fhe_uint, &mut scratch);
 
     println!(
         "{} {} {} {} {} {} {}",
@@ -189,140 +108,70 @@ fn test_interpreter_init_one_op_fft64_ref() {
     test_interpreter_init_one_op::<CGGI, FFT64Ref>()
 }
 
-pub fn test_interpreter_init_one_op<BRA: BlindRotationAlgo, BE: Backend>()
+pub fn test_interpreter_init_one_op<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-
     let threads = 4;
 
-    let module: &Module<BE> = params.module();
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc((1 << 22) * threads);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&ctx.params, rom_size, ram_size);
 
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
-
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
-
-    let imm_value: u32 = source_xa.next_u32();
-    let rs1_value: u32 = source_xa.next_u32();
-    let rs2_value: u32 = source_xa.next_u32();
-    let pc_value: u32 = source_xa.next_u32();
-    let ram_value: u32 = source_xa.next_u32();
-
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
+    // Deterministic operands: the first draws of a fresh source.
+    let mut source: poulpy_hal::source::Source = poulpy_hal::source::Source::new([0u8; 32]);
+    let imm_value: u32 = source.next_u32();
+    let rs1_value: u32 = source.next_u32();
+    let rs2_value: u32 = source.next_u32();
+    let pc_value: u32 = source.next_u32();
+    let ram_value: u32 = source.next_u32();
 
     let mut this_cycle_measurement = crate::Measurement::new();
     interpreter.read_and_prepare_instruction_components(
         1,
-        module,
-        &key_prepared,
-        Some(&sk_glwe_prepared),
-        scratch.borrow(),
+        ctx.params.module(),
+        &ctx.keys_prepared,
+        Some(&ctx.sk_glwe_prepared),
+        &mut scratch.borrow(),
         &mut this_cycle_measurement,
     );
 
-    interpreter.rs1_val_fhe_uint_prepared.encrypt_sk(
-        module,
-        rs1_value,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-    interpreter.rs2_val_fhe_uint_prepared.encrypt_sk(
-        module,
-        rs2_value,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-    interpreter.imm_val_fhe_uint_prepared.encrypt_sk(
-        module,
-        imm_value,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-    interpreter.pc_fhe_uint_prepared.encrypt_sk(
-        module,
-        pc_value,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
+    interpreter.rs1_val_fhe_uint_prepared =
+        ctx.encrypt_fhe_uint_prepared(rs1_value, &mut scratch.borrow());
+    interpreter.rs2_val_fhe_uint_prepared =
+        ctx.encrypt_fhe_uint_prepared(rs2_value, &mut scratch.borrow());
+    interpreter.imm_val_fhe_uint_prepared =
+        ctx.encrypt_fhe_uint_prepared(imm_value, &mut scratch.borrow());
+    interpreter.pc_fhe_uint_prepared =
+        ctx.encrypt_fhe_uint_prepared(pc_value, &mut scratch.borrow());
+    interpreter.ram_val_fhe_uint = ctx.encrypt_fhe_uint(ram_value, &mut scratch.borrow());
 
-    interpreter.ram_val_fhe_uint.encrypt_sk(
-        module,
-        ram_value,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
-
-    let mut res = FheUint::alloc_from_infos(&params.fhe_uint_infos());
+    let mut res: FheUint<Vec<u8>, u32, i64> =
+        FheUint::alloc_from_infos(ctx.params.module(), &ctx.params.fhe_uint_infos());
 
     for op in RD_UPDATE_RV32I_OP_LIST {
         op.eval_enc(
             threads,
-            module,
+            ctx.params.module(),
             &mut res,
             &interpreter.rs1_val_fhe_uint_prepared,
             &interpreter.rs2_val_fhe_uint_prepared,
             &interpreter.imm_val_fhe_uint_prepared,
             &interpreter.pc_fhe_uint_prepared,
             &interpreter.ram_val_fhe_uint,
-            &key_prepared,
-            scratch.borrow(),
+            &ctx.keys_prepared,
+            &mut scratch.borrow(),
         );
 
-        let have: u32 = res.decrypt(module, &sk_glwe_prepared, scratch.borrow());
+        let have: u32 = res.decrypt(
+            ctx.params.module(),
+            &ctx.sk_glwe_prepared,
+            &mut scratch.borrow(),
+        );
         let want: u32 = op.eval_plain(imm_value, rs1_value, rs2_value, pc_value, ram_value);
 
         assert_eq!(
@@ -344,54 +193,17 @@ fn test_interpreter_init_many_instructions_fft64_ref() {
     test_interpreter_init_many_instructions::<CGGI, FFT64Ref>()
 }
 
-fn test_interpreter_init_many_instructions<BRA: BlindRotationAlgo, BE: Backend>()
+fn test_interpreter_init_many_instructions<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-    use crate::Instruction;
-
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-    let module: &Module<BE> = params.module();
-
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
-
-    // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&ctx.params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
@@ -403,26 +215,14 @@ where
         instructions.add(Instruction::new(inst));
     }
 
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
-
     interpreter.instructions_encrypt_sk(
-        module,
+        ctx.params.module(),
         &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
-
-    let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
-
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
 
     for idx in 0..instructions_u32.len() {
         let instruction = instructions.get_raw(idx);
@@ -436,65 +236,33 @@ where
         let correct_mu: u32 = mu as u32;
         let correct_pcu: u32 = pcu as u32;
 
-        interpreter.pc_fhe_uint_prepared.encrypt_sk(
-            module,
-            (idx << 2) as u32,
-            &sk_glwe_prepared,
-            &mut source_xa,
-            &mut source_xe,
-            scratch.borrow(),
-        );
+        interpreter.pc_fhe_uint_prepared =
+            ctx.encrypt_fhe_uint_prepared((idx << 2) as u32, &mut scratch.borrow());
         let mut this_cycle_measurement = crate::Measurement::new();
         interpreter.read_and_prepare_instruction_components(
             1,
-            module,
-            &key_prepared,
-            Some(&sk_glwe_prepared),
-            scratch.borrow(),
+            ctx.params.module(),
+            &ctx.keys_prepared,
+            Some(&ctx.sk_glwe_prepared),
+            &mut scratch.borrow(),
             &mut this_cycle_measurement,
         );
 
-        let dec_rs1: u32 =
-            interpreter
-                .rs1_addr_fhe_uint
-                .decrypt(module, &sk_glwe_prepared, scratch.borrow());
-        let dec_rs2: u32 =
-            interpreter
-                .rs2_addr_fhe_uint
-                .decrypt(module, &sk_glwe_prepared, scratch.borrow());
-        let dec_rd: u32 =
-            interpreter
-                .rd_addr_fhe_uint
-                .decrypt(module, &sk_glwe_prepared, scratch.borrow());
-        let dec_imm: u32 =
-            interpreter
-                .imm_val_fhe_uint
-                .decrypt(module, &sk_glwe_prepared, scratch.borrow());
+        let dec = |ct: &FheUint<Vec<u8>, u32, i64>, scratch: &mut ScratchOwned<BE>| -> u32 {
+            ct.decrypt(
+                ctx.params.module(),
+                &ctx.sk_glwe_prepared,
+                &mut scratch.borrow(),
+            )
+        };
 
-        let dec_rdu: u32 = interpreter.rdu_val_fhe_uint.decrypt(
-            params.module(),
-            &sk_glwe_prepared,
-            scratch.borrow(),
-        );
-        let dec_mu: u32 = interpreter.mu_val_fhe_uint.decrypt(
-            params.module(),
-            &sk_glwe_prepared,
-            scratch.borrow(),
-        );
-        let dec_pcu: u32 = interpreter.pcu_val_fhe_uint.decrypt(
-            params.module(),
-            &sk_glwe_prepared,
-            scratch.borrow(),
-        );
-
-        // println!(
-        //     "-- {} {} {} {} {} {} {}",
-        //     correct_imm, correct_rs1, correct_rs2, correct_rd, correct_rdu, correct_mu, correct_pcu
-        // );
-        // println!(
-        //     "-- {} {} {} {} {} {} {}",
-        //     dec_imm, dec_rs1, dec_rs2, dec_rd, dec_rdu, dec_mu, dec_pcu
-        // );
+        let dec_rs1: u32 = dec(&interpreter.rs1_addr_fhe_uint, &mut scratch);
+        let dec_rs2: u32 = dec(&interpreter.rs2_addr_fhe_uint, &mut scratch);
+        let dec_rd: u32 = dec(&interpreter.rd_addr_fhe_uint, &mut scratch);
+        let dec_imm: u32 = dec(&interpreter.imm_val_fhe_uint, &mut scratch);
+        let dec_rdu: u32 = dec(&interpreter.rdu_val_fhe_uint, &mut scratch);
+        let dec_mu: u32 = dec(&interpreter.mu_val_fhe_uint, &mut scratch);
+        let dec_pcu: u32 = dec(&interpreter.pcu_val_fhe_uint, &mut scratch);
 
         assert_eq!(correct_imm, dec_imm);
         assert_eq!(correct_rs1, dec_rs1);
@@ -511,63 +279,22 @@ fn test_interpreter_cycle_single_instruction_noop_fft64_ref() {
     test_interpreter_cycle_single_instruction_noop::<CGGI, FFT64Ref>();
 }
 
-fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo, BE: Backend>()
+fn test_interpreter_cycle_single_instruction_noop<BRA: BlindRotationAlgo, BE: PhantomBackend>()
 where
-    Module<BE>: ModuleNew<BE>
-        + GLWESecretPreparedFactory<BE>
-        + FheUintPreparedFactory<u32, BE>
-        + ModuleN
-        + GLWEEncryptSk<BE>
-        + FheUintPreparedEncryptSk<u32, BE>
-        + PrepareMultiple<BE, BRA>
-        + GLWEAutomorphismKeyEncryptSk<BE>
-        + GGLWEToGGSWKeyEncryptSk<BE>
-        + GLWETrace<BE>
-        + BDDKeyEncryptSk<BRA, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEExternalProduct<BE>
-        + GLWEPackerOps<BE>
-        + GLWEPacking<BE>
-        + FheUintPrepare<BRA, BE>
-        + GGSWBlindRotation<u32, BE>
-        + GGSWPreparedFactory<BE>
-        + GLWEDecrypt<BE>
-        + GLWEAutomorphismKeyPreparedFactory<BE>
-        + GGLWEToGGSWKeyPreparedFactory<BE>
-        + BDDKeyPreparedFactory<BRA, BE>
-        + GGSWAutomorphism<BE>
-        + GLWEBlindRetrieval<BE>,
+    Module<BE>: ModuleNew<BE> + PhantomBootstrapModule<BRA, BE>,
     ScratchOwned<BE>: ScratchOwnedAlloc<BE> + ScratchOwnedBorrow<BE>,
-    Scratch<BE>: ScratchTakeCore<BE>,
-    BlindRotationKey<Vec<u8>, BRA>: BlindRotationKeyFactory<BRA>,
 {
-    use crate::Instruction;
-
-    let params: CryptographicParameters<BE> = CryptographicParameters::<BE>::new();
-    let module: &Module<BE> = params.module();
-
-    let mut source_xs: Source = Source::new([0u8; 32]);
-    let mut source_xa: Source = Source::new([0u8; 32]);
-    let mut source_xe: Source = Source::new([0u8; 32]);
-
+    let mut ctx: TestContext<BRA, BE> = TestContext::new();
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 24);
-
-    // Generates a new secret-key along with the public evaluation keys.
-    let mut sk_glwe: GLWESecret<Vec<u8>> = GLWESecret::alloc(params.n_glwe(), params.rank());
-    sk_glwe.fill_ternary_prob(0.5, &mut source_xs);
-    let mut sk_lwe: LWESecret<Vec<u8>> = LWESecret::alloc(params.n_lwe());
-    sk_lwe.fill_binary_block(params.lwe_block_size(), &mut source_xs);
 
     let rom_size = 1 << 10;
     let ram_size = 1 << 10;
-    let mut interpreter: Interpreter<BE> = Interpreter::new(&params, rom_size, ram_size);
+    let mut interpreter: Interpreter<BE> = Interpreter::new(&ctx.params, rom_size, ram_size);
 
     let instructions_u32 = vec![
         // 258455
         0b00000000_00000000_00000000_1110011,
         0b00000000_00000000_00000000_1110011,
-        // 258455, 33653139, 512279, 4286644499, 66579, 10507363, 3221229683, 8388847, 3221229683,
-        // 791, 8585319, 259383,
     ];
 
     let mut instructions = InstructionsParser::new();
@@ -575,46 +302,35 @@ where
         instructions.add(Instruction::new(inst));
     }
 
-    let mut sk_glwe_prepared: GLWESecretPrepared<Vec<u8>, BE> =
-        GLWESecretPrepared::alloc(module, sk_glwe.rank());
-    sk_glwe_prepared.prepare(module, &sk_glwe);
-
     interpreter.instructions_encrypt_sk(
-        module,
+        ctx.params.module(),
         &instructions,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
+        &ctx.sk_glwe_prepared,
+        &mut ctx.source_xa,
+        &mut ctx.source_xe,
+        &mut scratch.borrow(),
     );
 
-    interpreter.pc_fhe_uint.encrypt_sk(
-        module,
-        0,
-        &sk_glwe_prepared,
-        &mut source_xa,
-        &mut source_xe,
-        scratch.borrow(),
-    );
+    interpreter.pc_fhe_uint = ctx.encrypt_fhe_uint(0, &mut scratch.borrow());
 
     let mut scratch: ScratchOwned<BE> = ScratchOwned::alloc(1 << 28);
-
-    let key: VMKeys<Vec<u8>, BRA> =
-        VMKeys::encrypt_sk(&params, &sk_lwe, &sk_glwe, &mut source_xa, &mut source_xe);
-
-    let mut key_prepared: VMKeysPrepared<Vec<u8>, BRA, BE> = VMKeysPrepared::alloc(&params);
-    key_prepared.prepare(module, &key, scratch.borrow());
 
     interpreter.set_verbose_timings(true);
     interpreter.set_threads(16);
 
     println!("Cycle");
-    interpreter.cycle(module, &key_prepared, scratch.borrow());
+    interpreter.cycle(
+        ctx.params.module(),
+        &ctx.keys_prepared,
+        &mut scratch.borrow(),
+    );
     println!("Cycle done");
 
-    let pc = interpreter
-        .pc_fhe_uint
-        .decrypt(module, &sk_glwe_prepared, scratch.borrow());
+    let pc = interpreter.pc_fhe_uint.decrypt(
+        ctx.params.module(),
+        &ctx.sk_glwe_prepared,
+        &mut scratch.borrow(),
+    );
     println!("PC: {}", pc);
     assert_eq!(pc, 4);
 }

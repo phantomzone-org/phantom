@@ -7,7 +7,7 @@ use std::{
 
 pub mod interpreter;
 
-pub use interpreter::Phantom;
+pub use interpreter::{Backend, EncryptedVM, Phantom, RunOptions};
 
 pub struct CompileOpts {
     program: String,
